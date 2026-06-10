@@ -116,6 +116,45 @@ const _kIconCats = <_IconCat>[
       _IconOpt('letter:P',         'Letra P'),
     ],
   ),
+  _IconCat(
+    key: 'rank1Icon', label: '1º Lugar', defaultValue: '🥇',
+    options: [
+      _IconOpt('🥇',             'Medalha de ouro'),
+      _IconOpt('🏆',             'Troféu'),
+      _IconOpt('👑',             'Coroa'),
+      _IconOpt('⭐',             'Estrela'),
+      _IconOpt('🌟',             'Estrela brilhando'),
+      _IconOpt('1️⃣',            'Número 1'),
+      _IconOpt('lucide:Medal',   'Medalha'),
+      _IconOpt('lucide:Trophy',  'Troféu'),
+      _IconOpt('lucide:Award',   'Premiação'),
+      _IconOpt('letter:1',       'Dígito 1'),
+    ],
+  ),
+  _IconCat(
+    key: 'rank2Icon', label: '2º Lugar', defaultValue: '🥈',
+    options: [
+      _IconOpt('🥈',             'Medalha de prata'),
+      _IconOpt('🎖️',            'Medalha militar'),
+      _IconOpt('⭐',             'Estrela'),
+      _IconOpt('2️⃣',            'Número 2'),
+      _IconOpt('lucide:Medal',   'Medalha'),
+      _IconOpt('lucide:Award',   'Premiação'),
+      _IconOpt('letter:2',       'Dígito 2'),
+    ],
+  ),
+  _IconCat(
+    key: 'rank3Icon', label: '3º Lugar', defaultValue: '🥉',
+    options: [
+      _IconOpt('🥉',             'Medalha de bronze'),
+      _IconOpt('🎖️',            'Medalha militar'),
+      _IconOpt('⭐',             'Estrela'),
+      _IconOpt('3️⃣',            'Número 3'),
+      _IconOpt('lucide:Medal',   'Medalha'),
+      _IconOpt('lucide:Award',   'Premiação'),
+      _IconOpt('letter:3',       'Dígito 3'),
+    ],
+  ),
 ];
 
 // ── Lucide → Material icon map ────────────────────────────────────────────────
@@ -255,6 +294,14 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
   // ── Show player stats toggle ──────────────────────────────────────────────
   bool _showPlayerStats = false;
 
+  // ── Notificações configuráveis ────────────────────────────────────────────
+  int? _paymentDueDay;        // null = sem lembrete
+  int? _autoFinalizeMvpHours; // null = desativado
+  late final TextEditingController _autoFinalizeCtrl;
+
+  // ── Tab state ─────────────────────────────────────────────────────────────
+  int _activeTab = 0;
+
   // ── Save state ────────────────────────────────────────────────────────────
   bool    _saving     = false;
   bool    _isPersisted = false;
@@ -289,11 +336,19 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
       'ownGoalIcon':    s.ownGoalIcon,
       'mvpIcon':        s.mvpIcon,
       'playerIcon':     s.playerIcon,
+      'rank1Icon':      s.rank1Icon,
+      'rank2Icon':      s.rank2Icon,
+      'rank3Icon':      s.rank3Icon,
     };
-    _mvpTieRule       = s.mvpTieRule;
-    _mvpTieMaxPlayers = s.mvpTieMaxPlayers;
-    _mvpMaxCtrl       = TextEditingController(text: s.mvpTieMaxPlayers.toString());
-    _showPlayerStats  = s.showPlayerStats;
+    _mvpTieRule           = s.mvpTieRule;
+    _mvpTieMaxPlayers     = s.mvpTieMaxPlayers;
+    _mvpMaxCtrl           = TextEditingController(text: s.mvpTieMaxPlayers.toString());
+    _showPlayerStats      = s.showPlayerStats;
+    _paymentDueDay        = s.paymentDueDay;
+    _autoFinalizeMvpHours = s.autoFinalizeMvpHours;
+    _autoFinalizeCtrl     = TextEditingController(
+      text: s.autoFinalizeMvpHours != null ? s.autoFinalizeMvpHours.toString() : '',
+    );
   }
 
   @override
@@ -304,6 +359,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     _feeCtrl.dispose();
     _goalkeeperFeeCtrl.dispose();
     _mvpMaxCtrl.dispose();
+    _autoFinalizeCtrl.dispose();
     super.dispose();
   }
 
@@ -344,14 +400,19 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
         monthlyFee:          fee,
         goalkeeperMonthlyFee: goalkeeperFee,
         goalIcon:            _icons['goalIcon'],
-        goalkeeperIcon:     _icons['goalkeeperIcon'],
-        assistIcon:         _icons['assistIcon'],
-        ownGoalIcon:        _icons['ownGoalIcon'],
-        mvpIcon:            _icons['mvpIcon'],
-        playerIcon:         _icons['playerIcon'],
-        mvpTieRule:         _mvpTieRule,
-        mvpTieMaxPlayers:   _mvpTieRule == 2 ? _mvpTieMaxPlayers : null,
-        showPlayerStats:    _showPlayerStats,
+        goalkeeperIcon:      _icons['goalkeeperIcon'],
+        assistIcon:          _icons['assistIcon'],
+        ownGoalIcon:         _icons['ownGoalIcon'],
+        mvpIcon:             _icons['mvpIcon'],
+        playerIcon:          _icons['playerIcon'],
+        rank1Icon:           _icons['rank1Icon'],
+        rank2Icon:           _icons['rank2Icon'],
+        rank3Icon:           _icons['rank3Icon'],
+        mvpTieRule:           _mvpTieRule,
+        mvpTieMaxPlayers:     _mvpTieRule == 2 ? _mvpTieMaxPlayers : null,
+        showPlayerStats:      _showPlayerStats,
+        paymentDueDay:        _paymentMode == 0 ? _paymentDueDay : null,
+        autoFinalizeMvpHours: _autoFinalizeMvpHours,
       );
       ref.invalidate(groupSettingsProvider(widget.groupId));
       if (mounted) {
@@ -477,38 +538,24 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
             child: _buildHeader(detail?.name),
           ),
 
-          // ── 2. Configurações gerais ───────────────────────────────────────
+          // ── 2. Configurações (tabbed) ─────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
               child: _CardSection(
-                iconBg: const Color(0xFF2563EB),
-                icon:   Icons.settings_outlined,
-                title:  'Configurações gerais',
-                subtitle: 'Regras de partidas e modo de cobrança',
-                child: _buildGeneralConfig(isDark),
+                iconBg:   const Color(0xFF2563EB),
+                icon:     Icons.settings_outlined,
+                title:    'Configurações',
+                subtitle: 'Regras, pagamento, MVP e ícones da patota',
+                child: _buildTabbedSettings(isDark),
               ),
             ),
           ),
 
-          // ── 3. Ícones da patota ───────────────────────────────────────────
+          // ── 3. Equipe da patota ───────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: _CardSection(
-                iconBg:   const Color(0xFF7C3AED),
-                iconEmoji: '⚽',
-                title:    'Ícones da patota',
-                subtitle: 'Personalize os ícones exibidos em toda a aplicação',
-                child: _buildIcons(isDark),
-              ),
-            ),
-          ),
-
-          // ── 4. Equipe da patota ───────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
               child: _CardSection(
                 iconBg:  const Color(0xFF334155),
                 icon:    Icons.group_outlined,
@@ -578,6 +625,295 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
         ),
       ),
     ),
+  );
+
+  // ── Tab bar ───────────────────────────────────────────────────────────────
+
+  static const _kTabLabels = ['Geral', 'Pagamento', 'MVP', 'Ícones'];
+
+  Widget _buildTabbedSettings(bool isDark) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _buildTabBar(isDark),
+      const SizedBox(height: 16),
+      if (_activeTab == 0) _buildTabGeral(isDark),
+      if (_activeTab == 1) _buildTabPagamento(isDark),
+      if (_activeTab == 2) _buildTabMvp(isDark),
+      if (_activeTab == 3) _buildIcons(isDark),
+      const SizedBox(height: 20),
+      _buildSaveButton(isDark),
+    ],
+  );
+
+  Widget _buildTabBar(bool isDark) => Container(
+    decoration: BoxDecoration(
+      color: isDark ? AppColors.slate800 : AppColors.slate100,
+      borderRadius: BorderRadius.circular(10),
+    ),
+    padding: const EdgeInsets.all(4),
+    child: Row(
+      children: [
+        for (var i = 0; i < _kTabLabels.length; i++)
+          Expanded(child: _buildTabBtn(i, _kTabLabels[i], isDark)),
+      ],
+    ),
+  );
+
+  Widget _buildTabBtn(int idx, String label, bool isDark) {
+    final sel = _activeTab == idx;
+    return GestureDetector(
+      onTap: () => setState(() => _activeTab = idx),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: sel
+              ? (isDark ? AppColors.slate700 : Colors.white)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+          boxShadow: sel
+              ? [BoxShadow(color: Colors.black.withAlpha(20), blurRadius: 4, offset: const Offset(0, 1))]
+              : null,
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: sel ? FontWeight.w600 : FontWeight.w500,
+            color: sel
+                ? (isDark ? Colors.white : AppColors.slate900)
+                : (isDark ? AppColors.slate400 : AppColors.slate500),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Tab 0: Geral ──────────────────────────────────────────────────────────
+
+  Widget _buildTabGeral(bool isDark) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _subCard(
+        isDark:    isDark,
+        accentBg:  const Color(0xFFEEF2FF),
+        accentFg:  const Color(0xFF4F46E5),
+        icon:      Icons.group_outlined,
+        title:     'Jogadores',
+        subtitle:  'Por partida',
+        child: Row(
+          children: [
+            Expanded(child: _labeledInput(
+              label: 'Mínimo', ctrl: _minCtrl, hint: '5',
+              isDark: isDark, type: TextInputType.number,
+              fmts: [FilteringTextInputFormatter.digitsOnly],
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: _labeledInput(
+              label: 'Máximo', ctrl: _maxCtrl, hint: '6',
+              isDark: isDark, type: TextInputType.number,
+              fmts: [FilteringTextInputFormatter.digitsOnly],
+            )),
+          ],
+        ),
+      ),
+      const SizedBox(height: 12),
+      _subCard(
+        isDark:   isDark,
+        accentBg: const Color(0xFFFFFBEB),
+        accentFg: const Color(0xFFD97706),
+        icon:     Icons.calendar_today_outlined,
+        title:    'Padrões',
+        subtitle: 'Local, dia e horário',
+        child: Column(
+          children: [
+            _labeledInput(
+              label: 'Local padrão', ctrl: _placeCtrl,
+              hint: 'Ex: Boca Jrs', isDark: isDark,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: _DayDropdown(
+                  label: 'Dia', value: _dayOfWeek, isDark: isDark,
+                  onChanged: (v) => setState(() => _dayOfWeek = v),
+                )),
+                const SizedBox(width: 12),
+                Expanded(child: _TimeField(
+                  label: 'Horário', value: _kickoffTime,
+                  isDark: isDark, onTap: _pickTime,
+                )),
+              ],
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 12),
+      Container(
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.slate900 : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.slate700 : const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(Icons.bar_chart_rounded, size: 18,
+                  color: isDark ? AppColors.slate300 : const Color(0xFF2563EB)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Exibir gols e assistências',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
+                          color: isDark ? AppColors.slate100 : AppColors.slate900)),
+                  const SizedBox(height: 2),
+                  Text('Jogadores comuns poderão ver gols e assistências.',
+                      style: TextStyle(fontSize: 11,
+                          color: isDark ? AppColors.slate400 : AppColors.slate500)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Switch(
+              value: _showPlayerStats,
+              onChanged: (v) => setState(() => _showPlayerStats = v),
+              activeThumbColor: isDark ? AppColors.slate100 : AppColors.slate900,
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  // ── Tab 1: Pagamento ──────────────────────────────────────────────────────
+
+  Widget _buildTabPagamento(bool isDark) => _subCard(
+    isDark:   isDark,
+    accentBg: const Color(0xFFECFDF5),
+    accentFg: const Color(0xFF059669),
+    icon:     Icons.payments_outlined,
+    title:    'Pagamento',
+    subtitle: 'Modo de cobrança',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _payModeBtn(0, 'Mensal',   isDark)),
+            const SizedBox(width: 8),
+            Expanded(child: _payModeBtn(1, 'Por jogo', isDark)),
+          ],
+        ),
+        if (_paymentMode == 0) ...[
+          const SizedBox(height: 12),
+          _labeledInput(
+            label: 'Mensalidade Jogador (R\$)', ctrl: _feeCtrl,
+            hint: 'Ex: 50.00', isDark: isDark,
+            type: const TextInputType.numberWithOptions(decimal: true),
+          ),
+          const SizedBox(height: 8),
+          _labeledInput(
+            label: 'Mensalidade Goleiro (R\$)', ctrl: _goalkeeperFeeCtrl,
+            hint: 'Padrão: igual ao jogador', isDark: isDark,
+            type: const TextInputType.numberWithOptions(decimal: true),
+          ),
+          const SizedBox(height: 12),
+          _DueDayDropdown(
+            label:     'Dia de vencimento',
+            value:     _paymentDueDay,
+            isDark:    isDark,
+            onChanged: (v) => setState(() => _paymentDueDay = v),
+          ),
+        ],
+        const SizedBox(height: 8),
+        Text(
+          _paymentMode == 0
+              ? 'Cobrado mensalmente ao encerrar uma partida.'
+              : 'O financeiro define o valor ao encerrar cada partida.',
+          style: TextStyle(fontSize: 11,
+              color: isDark ? AppColors.slate500 : AppColors.slate400),
+        ),
+      ],
+    ),
+  );
+
+  // ── Tab 2: MVP ────────────────────────────────────────────────────────────
+
+  Widget _buildTabMvp(bool isDark) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _subCard(
+        isDark:   isDark,
+        accentBg: const Color(0xFFFFFBEB),
+        accentFg: const Color(0xFFD97706),
+        icon:     Icons.emoji_events_outlined,
+        title:    'Empate no MVP',
+        subtitle: 'O que acontece quando dois ou mais jogadores empatam em votos',
+        child: _buildMvpTieRule(isDark),
+      ),
+      const SizedBox(height: 12),
+      _subCard(
+        isDark:   isDark,
+        accentBg: const Color(0xFFF0F9FF),
+        accentFg: const Color(0xFF0284C7),
+        icon:     Icons.timer_outlined,
+        title:    'Encerrar votação MVP automaticamente',
+        subtitle: 'Finaliza a partida após um tempo configurado',
+        child: _buildAutoFinalizeSection(isDark),
+      ),
+    ],
+  );
+
+  // ── Save button (shared) ──────────────────────────────────────────────────
+
+  Widget _buildSaveButton(bool isDark) => Row(
+    children: [
+      SizedBox(
+        height: 44,
+        child: FilledButton.icon(
+          onPressed: _saving ? null : _save,
+          icon: _saving
+              ? const SizedBox(width: 14, height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.save_outlined, size: 15),
+          label: Text(_saving ? 'Salvando…' : 'Salvar configurações',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          style: FilledButton.styleFrom(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        ),
+      ),
+      const SizedBox(width: 12),
+      if (_saveMsg != null)
+        Expanded(
+          child: Text('${_saveMsgOk ? '✓ ' : '✕ '}$_saveMsg',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500,
+                  color: _saveMsgOk ? AppColors.emerald500 : AppColors.rose500)),
+        )
+      else if (!_isPersisted)
+        const Expanded(
+          child: Row(
+            children: [
+              Icon(Icons.info_outline_rounded, size: 13, color: AppColors.amber500),
+              SizedBox(width: 4),
+              Flexible(
+                child: Text('Usando valores padrão — salve para persistir.',
+                    style: TextStyle(fontSize: 11, color: AppColors.amber500)),
+              ),
+            ],
+          ),
+        ),
+    ],
   );
 
   // ── Section 2: Configurações gerais ──────────────────────────────────────
@@ -687,6 +1023,15 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                 type: const TextInputType.numberWithOptions(decimal: true),
               ),
             ],
+            if (_paymentMode == 0) ...[
+              const SizedBox(height: 12),
+              _DueDayDropdown(
+                label:     'Dia de vencimento',
+                value:     _paymentDueDay,
+                isDark:    isDark,
+                onChanged: (v) => setState(() => _paymentDueDay = v),
+              ),
+            ],
             const SizedBox(height: 8),
             Text(
               _paymentMode == 0
@@ -712,6 +1057,18 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
         title:    'Empate no MVP',
         subtitle: 'O que acontece quando dois ou mais jogadores empatam em votos',
         child: _buildMvpTieRule(isDark),
+      ),
+
+      const SizedBox(height: 12),
+
+      _subCard(
+        isDark:   isDark,
+        accentBg: const Color(0xFFF0F9FF),
+        accentFg: const Color(0xFF0284C7),
+        icon:     Icons.timer_outlined,
+        title:    'Encerrar votação MVP automaticamente',
+        subtitle: 'Finaliza a partida automaticamente após um tempo configurado',
+        child: _buildAutoFinalizeSection(isDark),
       ),
 
       const SizedBox(height: 12),
@@ -960,6 +1317,67 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
       ],
     ],
   );
+
+  Widget _buildAutoFinalizeSection(bool isDark) {
+    final enabled = _autoFinalizeMvpHours != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                enabled
+                    ? 'Finaliza automaticamente $_autoFinalizeMvpHours h após encerrar a partida.'
+                    : 'Desativado — o admin finaliza manualmente.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? AppColors.slate400 : AppColors.slate500,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Switch(
+              value: enabled,
+              onChanged: (v) => setState(() {
+                if (v) {
+                  _autoFinalizeMvpHours = 2;
+                  _autoFinalizeCtrl.text = '2';
+                } else {
+                  _autoFinalizeMvpHours = null;
+                  _autoFinalizeCtrl.clear();
+                }
+              }),
+              activeThumbColor: isDark ? AppColors.slate100 : AppColors.slate900,
+            ),
+          ],
+        ),
+        if (enabled) ...[
+          const SizedBox(height: 12),
+          _labeledInput(
+            label: 'Horas para encerrar após fim da partida',
+            ctrl:  _autoFinalizeCtrl,
+            hint:  'Ex: 2',
+            isDark: isDark,
+            type:  TextInputType.number,
+            fmts:  [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (v) {
+              final n = int.tryParse(v);
+              setState(() => _autoFinalizeMvpHours = (n != null && n >= 1) ? n : 1);
+            },
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Um lembrete será enviado 1 hora antes do encerramento automático.',
+            style: TextStyle(
+              fontSize: 11,
+              color: isDark ? AppColors.slate500 : AppColors.slate400,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 
   // ── Section 3: Ícones da patota ───────────────────────────────────────────
 
@@ -1837,6 +2255,85 @@ class _DayDropdown extends StatelessWidget {
                 }),
               ],
             ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Due Day Dropdown ──────────────────────────────────────────────────────────
+
+class _DueDayDropdown extends StatelessWidget {
+  final String   label;
+  final int?     value;
+  final bool     isDark;
+  final ValueChanged<int?> onChanged;
+
+  const _DueDayDropdown({
+    required this.label,
+    required this.value,
+    required this.isDark,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: TextStyle(
+              fontSize:   11,
+              fontWeight: FontWeight.w500,
+              color:      isDark ? AppColors.slate400 : AppColors.slate500,
+            )),
+        const SizedBox(height: 5),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color:        isDark ? AppColors.slate800 : AppColors.slate50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+                color: isDark ? AppColors.slate700 : AppColors.slate200),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int?>(
+              value:         value,
+              isExpanded:    true,
+              dropdownColor: isDark ? AppColors.slate800 : Colors.white,
+              style: TextStyle(
+                fontSize: 13,
+                color:    isDark ? AppColors.slate100 : AppColors.slate800,
+              ),
+              icon: Icon(Icons.keyboard_arrow_down_rounded,
+                  color: isDark ? AppColors.slate400 : AppColors.slate500),
+              onChanged: onChanged,
+              items: [
+                DropdownMenuItem<int?>(
+                  value: null,
+                  child: Text('Sem lembrete',
+                      style: TextStyle(
+                          color: isDark
+                              ? AppColors.slate500
+                              : AppColors.slate400)),
+                ),
+                ...List.generate(28, (i) => DropdownMenuItem<int?>(
+                  value: i + 1,
+                  child: Text('Dia ${i + 1}'),
+                )),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value != null
+              ? 'Lembrete no dia 1 e no dia $value de cada mês para quem ainda não pagou.'
+              : 'Nenhum lembrete de vencimento será enviado.',
+          style: TextStyle(
+            fontSize: 11,
+            color: isDark ? AppColors.slate500 : AppColors.slate400,
           ),
         ),
       ],

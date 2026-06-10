@@ -171,6 +171,9 @@ class GroupSettings {
   final String? ownGoalIcon;
   final String? mvpIcon;
   final String? playerIcon;
+  final String? rank1Icon;
+  final String? rank2Icon;
+  final String? rank3Icon;
 
   // MVP tie rule — mirrors site's mvpTieRule / mvpTieMaxPlayers
   // 0 = NoMvp  · 1 = AllMvp (default)  · 2 = AllMvpUpToMax
@@ -180,6 +183,10 @@ class GroupSettings {
   // Meta
   final bool isPersisted; // false = using defaults, prompt user to save
   final bool showPlayerStats; // true = regular players can see goals/assists
+
+  // Notificações configuráveis
+  final int? paymentDueDay;        // dia do mês (1–28) para vencimento da mensalidade; null = sem lembrete
+  final int? autoFinalizeMvpHours; // horas após encerrar para finalizar MVP automaticamente; null = desativado
 
   const GroupSettings({
     this.minPlayers        = 5,
@@ -196,10 +203,15 @@ class GroupSettings {
     this.ownGoalIcon,
     this.mvpIcon,
     this.playerIcon,
+    this.rank1Icon,
+    this.rank2Icon,
+    this.rank3Icon,
     this.mvpTieRule        = 1,
     this.mvpTieMaxPlayers  = 2,
     this.isPersisted       = false,
     this.showPlayerStats   = false,
+    this.paymentDueDay,
+    this.autoFinalizeMvpHours,
   });
 
   factory GroupSettings.defaults() => const GroupSettings();
@@ -225,10 +237,15 @@ class GroupSettings {
       ownGoalIcon:        j['ownGoalIcon']              as String?,
       mvpIcon:            j['mvpIcon']                  as String?,
       playerIcon:         j['playerIcon']               as String?,
-      mvpTieRule:         (j['mvpTieRule']        as int?) ?? 1,
-      mvpTieMaxPlayers:   (j['mvpTieMaxPlayers']  as int?) ?? 2,
-      isPersisted:        (j['isPersisted'] as bool?)   ?? false,
-      showPlayerStats:    (j['showPlayerStats'] as bool?) ?? false,
+      rank1Icon:          j['rank1Icon']                as String?,
+      rank2Icon:          j['rank2Icon']                as String?,
+      rank3Icon:          j['rank3Icon']                as String?,
+      mvpTieRule:           (j['mvpTieRule']          as int?) ?? 1,
+      mvpTieMaxPlayers:     (j['mvpTieMaxPlayers']    as int?) ?? 2,
+      isPersisted:          (j['isPersisted']   as bool?)  ?? false,
+      showPlayerStats:      (j['showPlayerStats'] as bool?) ?? false,
+      paymentDueDay:        j['paymentDueDay']        as int?,
+      autoFinalizeMvpHours: j['autoFinalizeMvpHours'] as int?,
     );
   }
 
@@ -248,9 +265,14 @@ class GroupSettings {
     required String? ownGoalIcon,
     required String? mvpIcon,
     required String? playerIcon,
+    String?          rank1Icon,
+    String?          rank2Icon,
+    String?          rank3Icon,
     required int     mvpTieRule,
     int?             mvpTieMaxPlayers,
     required bool    showPlayerStats,
+    int?             paymentDueDay,
+    int?             autoFinalizeMvpHours,
   }) =>
       {
         'minPlayers':         minPlayers,
@@ -264,13 +286,18 @@ class GroupSettings {
         'ownGoalIcon':        ownGoalIcon,
         'mvpIcon':            mvpIcon,
         'playerIcon':         playerIcon,
+        'rank1Icon':          rank1Icon,
+        'rank2Icon':          rank2Icon,
+        'rank3Icon':          rank3Icon,
         'paymentMode':           paymentMode,
         // fees only sent when Monthly mode
         'monthlyFee':            paymentMode == 0 ? monthlyFee : null,
         'goalkeeperMonthlyFee':  paymentMode == 0 ? goalkeeperMonthlyFee : null,
         'mvpTieRule':         mvpTieRule,
         // mvpTieMaxPlayers only sent when rule == 2 (mirrors site behaviour)
-        'mvpTieMaxPlayers': mvpTieRule == 2 ? mvpTieMaxPlayers : null,
-        'showPlayerStats': showPlayerStats,
+        'mvpTieMaxPlayers':   mvpTieRule == 2 ? mvpTieMaxPlayers : null,
+        'showPlayerStats':    showPlayerStats,
+        'paymentDueDay':      paymentMode == 0 ? paymentDueDay : null,
+        'autoFinalizeMvpHours': autoFinalizeMvpHours,
       };
 }
