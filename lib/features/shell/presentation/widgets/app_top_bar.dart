@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/push/notification_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
@@ -219,48 +220,135 @@ class _NotificationSheetState extends ConsumerState<_NotificationSheet> {
   void _navigate(BuildContext ctx, AppNotification n) {
     _markRead(n);
     Navigator.pop(ctx);
-    final route = n.actionUrl ?? _defaultRoute(n.type);
+
+    // actionUrl explícito tem prioridade
+    if (n.actionUrl != null && n.actionUrl!.isNotEmpty) {
+      ctx.push(n.actionUrl!);
+      return;
+    }
+
+    // Usa dataJson (IDs) para montar a rota mais específica possível
+    final route = notificationRoute(n.type, n.dataJson ?? {});
     if (route.isNotEmpty) ctx.push(route);
   }
 
-  String _defaultRoute(String type) {
-    switch (type.toLowerCase()) {
-      case 'matchinvite':
-      case 'match_invite':  return '/app/matches';
-      case 'groupinvite':
-      case 'group_invite':  return '/app/invites';
-      case 'payment':       return '/app/payments';
-      case 'poll':          return '/app/polls';
-      case 'birthday':      return '/app/birthdays';
-      default:              return '';
-    }
-  }
-
   IconData _iconFor(String type) {
-    switch (type.toLowerCase()) {
-      case 'matchinvite':
-      case 'match_invite':   return Icons.sports_soccer_rounded;
-      case 'groupinvite':
-      case 'group_invite':   return Icons.group_add_rounded;
-      case 'payment':        return Icons.payments_rounded;
-      case 'poll':           return Icons.how_to_vote_rounded;
-      case 'birthday':       return Icons.cake_rounded;
-      case 'replay':         return Icons.videocam_rounded;
-      default:               return Icons.notifications_rounded;
+    switch (type) {
+      case 'match_invite':
+      case 'match_invite_reminder':
+      case 'match_started':
+      case 'match_ended':
+      case 'match_finalized':
+      case 'match_no_quorum':
+      case 'teams_assigned':
+      case 'attendance_accepted':
+      case 'attendance_rejected':
+        return Icons.sports_soccer_rounded;
+
+      case 'match_mvp':
+      case 'mvp_voting_reminder':
+        return Icons.emoji_events_rounded;
+
+      case 'poll_created':
+      case 'poll_closed':
+      case 'poll_reminder':
+      case 'poll_deadline_changed':
+        return Icons.how_to_vote_rounded;
+
+      case 'event_created':
+      case 'event_deleted':
+      case 'event_reminder':
+        return Icons.calendar_month_rounded;
+
+      case 'payment_pending':
+      case 'payment_confirmed':
+      case 'monthly_payment_reminder':
+      case 'extra_charge_discount':
+        return Icons.payments_rounded;
+
+      case 'group_invite':
+        return Icons.group_add_rounded;
+
+      case 'promoted_admin':
+      case 'promoted_financeiro':
+        return Icons.shield_rounded;
+
+      case 'player_left':
+      case 'player_removed':
+      case 'player_removed_self':
+        return Icons.person_remove_rounded;
+
+      case 'bet_resolved':
+      case 'bet_created':
+        return Icons.casino_rounded;
+
+      case 'birthday':
+        return Icons.cake_rounded;
+
+      case 'replay':
+        return Icons.videocam_rounded;
+
+      default:
+        return Icons.notifications_rounded;
     }
   }
 
   Color _colorFor(String type) {
-    switch (type.toLowerCase()) {
-      case 'matchinvite':
-      case 'match_invite':  return const Color(0xFF3B82F6);
-      case 'groupinvite':
-      case 'group_invite':  return const Color(0xFF8B5CF6);
-      case 'payment':       return const Color(0xFF10B981);
-      case 'poll':          return const Color(0xFFF59E0B);
-      case 'birthday':      return const Color(0xFFEC4899);
-      case 'replay':        return const Color(0xFFEF4444);
-      default:              return const Color(0xFF64748B);
+    switch (type) {
+      case 'match_invite':
+      case 'match_invite_reminder':
+      case 'match_started':
+      case 'match_ended':
+      case 'match_finalized':
+      case 'match_no_quorum':
+      case 'teams_assigned':
+      case 'attendance_accepted':
+      case 'attendance_rejected':
+        return const Color(0xFF3B82F6); // blue
+
+      case 'match_mvp':
+      case 'mvp_voting_reminder':
+        return const Color(0xFFEAB308); // yellow
+
+      case 'poll_created':
+      case 'poll_closed':
+      case 'poll_reminder':
+      case 'poll_deadline_changed':
+        return const Color(0xFFF59E0B); // amber
+
+      case 'event_created':
+      case 'event_deleted':
+      case 'event_reminder':
+        return const Color(0xFF6366F1); // indigo
+
+      case 'payment_pending':
+      case 'payment_confirmed':
+      case 'monthly_payment_reminder':
+      case 'extra_charge_discount':
+        return const Color(0xFF10B981); // green
+
+      case 'group_invite':
+      case 'promoted_admin':
+      case 'promoted_financeiro':
+        return const Color(0xFF8B5CF6); // violet
+
+      case 'player_left':
+      case 'player_removed':
+      case 'player_removed_self':
+        return const Color(0xFFEF4444); // red
+
+      case 'bet_resolved':
+      case 'bet_created':
+        return const Color(0xFFEC4899); // pink
+
+      case 'birthday':
+        return const Color(0xFFEC4899); // pink
+
+      case 'replay':
+        return const Color(0xFFEF4444); // red
+
+      default:
+        return const Color(0xFF64748B); // slate
     }
   }
 

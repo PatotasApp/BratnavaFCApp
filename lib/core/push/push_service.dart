@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 import 'package:logger/logger.dart';
 import 'local_notifications.dart';
+import 'notification_router.dart';
 import 'push_token_api.dart';
 
 /// Handler de background — DEVE ser função top-level (fora de qualquer classe).
@@ -14,15 +15,35 @@ Future<void> firebaseBackgroundMessageHandler(RemoteMessage message) async {
   final data = message.data;
   log.d('[Push BG] type=${data["type"]} | data: $data');
 
-  // match_invite é data-only: exibe notificação local com botões SIM/NÃO
+  await LocalNotifications.initialize();
+
+  // match_invite é data-only: exibe com botões SIM/NÃO
   if (data['type'] == 'match_invite') {
-    await LocalNotifications.initialize();
     await LocalNotifications.showMatchInvite(
       title:   data['title'] ?? 'Convite para partida',
       body:    data['body']  ?? 'Você foi convidado. Confirme sua presença!',
       groupId: data['groupId'] ?? '',
       matchId: data['matchId'] ?? '',
     );
+    return;
+  }
+
+  // poll_reminder de evento: exibe com botões Sim/Talvez/Não
+  if (data['type'] == 'poll_reminder' && data['pollType'] == 'event') {
+    final optionSimId    = data['optionSimId']    ?? '';
+    final optionTalvezId = data['optionTalvezId'] ?? '';
+    final optionNaoId    = data['optionNaoId']    ?? '';
+    if (optionSimId.isNotEmpty && optionTalvezId.isNotEmpty && optionNaoId.isNotEmpty) {
+      await LocalNotifications.showEventPollReminder(
+        title:          data['title'] ?? 'Votação encerrando! 🗳️',
+        body:           data['body']  ?? 'Vote antes que seja tarde!',
+        groupId:        data['groupId'] ?? '',
+        pollId:         data['pollId']  ?? '',
+        optionSimId:    optionSimId,
+        optionTalvezId: optionTalvezId,
+        optionNaoId:    optionNaoId,
+      );
+    }
   }
 }
 
@@ -40,9 +61,19 @@ class PushService {
   })  : _tokenApi = tokenApi,
         _router = router
   {
-    // Injeta callback de navegação para toque no corpo da notificação local
+    // Callbacks de navegação para toque no corpo das notificações locais
     LocalNotifications.onMatchInviteTapped = (groupId, matchId) {
-      _router.push('/app/matches');
+      _router.push(notificationRoute('match_invite', {
+        'matchId': matchId,
+        'groupId': groupId,
+      }));
+    };
+
+    LocalNotifications.onEventPollTapped = (groupId, pollId) {
+      _router.push(notificationRoute('poll_reminder', {
+        'pollId':  pollId,
+        'groupId': groupId,
+      }));
     };
   }
 
@@ -126,9 +157,15 @@ class PushService {
     if (details == null || !details.didNotificationLaunchApp) return;
     final payload = details.notificationResponse?.payload;
     if (payload == null || !payload.contains('::')) return;
-    // É um match_invite — navega para partidas após o frame ser construído
+    // É um match_invite — extrai IDs do payload ("groupId::matchId") e navega
+    final parts   = payload.split('::');
+    final groupId = parts.isNotEmpty  ? parts[0] : '';
+    final matchId = parts.length >= 2 ? parts[1] : '';
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _router.push('/app/matches');
+      _router.push(notificationRoute('match_invite', {
+        'matchId': matchId,
+        'groupId': groupId,
+      }));
     });
   }
 
@@ -164,73 +201,18 @@ class PushService {
 
   // ── Navegação via payload ────────────────────────────────────────────────
 
-  /// Interpreta o campo `type` do payload e redireciona para a tela correta.
-  ///
-  /// Payloads esperados:
-  ///   { "type": "match_invite",    "groupId": "...", "matchId": "..." }
-  ///   { "type": "match_started",   "groupId": "...", "matchId": "..." }
-  ///   { "type": "match_ended",     "groupId": "...", "matchId": "..." }
-  ///   { "type": "group_invite" }
-  ///   { "type": "payment_pending", "groupId": "..." }
+  /// Interpreta o campo `type` do payload FCM e navega para a tela correta.
+  /// A lógica de roteamento está centralizada em [notificationRoute].
   void _navigate(Map<String, dynamic> data) {
-    final type    = data['type']    as String?;
-    final groupId = data['groupId'] as String?;
-    final matchId = data['matchId'] as String?;
-
-    switch (type) {
-      // ── Partidas ────────────────────────────────────────────────────────────
-      case 'match_invite':
-      case 'match_started':
-        _router.push('/app/matches');
-        break;
-
-      case 'teams_assigned':
-        _router.push('/app/matches');
-        break;
-
-      case 'match_ended':
-        // Encerrada → tela de partidas para votar no MVP
-        _router.push('/app/matches');
-        break;
-
-      case 'match_finalized':
-        // Finalizada → histórico com resultado e MVP
-        if (groupId != null && matchId != null) {
-          _router.push('/app/history/$groupId/$matchId');
-        } else {
-          _router.push('/app/history');
-        }
-        break;
-
-      // ── Convites / grupo ─────────────────────────────────────────────────────
-      case 'group_invite':
-      case 'player_left':
-      case 'promoted_admin':
-      case 'promoted_financeiro':
-        _router.push('/app/groups');
-        break;
-
-      // ── Financeiro ───────────────────────────────────────────────────────────
-      case 'payment_pending':
-      case 'payment_confirmed':
-        _router.push('/app/payments');
-        break;
-
-      // ── Votações ─────────────────────────────────────────────────────────────
-      case 'poll_created':
-      case 'poll_closed':
-        _router.push('/app/polls');
-        break;
-
-      // ── Calendário ───────────────────────────────────────────────────────────
-      case 'event_created':
-      case 'event_deleted':
-        _router.push('/app/calendar');
-        break;
-
-      default:
-        _log.d('[Push] Tipo de notificação desconhecido: $type');
+    final type = data['type'] as String?;
+    if (type == null || type.isEmpty) {
+      _log.d('[Push] Payload sem campo "type" — ignorando navegação.');
+      return;
     }
+
+    final route = notificationRoute(type, data);
+    _log.d('[Push] Navegando: type=$type → $route');
+    _router.push(route);
   }
 
   // ── Notificação em foreground ────────────────────────────────────────────
@@ -239,7 +221,7 @@ class PushService {
     final data  = message.data;
     final type  = data['type'] as String?;
 
-    // match_invite é data-only (sem notification field) — exibe com botões SIM/NÃO
+    // match_invite é data-only — exibe com botões SIM/NÃO
     if (type == 'match_invite') {
       LocalNotifications.showMatchInvite(
         title:   data['title'] ?? 'Convite para partida',
@@ -248,6 +230,25 @@ class PushService {
         matchId: data['matchId'] ?? '',
       );
       return;
+    }
+
+    // poll_reminder de evento — exibe com botões Sim/Talvez/Não
+    if (type == 'poll_reminder' && data['pollType'] == 'event') {
+      final optionSimId    = data['optionSimId']    ?? '';
+      final optionTalvezId = data['optionTalvezId'] ?? '';
+      final optionNaoId    = data['optionNaoId']    ?? '';
+      if (optionSimId.isNotEmpty && optionTalvezId.isNotEmpty && optionNaoId.isNotEmpty) {
+        LocalNotifications.showEventPollReminder(
+          title:          data['title'] ?? 'Votação encerrando! 🗳️',
+          body:           data['body']  ?? 'Vote antes que seja tarde!',
+          groupId:        data['groupId'] ?? '',
+          pollId:         data['pollId']  ?? '',
+          optionSimId:    optionSimId,
+          optionTalvezId: optionTalvezId,
+          optionNaoId:    optionNaoId,
+        );
+        return;
+      }
     }
 
     final title = message.notification?.title ?? data['title'] as String? ?? '';
