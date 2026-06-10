@@ -337,6 +337,20 @@ class _CurrentBetTabState extends ConsumerState<CurrentBetTab> {
             const SizedBox(height: 12),
           ],
 
+          // ── Escalação dos times ───────────────────────────────────────────
+          if (ctx.players.any((p) => p.team != 0)) ...[
+            _TeamLineupPanel(
+              players:    ctx.players,
+              selections: _selections,
+              teamAName:  ctx.teamAName,
+              teamBName:  ctx.teamBName,
+              teamAColor: ctx.teamAColor,
+              teamBColor: ctx.teamBColor,
+              isDark:     isDark,
+            ),
+            const SizedBox(height: 12),
+          ],
+
           // ── Selection cards ───────────────────────────────────────────────
           if (hasExisting || !isLocked)
             for (var i = 0; i < _selections.length; i++) ...[
@@ -350,7 +364,11 @@ class _CurrentBetTabState extends ConsumerState<CurrentBetTab> {
                     ? _selections.firstWhere(
                         (s) => s.category == 'WinningTeam').winTeam
                     : null,
-                isDark:    isDark,
+                isDark:      isDark,
+                teamAName:   ctx.teamAName,
+                teamBName:   ctx.teamBName,
+                teamAColor:  ctx.teamAColor,
+                teamBColor:  ctx.teamBColor,
                 onUpdate:  (updated) => _updateSelection(i, updated),
                 onRemove:  () => _removeSelection(i),
               ),
@@ -679,6 +697,10 @@ class _SelectionCard extends StatelessWidget {
   final bool               canRemove;
   final String?            winnerHint;
   final bool               isDark;
+  final String?            teamAName;
+  final String?            teamBName;
+  final Color?             teamAColor;
+  final Color?             teamBColor;
   final ValueChanged<SelectionFormState> onUpdate;
   final VoidCallback       onRemove;
 
@@ -692,6 +714,10 @@ class _SelectionCard extends StatelessWidget {
     required this.onUpdate,
     required this.onRemove,
     this.winnerHint,
+    this.teamAName,
+    this.teamBName,
+    this.teamAColor,
+    this.teamBColor,
   });
 
   bool _scoreConsistent(String? winner, int? a, int? b) {
@@ -787,13 +813,26 @@ class _SelectionCard extends StatelessWidget {
   }
 
   Widget _buildWinningTeam(TextStyle labelStyle) {
-    const opts = [
-      ('TeamA', 'Time A'),
-      ('Draw',  'Empate'),
-      ('TeamB', 'Time B'),
+    final labelA = teamAName ?? 'Time A';
+    final labelB = teamBName ?? 'Time B';
+    final colorA = teamAColor;
+    final colorB = teamBColor;
+
+    final opts = [
+      ('TeamA', labelA, colorA),
+      ('Draw',  'Empate', null as Color?),
+      ('TeamB', labelB,  colorB),
     ];
+
     return Row(children: opts.map((opt) {
-      final active = sel.winTeam == opt.$1;
+      final active     = sel.winTeam == opt.$1;
+      final teamColor  = opt.$3;
+      final activeColor = teamColor
+          ?? (isDark ? Colors.white : AppColors.slate900);
+      final activeFg = teamColor != null
+          ? (teamColor.computeLuminance() > 0.4 ? AppColors.slate900 : Colors.white)
+          : (isDark ? AppColors.slate900 : Colors.white);
+
       return Expanded(child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 3),
         child: GestureDetector(
@@ -803,14 +842,14 @@ class _SelectionCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
               color: active
-                  ? (isDark ? Colors.white : AppColors.slate900)
+                  ? activeColor
                   : (locked
                       ? (isDark ? AppColors.slate800 : AppColors.slate50)
                       : (isDark ? AppColors.slate700 : AppColors.slate50)),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: active
-                    ? (isDark ? Colors.white : AppColors.slate900)
+                    ? activeColor
                     : (isDark ? AppColors.slate600 : AppColors.slate200),
               ),
             ),
@@ -819,7 +858,7 @@ class _SelectionCard extends StatelessWidget {
                   fontSize:   12,
                   fontWeight: FontWeight.w600,
                   color: active
-                      ? (isDark ? AppColors.slate900 : Colors.white)
+                      ? activeFg
                       : (isDark ? AppColors.slate300 : AppColors.slate600),
                 ))),
           ),
@@ -834,7 +873,7 @@ class _SelectionCard extends StatelessWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Expanded(child: Column(children: [
-          Text('Time A', style: labelStyle),
+          Text(teamAName ?? 'Time A', style: labelStyle),
           const SizedBox(height: 6),
           _NumberStepper(
             value:    sel.scoreA ?? 0,
@@ -854,7 +893,7 @@ class _SelectionCard extends StatelessWidget {
                   color: isDark ? AppColors.slate400 : AppColors.slate400)),
         ),
         Expanded(child: Column(children: [
-          Text('Time B', style: labelStyle),
+          Text(teamBName ?? 'Time B', style: labelStyle),
           const SizedBox(height: 6),
           _NumberStepper(
             value:    sel.scoreB ?? 0,
@@ -916,7 +955,7 @@ class _SelectionCard extends StatelessWidget {
                 DropdownMenuItem(
                   value: p.matchPlayerId,
                   child: Text(
-                    '${p.name} (${p.team == 1 ? "Time A" : "Time B"})',
+                    '${p.name} (${p.team == 1 ? (teamAName ?? "Time A") : (teamBName ?? "Time B")})',
                     style: TextStyle(fontSize: 13,
                         color: isDark ? Colors.white : AppColors.slate900),
                   ),
@@ -943,6 +982,162 @@ class _SelectionCard extends StatelessWidget {
         ),
       ]),
     ]);
+  }
+}
+
+// ── Team lineup panel ─────────────────────────────────────────────────────────
+
+class _TeamLineupPanel extends StatelessWidget {
+  final List<BetPlayer>        players;
+  final List<SelectionFormState> selections;
+  final String?  teamAName;
+  final String?  teamBName;
+  final Color?   teamAColor;
+  final Color?   teamBColor;
+  final bool     isDark;
+
+  const _TeamLineupPanel({
+    required this.players,
+    required this.selections,
+    required this.isDark,
+    this.teamAName,
+    this.teamBName,
+    this.teamAColor,
+    this.teamBColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorA  = teamAColor ?? AppColors.blue500;
+    final colorB  = teamBColor ?? AppColors.slate400;
+    final labelA  = teamAName  ?? 'Time A';
+    final labelB  = teamBName  ?? 'Time B';
+
+    // Seleção de vencedor
+    final winSel  = selections.where((s) => s.category == 'WinningTeam').firstOrNull;
+    final winner  = winSel?.winTeam; // 'TeamA' | 'TeamB' | 'Draw' | null
+
+    // Gols e assistências apostados por matchPlayerId
+    final goals   = <String, int>{};
+    final assists = <String, int>{};
+    for (final s in selections) {
+      if (s.category == 'PlayerGoals'   && s.playerMatchId != null)
+        goals[s.playerMatchId!]   = (goals[s.playerMatchId!]   ?? 0) + (s.playerCount ?? 0);
+      if (s.category == 'PlayerAssists' && s.playerMatchId != null)
+        assists[s.playerMatchId!] = (assists[s.playerMatchId!] ?? 0) + (s.playerCount ?? 0);
+    }
+
+    final teamA = players.where((p) => p.team == 1).toList();
+    final teamB = players.where((p) => p.team == 2).toList();
+
+    Widget buildHeader(String label, Color color, bool highlighted) {
+      final fg = color.computeLuminance() > 0.4 ? AppColors.slate900 : Colors.white;
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        color: color,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              label.toUpperCase(),
+              style: TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w800,
+                letterSpacing: 0.8, color: fg,
+              ),
+            ),
+            if (highlighted && winner != null && winner != 'Draw') ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text('✓ VITÓRIA',
+                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: fg)),
+              ),
+            ],
+            if (winner == 'Draw') ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text('EMPATE',
+                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: fg)),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    Widget buildPlayer(BetPlayer p) {
+      final g = goals[p.matchPlayerId];
+      final a = assists[p.matchPlayerId];
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(p.name,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? AppColors.slate300 : AppColors.slate700,
+                  ),
+                  overflow: TextOverflow.ellipsis),
+            ),
+            if (g != null || a != null)
+              Text(
+                '${g != null ? '${g}⚽' : ''}${a != null ? ' ${a}🅰️' : ''}',
+                style: TextStyle(fontSize: 10, color: isDark ? AppColors.slate400 : AppColors.slate500),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ── Time A ──────────────────────────────────────────────
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    buildHeader(labelA, colorA, winner == 'TeamA' || winner == 'Draw'),
+                    ...teamA.map(buildPlayer),
+                  ],
+                ),
+              ),
+              // divisor vertical
+              VerticalDivider(width: 1, color: isDark ? AppColors.slate700 : AppColors.slate200),
+              // ── Time B ──────────────────────────────────────────────
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    buildHeader(labelB, colorB, winner == 'TeamB' || winner == 'Draw'),
+                    ...teamB.map(buildPlayer),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

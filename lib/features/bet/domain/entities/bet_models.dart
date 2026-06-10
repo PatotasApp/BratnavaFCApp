@@ -147,6 +147,10 @@ class CurrentMatchBetContext {
   final String          playedAt;
   final String          statusName;
   final bool            betWindowOpen;
+  final String?         teamAName;
+  final String?         teamBName;
+  final String?         teamAColorHex;
+  final String?         teamBColorHex;
   final List<BetPlayer> players;
   final MatchBetDto?    myBet;
 
@@ -156,8 +160,22 @@ class CurrentMatchBetContext {
     required this.statusName,
     required this.betWindowOpen,
     required this.players,
+    this.teamAName,
+    this.teamBName,
+    this.teamAColorHex,
+    this.teamBColorHex,
     this.myBet,
   });
+
+  Color? get teamAColor => _hexToColor(teamAColorHex);
+  Color? get teamBColor => _hexToColor(teamBColorHex);
+
+  static Color? _hexToColor(String? hex) {
+    if (hex == null || hex.isEmpty) return null;
+    final clean = hex.replaceAll('#', '');
+    final value = int.tryParse('FF$clean', radix: 16);
+    return value != null ? Color(value) : null;
+  }
 
   factory CurrentMatchBetContext.fromJson(Map<String, dynamic> j) {
     final rawPlayers = j['players'];
@@ -169,6 +187,10 @@ class CurrentMatchBetContext {
       playedAt:      j['playedAt']      as String? ?? '',
       statusName:    j['statusName']    as String? ?? '',
       betWindowOpen: j['betWindowOpen'] as bool?   ?? false,
+      teamAName:     j['teamAName']     as String? ?? j['TeamAName']     as String?,
+      teamBName:     j['teamBName']     as String? ?? j['TeamBName']     as String?,
+      teamAColorHex: j['teamAColorHex'] as String? ?? j['TeamAColorHex'] as String?,
+      teamBColorHex: j['teamBColorHex'] as String? ?? j['TeamBColorHex'] as String?,
       players:       players,
       myBet: j['myBet'] is Map<String, dynamic>
           ? MatchBetDto.fromJson(j['myBet'] as Map<String, dynamic>)
