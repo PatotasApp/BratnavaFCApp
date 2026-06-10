@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/account_store.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/entities/match_models.dart';
 import '../providers/match_provider.dart';
+import '../widgets/match_flyer.dart';
 
 const _kStrategies = [
   (id: 1, label: 'Manual'),
@@ -307,6 +309,39 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
                     .setNoShow(matchPlayerId, noShow),
               ),
               const SizedBox(height: 12),
+              // ── Card da partida ───────────────────────────────────────
+              OutlinedButton.icon(
+                onPressed: () {
+                  final acc = ref.read(accountStoreProvider).activeAccount;
+                  final gid = acc?.activeGroupId ?? '';
+                  final dio = ref.read(dioProvider);
+                  showMatchCardDialog(
+                    context: context, s: s, groupId: gid, dio: dio);
+                },
+                icon: const Icon(Icons.auto_awesome_rounded, size: 16),
+                label: const Text('Card da partida',
+                    style: TextStyle(fontSize: 13)),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 44),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              if (s.unassignedPlayers.isNotEmpty) ...[
+                _UnassignedSection(
+                  players:    s.unassignedPlayers,
+                  isAdmin:    _isAdmin,
+                  isDark:     isDark,
+                  teamALabel: s.teamAColor?.name ?? 'Time A',
+                  teamBLabel: s.teamBColor?.name ?? 'Time B',
+                  teamAColor: s.teamAColor?.color,
+                  teamBColor: s.teamBColor?.color,
+                  onAssign:   (pid, toA) => ref
+                      .read(matchNotifierProvider.notifier)
+                      .assignUnassigned(pid, toA),
+                ),
+                const SizedBox(height: 12),
+              ],
               if (_isAdmin) ...[
                 SizedBox(
                   width: double.infinity,
@@ -579,6 +614,29 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
               )),
             ],
           ),
+
+          // ── Jogadores não atribuídos (ex: goleiros) ───────────────────────
+          if (opt.unassigned.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _UnassignedGenSection(
+              players:    opt.unassigned,
+              isAdmin:    widget.isAdmin,
+              isDark:     widget.isDark,
+              teamALabel: aName,
+              teamBLabel: bName,
+              teamAColor: aColor,
+              teamBColor: bColor,
+              onAssign: (pid, toA) {
+                final player = opt.unassigned.firstWhere((p) => p.playerId == pid);
+                ref.read(matchNotifierProvider.notifier).editTeamGenOption(
+                  widget.selectedIdx,
+                  toA ? [...opt.teamA, player] : opt.teamA,
+                  toA ? opt.teamB : [...opt.teamB, player],
+                  unassigned: opt.unassigned.where((p) => p.playerId != pid).toList(),
+                );
+              },
+            ),
+          ],
 
 
           if (widget.isAdmin) ...[

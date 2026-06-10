@@ -123,7 +123,7 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
                 child: SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: (s.mutating || s.acceptedOverLimit || accepted.length < 2)
+                    onPressed: (s.mutating || !s.canAdvanceToMatchmaking)
                         ? null
                         : _goNext,
                     icon: s.mutating
