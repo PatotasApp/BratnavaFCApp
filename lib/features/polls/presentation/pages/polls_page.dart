@@ -404,24 +404,30 @@ class _Header extends StatelessWidget {
           const SizedBox(height: 14),
 
           // ── Tabs ──
-          Row(
-            children: [
-              _TabBtn(
-                label: 'Eventos',
-                icon: Icons.calendar_today_outlined,
-                count: eventCount,
-                active: activeTab == _Tab.events,
-                onTap: () => onTabChange(_Tab.events),
+          Container(
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
               ),
-              const SizedBox(width: 8),
-              _TabBtn(
-                label: 'Votações',
-                icon: Icons.how_to_vote_outlined,
-                count: pollCount,
-                active: activeTab == _Tab.polls,
-                onTap: () => onTabChange(_Tab.polls),
-              ),
-            ],
+            ),
+            child: Row(
+              children: [
+                _TabBtn(
+                  label: 'Eventos',
+                  icon: Icons.calendar_today_outlined,
+                  count: eventCount,
+                  active: activeTab == _Tab.events,
+                  onTap: () => onTabChange(_Tab.events),
+                ),
+                _TabBtn(
+                  label: 'Votações',
+                  icon: Icons.how_to_vote_outlined,
+                  count: pollCount,
+                  active: activeTab == _Tab.polls,
+                  onTap: () => onTabChange(_Tab.polls),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -448,27 +454,28 @@ class _TabBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+      child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: active ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: active ? Colors.white : Colors.white.withValues(alpha: 0.3),
+          border: Border(
+            bottom: BorderSide(
+              color: active ? Colors.white : Colors.transparent,
+              width: 2,
+            ),
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 14, color: active ? AppColors.slate900 : Colors.white.withValues(alpha: 0.7)),
+            Icon(icon, size: 14,
+              color: active ? Colors.white : Colors.white.withValues(alpha: 0.6)),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: active ? AppColors.slate900 : Colors.white.withValues(alpha: 0.7),
+                fontWeight: FontWeight.w500,
+                color: active ? Colors.white : Colors.white.withValues(alpha: 0.6),
               ),
             ),
             if (count > 0) ...[
@@ -476,15 +483,15 @@ class _TabBtn extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(
-                  color: active ? AppColors.slate900 : Colors.white.withValues(alpha: 0.2),
+                  color: Colors.white.withValues(alpha: active ? 0.2 : 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
                   '$count',
                   style: TextStyle(
                     fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: active ? Colors.white : Colors.white,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: active ? 1.0 : 0.6),
                   ),
                 ),
               ),
@@ -526,11 +533,7 @@ class _PollList extends StatelessWidget {
           if (open.isNotEmpty) ...[
             _GroupCard(
               label: isEvents ? 'Abertos' : 'Abertas',
-              color: Colors.green.shade500,
-              icon:  Icons.lock_open_outlined,
               count: open.length,
-              countColor: Colors.green.shade700,
-              countBg: Colors.green.shade50,
               isDark: isDark,
               items: open,
               isEvents: isEvents,
@@ -543,11 +546,7 @@ class _PollList extends StatelessWidget {
           if (closed.isNotEmpty)
             _GroupCard(
               label: isEvents ? 'Encerrados' : 'Encerradas',
-              color: AppColors.slate400,
-              icon:  Icons.lock_outlined,
               count: closed.length,
-              countColor: AppColors.slate600,
-              countBg: AppColors.slate200,
               isDark: isDark,
               items: closed,
               isEvents: isEvents,
@@ -563,11 +562,7 @@ class _PollList extends StatelessWidget {
 
 class _GroupCard extends StatelessWidget {
   final String   label;
-  final Color    color;
-  final IconData icon;
   final int      count;
-  final Color    countColor;
-  final Color    countBg;
   final bool     isDark;
   final List<PollSummary> items;
   final bool     isEvents;
@@ -577,11 +572,7 @@ class _GroupCard extends StatelessWidget {
 
   const _GroupCard({
     required this.label,
-    required this.color,
-    required this.icon,
     required this.count,
-    required this.countColor,
-    required this.countBg,
     required this.isDark,
     required this.items,
     required this.isEvents,
@@ -607,25 +598,27 @@ class _GroupCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
                 color: isDark ? AppColors.slate800.withValues(alpha: 0.5) : AppColors.slate50,
+                border: Border(
+                  bottom: BorderSide(color: isDark ? AppColors.slate800 : AppColors.slate100),
+                ),
               ),
               child: Row(
                 children: [
-                  Container(
-                    width: 22,
-                    height: 22,
-                    decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(6)),
-                    child: Icon(icon, size: 12, color: Colors.white),
+                  Text(
+                    label.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 1.2,
+                      color: isDark ? AppColors.slate500 : AppColors.slate400,
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                  Text(label, style: TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w600,
-                    color: isDark ? AppColors.slate300 : AppColors.slate700,
-                  )),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(color: countBg, borderRadius: BorderRadius.circular(10)),
-                    child: Text('$count', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: countColor)),
+                  Text(
+                    ' · $count',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isDark ? AppColors.slate500 : AppColors.slate400,
+                    ),
                   ),
                 ],
               ),
