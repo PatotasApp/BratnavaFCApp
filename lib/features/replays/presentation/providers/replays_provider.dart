@@ -11,16 +11,22 @@ final replaysDsProvider = Provider<ReplaysRemoteDataSource>(
 
 // ── Tabs state notifiers ──────────────────────────────────────────────────────
 
-/// Shared mutable list of [ReplayClip] with optimistic update helpers.
+/// Shared mutable list of [ReplayClip] with optimistic update helpers
+/// e paginação incremental (load-more).
 class ReplayListNotifier extends StateNotifier<AsyncValue<List<ReplayClip>>> {
   final ReplaysRemoteDataSource _ds;
   final String _groupId;
-  final Future<List<ReplayClip>> Function() _fetcher;
+  final Future<ReplayPage> Function(int page, int pageSize) _fetcher;
+  static const int _pageSize = ReplaysRemoteDataSource.defaultPageSize;
+
+  int _page = 1;
+  int _total = 0;
+  bool _loadingMore = false;
 
   ReplayListNotifier({
     required ReplaysRemoteDataSource ds,
     required String groupId,
-    required Future<List<ReplayClip>> Function() fetcher,
+    required Future<ReplayPage> Function(int page, int pageSize) fetcher,
   })  : _ds = ds,
         _groupId = groupId,
         _fetcher = fetcher,
@@ -28,9 +34,43 @@ class ReplayListNotifier extends StateNotifier<AsyncValue<List<ReplayClip>>> {
     fetch();
   }
 
+  /// Total de itens no servidor e se há mais páginas a carregar.
+  int get total => _total;
+  bool get hasMore => (state.valueOrNull?.length ?? 0) < _total;
+  bool get isLoadingMore => _loadingMore;
+
   Future<void> fetch() async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(_fetcher);
+    _page = 1;
+    try {
+      final page = await _fetcher(1, _pageSize);
+      _total = page.total;
+      state = AsyncData(page.items);
+    } catch (e, st) {
+      state = AsyncError(e, st);
+    }
+  }
+
+  /// Carrega a próxima página e anexa ao final (dedupe por clipId).
+  Future<void> fetchNext() async {
+    final current = state.valueOrNull;
+    if (current == null || _loadingMore || current.length >= _total) return;
+    _loadingMore = true;
+    try {
+      final next = await _fetcher(_page + 1, _pageSize);
+      _page += 1;
+      _total = next.total;
+      final seen = current.map((c) => c.clipId).toSet();
+      final merged = [
+        ...current,
+        ...next.items.where((c) => !seen.contains(c.clipId)),
+      ];
+      state = AsyncData(merged);
+    } catch (_) {
+      // Falha ao carregar mais não é fatal — mantém a lista atual.
+    } finally {
+      _loadingMore = false;
+    }
   }
 
   // ── Optimistic like toggle ────────────────────────────────────────────────
@@ -131,7 +171,8 @@ final replaysAllProvider =
   (ref, groupId) => ReplayListNotifier(
     ds:      ref.watch(replaysDsProvider),
     groupId: groupId,
-    fetcher: () => ref.read(replaysDsProvider).fetchAll(groupId),
+    fetcher: (page, size) =>
+        ref.read(replaysDsProvider).fetchAll(groupId, page: page, pageSize: size),
   ),
 );
 
@@ -141,7 +182,8 @@ final replaysLikedProvider =
   (ref, groupId) => ReplayListNotifier(
     ds:      ref.watch(replaysDsProvider),
     groupId: groupId,
-    fetcher: () => ref.read(replaysDsProvider).fetchMyLikes(groupId),
+    fetcher: (page, size) =>
+        ref.read(replaysDsProvider).fetchMyLikes(groupId, page: page, pageSize: size),
   ),
 );
 
@@ -151,6 +193,7 @@ final replaysFavoritesProvider =
   (ref, groupId) => ReplayListNotifier(
     ds:      ref.watch(replaysDsProvider),
     groupId: groupId,
-    fetcher: () => ref.read(replaysDsProvider).fetchMyFavorites(groupId),
+    fetcher: (page, size) =>
+        ref.read(replaysDsProvider).fetchMyFavorites(groupId, page: page, pageSize: size),
   ),
 );

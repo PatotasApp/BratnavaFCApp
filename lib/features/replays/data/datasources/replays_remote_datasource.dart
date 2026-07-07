@@ -1,9 +1,15 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../../domain/entities/replay_clip.dart';
+
+/// Página de replays: itens + total informado pelo backend (para load-more).
+typedef ReplayPage = ({List<ReplayClip> items, int total});
 
 class ReplaysRemoteDataSource {
   final Dio _dio;
   const ReplaysRemoteDataSource(this._dio);
+
+  static const int defaultPageSize = 20;
 
   // ── Endpoint helpers ──────────────────────────────────────────────────────
 
@@ -22,24 +28,31 @@ class ReplaysRemoteDataSource {
   static String _delete(String gid, String cid) =>
       '/api/matches/group/$gid/replays/$cid';
 
-  // ── Queries ───────────────────────────────────────────────────────────────
+  // ── Queries (paginadas) ───────────────────────────────────────────────────
 
-  Future<List<ReplayClip>> fetchAll(String groupId) async {
-    final res = await _dio.get(_all(groupId));
-    final raw = _unwrapList(res.data);
-    return raw.map((e) => ReplayClip.fromJson(e as Map<String, dynamic>)).toList();
-  }
+  Future<ReplayPage> fetchAll(String groupId,
+          {int page = 1, int pageSize = defaultPageSize}) =>
+      _fetchPage(_all(groupId), page: page, pageSize: pageSize);
 
-  Future<List<ReplayClip>> fetchMyLikes(String groupId) async {
-    final res = await _dio.get(_myLikes(groupId));
-    final raw = _unwrapList(res.data);
-    return raw.map((e) => ReplayClip.fromJson(e as Map<String, dynamic>)).toList();
-  }
+  Future<ReplayPage> fetchMyLikes(String groupId,
+          {int page = 1, int pageSize = defaultPageSize}) =>
+      _fetchPage(_myLikes(groupId), page: page, pageSize: pageSize);
 
-  Future<List<ReplayClip>> fetchMyFavorites(String groupId) async {
-    final res = await _dio.get(_myFavorites(groupId));
-    final raw = _unwrapList(res.data);
-    return raw.map((e) => ReplayClip.fromJson(e as Map<String, dynamic>)).toList();
+  Future<ReplayPage> fetchMyFavorites(String groupId,
+          {int page = 1, int pageSize = defaultPageSize}) =>
+      _fetchPage(_myFavorites(groupId), page: page, pageSize: pageSize);
+
+  Future<ReplayPage> _fetchPage(String path,
+      {required int page, required int pageSize}) async {
+    final res = await _dio.get(path, queryParameters: {
+      'page': page,
+      'pageSize': pageSize,
+    });
+    final items = unwrapList(res.data)
+        .map((e) => ReplayClip.fromJson(e as Map<String, dynamic>))
+        .toList();
+    final total = extractTotal(res.data) ?? items.length;
+    return (items: items, total: total);
   }
 
   // ── Mutations ─────────────────────────────────────────────────────────────
@@ -80,13 +93,25 @@ class ReplaysRemoteDataSource {
     }
   }
 
-  List<dynamic> _unwrapList(dynamic data) {
-    if (data is List) return data;
-    if (data is Map) {
-      final inner = data['data'] ?? data['Data'];
-      if (inner is List) return inner;
-    }
-    return const [];
+  /// Desembrulha a lista de itens tolerando três formatos de resposta:
+  ///  - array cru:                      `[ {...}, {...} ]`
+  ///  - envelope ApiResponse:           `{ data: [ {...} ] }`
+  ///  - envelope + PagedResultDto:       `{ data: { items: [ {...} ] } }`
+  @visibleForTesting
+  static List<dynamic> unwrapList(dynamic data) {
+    dynamic node = data;
+    if (node is Map) node = node['data'] ?? node['Data'] ?? node;   // ApiResponse
+    if (node is Map) node = node['items'] ?? node['Items'] ?? node; // PagedResultDto
+    return node is List ? node : const [];
+  }
+
+  /// Extrai `total` do PagedResultDto quando presente.
+  @visibleForTesting
+  static int? extractTotal(dynamic data) {
+    dynamic node = data;
+    if (node is Map) node = node['data'] ?? node['Data'] ?? node;
+    if (node is Map) return node['total'] as int? ?? node['Total'] as int?;
+    return null;
   }
 
   Map<String, dynamic> _unwrapMap(dynamic data) {

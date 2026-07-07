@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../domain/entities/replay_clip.dart';
 import '../providers/replays_provider.dart';
+
+// Presets de velocidade (câmera lenta → normal → rápido). Paridade com o site.
+const List<double> _kSpeeds = [0.25, 0.5, 1.0, 1.5, 2.0];
+// Passo aproximado de um quadro a 30fps.
+const Duration _kFrameStep = Duration(milliseconds: 33);
+const String _kSpeedPrefKey = 'replay_speed';
+const String _kLoopPrefKey  = 'replay_loop';
 
 // ── URL resolver (shared) ─────────────────────────────────────────────────────
 
@@ -54,6 +62,9 @@ class _ReplayVideoPlayerPageState
   bool _isFullscreen = false;
   bool _actionBusy   = false;
 
+  double _speed = 1.0;
+  bool   _loop  = false;
+
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   ReplayClip get _clip  => _clips[_index];
@@ -75,7 +86,23 @@ class _ReplayVideoPlayerPageState
     super.initState();
     _index = widget.initialIndex;
     _clips = List<ReplayClip>.from(widget.clips);
+    _loadPrefs();
     _initController();
+  }
+
+  Future<void> _loadPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    final s = prefs.getDouble(_kSpeedPrefKey);
+    final l = prefs.getBool(_kLoopPrefKey);
+    setState(() {
+      if (s != null && _kSpeeds.contains(s)) _speed = s;
+      if (l != null) _loop = l;
+    });
+    if (_initialised) {
+      _ctrl.setPlaybackSpeed(_speed);
+      _ctrl.setLooping(_loop);
+    }
   }
 
   void _initController() {
@@ -88,17 +115,21 @@ class _ReplayVideoPlayerPageState
       ..initialize().then((_) {
           if (!mounted) return;
           setState(() => _initialised = true);
-          _ctrl.play();
-          _ctrl.addListener(_onCtrlUpdate);
+          _ctrl
+            ..setPlaybackSpeed(_speed)
+            ..setLooping(_loop)
+            ..play()
+            // Listener enxuto: só cuida do auto-avanço; a UI que depende do
+            // tempo é reconstruída via ValueListenableBuilder (sem rebuild global).
+            ..addListener(_onEnd);
         }).catchError((_) {
           if (!mounted) return;
           setState(() => _hasError = true);
         });
   }
 
-  void _onCtrlUpdate() {
-    if (!mounted) return;
-    setState(() {});
+  void _onEnd() {
+    if (!mounted || _loop) return;
     final v = _ctrl.value;
     if (v.isInitialized &&
         !v.isPlaying &&
@@ -112,7 +143,7 @@ class _ReplayVideoPlayerPageState
 
   void _goTo(int index) {
     _ctrl
-      ..removeListener(_onCtrlUpdate)
+      ..removeListener(_onEnd)
       ..pause()
       ..dispose();
     setState(() {
@@ -128,9 +159,34 @@ class _ReplayVideoPlayerPageState
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _ctrl
-      ..removeListener(_onCtrlUpdate)
+      ..removeListener(_onEnd)
       ..dispose();
     super.dispose();
+  }
+
+  // ── Velocidade / loop / quadro a quadro ─────────────────────────────────────
+
+  Future<void> _applySpeed(double s) async {
+    setState(() => _speed = s);
+    if (_initialised) _ctrl.setPlaybackSpeed(s);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_kSpeedPrefKey, s);
+  }
+
+  Future<void> _toggleLoop() async {
+    final next = !_loop;
+    setState(() => _loop = next);
+    if (_initialised) _ctrl.setLooping(next);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kLoopPrefKey, next);
+  }
+
+  void _frameStep(int dir) {
+    if (!_initialised) return;
+    _ctrl.pause();
+    final pos = _ctrl.value.position + (_kFrameStep * dir);
+    final dur = _ctrl.value.duration;
+    _ctrl.seekTo(pos < Duration.zero ? Duration.zero : (pos > dur ? dur : pos));
   }
 
   // ── Playback controls ─────────────────────────────────────────────────────
@@ -261,20 +317,30 @@ class _ReplayVideoPlayerPageState
                   },
                 ),
 
+              // Controles: só a subárvore que depende do tempo é reconstruída,
+              // via ValueListenableBuilder (sem rebuild global por tick).
               if (_initialised && _showControls)
-                _ControlsOverlay(
-                  isPlaying:    _ctrl.value.isPlaying,
-                  isBuffering:  _ctrl.value.isBuffering,
-                  isFullscreen: _isFullscreen,
-                  hasPrev:      _hasPrev,
-                  hasNext:      _hasNext,
-                  onPlayPause:  () => _ctrl.value.isPlaying
-                      ? _ctrl.pause() : _ctrl.play(),
-                  onSeekBack:   () => _seek(const Duration(seconds: -10)),
-                  onSeekForward:() => _seek(const Duration(seconds: 10)),
-                  onPrev:       _hasPrev ? () => _goTo(_index - 1) : null,
-                  onNext:       _hasNext ? () => _goTo(_index + 1) : null,
-                  onFullscreen: _toggleFullscreen,
+                ValueListenableBuilder<VideoPlayerValue>(
+                  valueListenable: _ctrl,
+                  builder: (_, v, __) => _ControlsOverlay(
+                    isPlaying:    v.isPlaying,
+                    isBuffering:  v.isBuffering,
+                    isFullscreen: _isFullscreen,
+                    hasPrev:      _hasPrev,
+                    hasNext:      _hasNext,
+                    speed:        _speed,
+                    loop:         _loop,
+                    onPlayPause:  () => v.isPlaying ? _ctrl.pause() : _ctrl.play(),
+                    onSeekBack:   () => _seek(const Duration(seconds: -10)),
+                    onSeekForward:() => _seek(const Duration(seconds: 10)),
+                    onPrev:       _hasPrev ? () => _goTo(_index - 1) : null,
+                    onNext:       _hasNext ? () => _goTo(_index + 1) : null,
+                    onFramePrev:  () => _frameStep(-1),
+                    onFrameNext:  () => _frameStep(1),
+                    onSpeed:      _applySpeed,
+                    onLoop:       _toggleLoop,
+                    onFullscreen: _toggleFullscreen,
+                  ),
                 ),
             ]),
           ),
@@ -429,11 +495,17 @@ class _ControlsOverlay extends StatelessWidget {
   final bool         isFullscreen;
   final bool         hasPrev;
   final bool         hasNext;
+  final double       speed;
+  final bool         loop;
   final VoidCallback onPlayPause;
   final VoidCallback onSeekBack;
   final VoidCallback onSeekForward;
   final VoidCallback? onPrev;
   final VoidCallback? onNext;
+  final VoidCallback onFramePrev;
+  final VoidCallback onFrameNext;
+  final ValueChanged<double> onSpeed;
+  final VoidCallback onLoop;
   final VoidCallback onFullscreen;
 
   const _ControlsOverlay({
@@ -442,11 +514,17 @@ class _ControlsOverlay extends StatelessWidget {
     required this.isFullscreen,
     required this.hasPrev,
     required this.hasNext,
+    required this.speed,
+    required this.loop,
     required this.onPlayPause,
     required this.onSeekBack,
     required this.onSeekForward,
     this.onPrev,
     this.onNext,
+    required this.onFramePrev,
+    required this.onFrameNext,
+    required this.onSpeed,
+    required this.onLoop,
     required this.onFullscreen,
   });
 
@@ -465,32 +543,45 @@ class _ControlsOverlay extends StatelessWidget {
         ),
       ),
       child: Stack(children: [
+        // Transporte central (com quadro a quadro nas pontas internas)
         Center(
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            _CtrlBtn(icon: Icons.skip_previous_rounded, size: 28,
+            _CtrlBtn(icon: Icons.skip_previous_rounded, size: 26,
                 onTap: onPrev, disabled: !hasPrev),
-            const SizedBox(width: 8),
-            _CtrlBtn(icon: Icons.replay_10_rounded, size: 32, onTap: onSeekBack),
-            const SizedBox(width: 16),
+            _CtrlBtn(icon: Icons.navigate_before_rounded, size: 26, onTap: onFramePrev),
+            const SizedBox(width: 4),
+            _CtrlBtn(icon: Icons.replay_10_rounded, size: 30, onTap: onSeekBack),
+            const SizedBox(width: 12),
             isBuffering
                 ? const SizedBox(width: 60, height: 60,
                     child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
                 : _CtrlBtn(
                     icon:  isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                    size:  52, onTap: onPlayPause),
-            const SizedBox(width: 16),
-            _CtrlBtn(icon: Icons.forward_10_rounded, size: 32, onTap: onSeekForward),
-            const SizedBox(width: 8),
-            _CtrlBtn(icon: Icons.skip_next_rounded, size: 28,
+                    size:  50, onTap: onPlayPause),
+            const SizedBox(width: 12),
+            _CtrlBtn(icon: Icons.forward_10_rounded, size: 30, onTap: onSeekForward),
+            const SizedBox(width: 4),
+            _CtrlBtn(icon: Icons.navigate_next_rounded, size: 26, onTap: onFrameNext),
+            _CtrlBtn(icon: Icons.skip_next_rounded, size: 26,
                 onTap: onNext, disabled: !hasNext),
           ]),
         ),
+        // Barra inferior: velocidade / câmera lenta + loop
         Positioned(
-          bottom: 12, right: 12,
-          child: _CtrlBtn(
-            icon:  isFullscreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
-            size:  24, onTap: onFullscreen,
-          ),
+          left: 12, right: 12, bottom: 10,
+          child: Row(children: [
+            Expanded(child: _SpeedBar(speed: speed, onSpeed: onSpeed)),
+            const SizedBox(width: 8),
+            _CtrlBtn(
+              icon: Icons.loop_rounded, size: 20, onTap: onLoop,
+              highlighted: loop,
+            ),
+            const SizedBox(width: 6),
+            _CtrlBtn(
+              icon:  isFullscreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
+              size:  22, onTap: onFullscreen,
+            ),
+          ]),
         ),
         if (isFullscreen)
           Positioned(
@@ -505,17 +596,60 @@ class _ControlsOverlay extends StatelessWidget {
   }
 }
 
+// ── Barra de velocidade (segmentada) ────────────────────────────────────────────
+
+class _SpeedBar extends StatelessWidget {
+  final double speed;
+  final ValueChanged<double> onSpeed;
+  const _SpeedBar({required this.speed, required this.onSpeed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 30,
+      decoration: BoxDecoration(
+        color: const Color(0x55000000),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        for (final s in _kSpeeds)
+          GestureDetector(
+            onTap: () => onSpeed(s),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: speed == s ? Colors.white : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                '${s == s.roundToDouble() ? s.toInt() : s}×',
+                style: TextStyle(
+                  fontSize: 12, fontWeight: FontWeight.w700,
+                  color: speed == s ? const Color(0xFF0F172A) : Colors.white70,
+                ),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
+}
+
 class _CtrlBtn extends StatelessWidget {
   final IconData      icon;
   final double        size;
   final VoidCallback? onTap;
   final bool          disabled;
+  final bool          highlighted;
 
   const _CtrlBtn({
     required this.icon,
     this.size = 28,
     this.onTap,
     this.disabled = false,
+    this.highlighted = false,
   });
 
   @override
@@ -526,8 +660,9 @@ class _CtrlBtn extends StatelessWidget {
         onTap: disabled ? null : onTap,
         child: Container(
           width: size + 18, height: size + 18,
-          decoration: const BoxDecoration(
-            color: Color(0x55000000), shape: BoxShape.circle,
+          decoration: BoxDecoration(
+            color: highlighted ? const Color(0xAA34D399) : const Color(0x55000000),
+            shape: BoxShape.circle,
           ),
           child: Icon(icon, color: Colors.white, size: size),
         ),
@@ -549,9 +684,13 @@ class _ProgressBar extends StatelessWidget {
       color: const Color(0xFF0F172A),
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
       child: Row(children: [
-        Text(fmt(ctrl.value.position),
-            style: const TextStyle(
-                color: Colors.white54, fontSize: 11, fontFamily: 'monospace')),
+        // Só o texto de posição precisa atualizar por tick.
+        ValueListenableBuilder<VideoPlayerValue>(
+          valueListenable: ctrl,
+          builder: (_, v, __) => Text(fmt(v.position),
+              style: const TextStyle(
+                  color: Colors.white54, fontSize: 11, fontFamily: 'monospace')),
+        ),
         Expanded(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),

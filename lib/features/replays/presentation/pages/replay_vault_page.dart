@@ -30,7 +30,7 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
   bool _resolvedIsAdmin(String groupId) {
     final acc = ref.read(accountStoreProvider).activeAccount;
     if (acc == null) return false;
-    return acc.isAdmin || acc.groupAdminIds.contains(groupId);
+    return acc.isGroupAdmin(groupId);
   }
 
   String? get _accessToken =>
@@ -251,6 +251,27 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
           }
         }
 
+        // ── Load-more (paginação) ─────────────────────────────────────────
+        if (notifier.hasMore) {
+          slivers.add(SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: notifier.isLoadingMore
+                    ? const SizedBox(
+                        width: 22, height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : TextButton.icon(
+                        onPressed: () => notifier.fetchNext(),
+                        icon:  const Icon(Icons.expand_more_rounded, size: 18),
+                        label: Text(
+                            'Carregar mais (${notifier.total - clips.length})'),
+                      ),
+              ),
+            ),
+          ));
+        }
+
         // bottom padding
         slivers.add(const SliverPadding(
           padding: EdgeInsets.only(bottom: 32),
@@ -258,7 +279,17 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
 
         return RefreshIndicator(
           onRefresh: notifier.fetch,
-          child: CustomScrollView(slivers: slivers),
+          child: NotificationListener<ScrollNotification>(
+            onNotification: (sn) {
+              if (sn.metrics.pixels >= sn.metrics.maxScrollExtent - 400 &&
+                  notifier.hasMore &&
+                  !notifier.isLoadingMore) {
+                notifier.fetchNext();
+              }
+              return false;
+            },
+            child: CustomScrollView(slivers: slivers),
+          ),
         );
       },
     );
