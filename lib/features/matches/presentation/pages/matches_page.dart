@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/entities/account.dart';
@@ -30,10 +29,10 @@ class MatchesPage extends ConsumerStatefulWidget {
 
 class _MatchesPageState extends ConsumerState<MatchesPage> {
   // ── Formulário Step 1 ─────────────────────────────────────────────────────
-  final _formKey   = GlobalKey<FormState>();
+  final _formKey = GlobalKey<FormState>();
   final _placeCtrl = TextEditingController();
-  DateTime _date   = DateTime.now();
-  TimeOfDay _time  = TimeOfDay.now();
+  DateTime _date = DateTime.now();
+  TimeOfDay _time = TimeOfDay.now();
   bool _formInited = false;
 
   // ── Pré-visualização (admin) ──────────────────────────────────────────────
@@ -72,7 +71,9 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
     if (raw != null) {
       final parts = raw.split(':');
       if (parts.length >= 2) {
-        _time = TimeOfDay(hour: int.tryParse(parts[0]) ?? 0, minute: int.tryParse(parts[1]) ?? 0);
+        _time = TimeOfDay(
+            hour: int.tryParse(parts[0]) ?? 0,
+            minute: int.tryParse(parts[1]) ?? 0);
       }
     }
   }
@@ -86,17 +87,21 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
   Future<void> _createMatch() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final placeName = _placeCtrl.text.trim();
-    final playedAt  = DateTime(_date.year, _date.month, _date.day, _time.hour, _time.minute);
-    await ref.read(matchNotifierProvider.notifier).createMatch(placeName, playedAt);
+    final playedAt =
+        DateTime(_date.year, _date.month, _date.day, _time.hour, _time.minute);
+    await ref
+        .read(matchNotifierProvider.notifier)
+        .createMatch(placeName, playedAt);
     if (mounted) setState(() => _creatingNew = false);
   }
 
   // ── Pickers ───────────────────────────────────────────────────────────────
   Future<void> _pickDate() async {
     final d = await showDatePicker(
-      context: context, initialDate: _date,
+      context: context,
+      initialDate: _date,
       firstDate: DateTime.now().subtract(const Duration(days: 1)),
-      lastDate:  DateTime.now().add(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
     );
     if (d != null) setState(() => _date = d);
   }
@@ -107,19 +112,21 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
   }
 
   // ── Conteúdo por etapa ────────────────────────────────────────────────────
-  Widget _buildStepContent(MatchState s, bool isAdmin) {
+  Widget _buildStepContent(MatchState s, bool isAdmin, String groupId) {
     if (!s.hasMatch || _creatingNew) {
       return isAdmin
           ? _CreateMatchView(
-              formKey:    _formKey,
-              placeCtrl:  _placeCtrl,
-              date:       _date,
-              time:       _time,
+              formKey: _formKey,
+              placeCtrl: _placeCtrl,
+              date: _date,
+              time: _time,
               onPickDate: _pickDate,
               onPickTime: _pickTime,
-              onCreate:   _createMatch,
-              mutating:   s.mutating,
-              onCancel:   s.hasMatch ? () => setState(() => _creatingNew = false) : null,
+              onCreate: _createMatch,
+              mutating: s.mutating,
+              onCancel: s.hasMatch
+                  ? () => setState(() => _creatingNew = false)
+                  : null,
             )
           : const _WaitingForMatchView();
     }
@@ -129,22 +136,42 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
       case MatchStep.create:
         return isAdmin
             ? _CreateMatchView(
-                formKey:    _formKey,
-                placeCtrl:  _placeCtrl,
-                date:       _date,
-                time:       _time,
+                formKey: _formKey,
+                placeCtrl: _placeCtrl,
+                date: _date,
+                time: _time,
                 onPickDate: _pickDate,
                 onPickTime: _pickTime,
-                onCreate:   _createMatch,
-                mutating:   s.mutating,
+                onCreate: _createMatch,
+                mutating: s.mutating,
               )
             : const _WaitingForMatchView();
-      case MatchStep.accept:  return const Step2AceitacaoPage();
-      case MatchStep.teams:   return const Step3MatchmakingPage();
-      case MatchStep.playing: return const Step4JogoPage();
-      case MatchStep.ended:   return const Step5EncerrarPage();
-      case MatchStep.post:    return const Step6PosJogoPage();
-      case MatchStep.done:    return const Step7FinalPage();
+      case MatchStep.accept:
+        return Step2AceitacaoPage(
+          linkedPollStrip: s.hasMatch
+              ? _LinkedPollStrip(
+                  groupId: groupId,
+                  linkedPollId: s.linkedPollId,
+                  isAdmin: isAdmin,
+                  onLink: (pollId) => ref
+                      .read(matchNotifierProvider.notifier)
+                      .setLinkedPoll(pollId),
+                  onUnlink: () => ref
+                      .read(matchNotifierProvider.notifier)
+                      .setLinkedPoll(null),
+                )
+              : null,
+        );
+      case MatchStep.teams:
+        return const Step3MatchmakingPage();
+      case MatchStep.playing:
+        return const Step4JogoPage();
+      case MatchStep.ended:
+        return const Step5EncerrarPage();
+      case MatchStep.post:
+        return const Step6PosJogoPage();
+      case MatchStep.done:
+        return const Step7FinalPage();
     }
   }
 
@@ -207,12 +234,12 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
   // ── UI ────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final s            = ref.watch(matchNotifierProvider);
+    final s = ref.watch(matchNotifierProvider);
     // watch (não read) para reagir ao refreshRoles() assíncrono do startup
-    final account      = ref.watch(accountStoreProvider).activeAccount;
+    final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
-    final groupId      = account?.activeGroupId ?? activePlayer?.groupId ?? '';
-    final isAdmin      = _isAdmin(account, groupId);
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId ?? '';
+    final isAdmin = _isAdmin(account, groupId);
 
     if (!s.loading && s.groupSettings != null) _initForm(s);
 
@@ -229,81 +256,71 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
 
     return Stack(
       children: [
-      Column(
-      children: [
-        _MatchBanner(
-          s:           s,
-          isAdmin:     isAdmin,
-          canRewind:   isAdmin && s.hasMatch && s.canRewind,
-          onRefresh:   () => ref.read(matchNotifierProvider.notifier).refresh(),
-          onRewind:    _rewindStep,
-          onDelete:    isAdmin && s.hasMatch ? _confirmDelete : null,
-          onCreateNew: isAdmin ? () {
-            ref.read(matchNotifierProvider.notifier).clearSelection();
-            setState(() { _creatingNew = true; _previewStep = null; });
-          } : null,
-        ),
-        if (s.upcomingHeaders.length > 1)
-          _MatchSelector(
-            headers:  s.upcomingHeaders,
-            selected: s.selectedMatchIdx,
-            onSelect: (i) {
-              setState(() => _creatingNew = false);
-              ref.read(matchNotifierProvider.notifier).selectMatch(i);
-            },
-          ),
-        MatchStepperHeader(
-          currentStep: currentStep,
-          previewStep: _previewStep,
-          onStepTap: isAdmin && s.hasMatch
-              ? (step) => setState(() {
-                    _previewStep = (_previewStep == step || step == currentStep) ? null : step;
-                  })
-              : null,
-        ),
-        if (s.hasMatch)
-          _LinkedPollStrip(
-            groupId:     groupId,
-            linkedPollId: s.linkedPollId,
-            isAdmin:     isAdmin,
-            onLink:   (pollId) =>
-                ref.read(matchNotifierProvider.notifier).setLinkedPoll(pollId),
-            onUnlink: () =>
-                ref.read(matchNotifierProvider.notifier).setLinkedPoll(null),
-          ),
-        if (_previewStep != null && _previewStep != currentStep)
-          _PreviewBanner(
-            previewStep: _previewStep!,
-            currentStep: currentStep,
-            onDismiss:   () => setState(() => _previewStep = null),
-          ),
-        Expanded(
-          child: _buildStepContent(s, isAdmin),
-        ),
-      ],
-      ), // Column
+        Column(
+          children: [
+            _MatchBanner(
+              s: s,
+              isAdmin: isAdmin,
+              canRewind: isAdmin && s.hasMatch && s.canRewind,
+              onRefresh: () =>
+                  ref.read(matchNotifierProvider.notifier).refresh(),
+              onRewind: _rewindStep,
+              onDelete: isAdmin && s.hasMatch ? _confirmDelete : null,
+              onCreateNew: isAdmin
+                  ? () {
+                      ref.read(matchNotifierProvider.notifier).clearSelection();
+                      setState(() {
+                        _creatingNew = true;
+                        _previewStep = null;
+                      });
+                    }
+                  : null,
+            ),
+            if (s.upcomingHeaders.length > 1)
+              _MatchSelector(
+                headers: s.upcomingHeaders,
+                selected: s.selectedMatchIdx,
+                onSelect: (i) {
+                  setState(() => _creatingNew = false);
+                  ref.read(matchNotifierProvider.notifier).selectMatch(i);
+                },
+              ),
+            MatchStepperHeader(
+              currentStep: currentStep,
+              previewStep: _previewStep,
+              onStepTap: isAdmin && s.hasMatch
+                  ? (step) => setState(() {
+                        _previewStep =
+                            (_previewStep == step || step == currentStep)
+                                ? null
+                                : step;
+                      })
+                  : null,
+            ),
+            if (s.hasMatch && currentStep != MatchStep.accept)
+              _LinkedPollStrip(
+                groupId: groupId,
+                linkedPollId: s.linkedPollId,
+                isAdmin: isAdmin,
+                onLink: (pollId) => ref
+                    .read(matchNotifierProvider.notifier)
+                    .setLinkedPoll(pollId),
+                onUnlink: () => ref
+                    .read(matchNotifierProvider.notifier)
+                    .setLinkedPoll(null),
+              ),
+            if (_previewStep != null && _previewStep != currentStep)
+              _PreviewBanner(
+                previewStep: _previewStep!,
+                currentStep: currentStep,
+                onDismiss: () => setState(() => _previewStep = null),
+              ),
+            Expanded(
+              child: _buildStepContent(s, isAdmin, groupId),
+            ),
+          ],
+        ), // Column
       ], // Stack
-    );
-  }
-
-  void _showCreateSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _CreateMatchSheet(
-        formKey:    _formKey,
-        placeCtrl:  _placeCtrl,
-        date:       _date,
-        time:       _time,
-        onPickDate: _pickDate,
-        onPickTime: _pickTime,
-        onCreate:   () async {
-          Navigator.pop(context);
-          await _createMatch();
-        },
-        mutating: ref.read(matchNotifierProvider).mutating,
-      ),
     );
   }
 }
@@ -343,12 +360,18 @@ class _MatchBanner extends StatelessWidget {
               children: [
                 const Text(
                   'Partidas',
-                  style: TextStyle(color: AppColors.slate400, fontSize: 11, fontWeight: FontWeight.w500),
+                  style: TextStyle(
+                      color: AppColors.slate400,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500),
                 ),
                 if (s.hasMatch)
                   Text(
                     '${s.placeName ?? "—"} · ${s.playedAt != null ? fmt.format(s.playedAt!.toLocal()) : "—"}',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13),
                     overflow: TextOverflow.ellipsis,
                   ),
               ],
@@ -357,27 +380,38 @@ class _MatchBanner extends StatelessWidget {
           // ── Nova Partida (só admin) ───────────────────────────────────────
           if (isAdmin && onCreateNew != null)
             IconButton(
-              icon: const Icon(Icons.add_circle_outline_rounded, color: Colors.white, size: 20),
+              icon: const Icon(Icons.add_circle_outline_rounded,
+                  color: Colors.white, size: 20),
               onPressed: onCreateNew,
               tooltip: 'Nova partida',
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
             ),
-          // ── Voltar etapa (só admin com partida ativa, só ícone) ──────────
           if (isAdmin && s.hasMatch)
-            IconButton(
-              icon: Icon(Icons.undo_rounded,
-                  size: 20,
-                  color: canRewind ? AppColors.amber400 : AppColors.slate600),
+            TextButton.icon(
               onPressed: canRewind ? onRewind : null,
-              tooltip: canRewind ? 'Voltar uma etapa' : 'Não é possível voltar neste status',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              icon: Icon(Icons.undo_rounded,
+                  size: 16,
+                  color: canRewind ? AppColors.amber400 : AppColors.slate600),
+              label: Text(
+                'Voltar etapa',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: canRewind ? AppColors.amber400 : AppColors.slate600,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 34),
+              ),
             ),
           // ── Excluir (só admin, com confirmação) ──────────────────────────
           if (onDelete != null)
             IconButton(
-              icon: const Icon(Icons.delete_outline_rounded, color: AppColors.rose400, size: 20),
+              icon: const Icon(Icons.delete_outline_rounded,
+                  color: AppColors.rose400, size: 20),
               onPressed: onDelete,
               tooltip: 'Excluir partida',
               padding: EdgeInsets.zero,
@@ -399,11 +433,11 @@ class _MatchBanner extends StatelessWidget {
 // ── Strip de votação/evento vinculado ────────────────────────────────────────
 
 class _LinkedPollStrip extends ConsumerWidget {
-  final String   groupId;
-  final String?  linkedPollId;
-  final bool     isAdmin;
+  final String groupId;
+  final String? linkedPollId;
+  final bool isAdmin;
   final void Function(String) onLink;
-  final VoidCallback          onUnlink;
+  final VoidCallback onUnlink;
 
   const _LinkedPollStrip({
     required this.groupId,
@@ -415,15 +449,18 @@ class _LinkedPollStrip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark    = Theme.of(context).brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final pollsAsync = ref.watch(pollsListProvider(groupId));
-    final polls      = pollsAsync.valueOrNull ?? [];
+    final polls = pollsAsync.valueOrNull ?? [];
 
     // Encontra o poll vinculado na lista
     PollSummary? linked;
     if (linkedPollId != null && linkedPollId!.isNotEmpty) {
-      try { linked = polls.firstWhere((p) => p.id == linkedPollId); }
-      catch (_) { linked = null; }
+      try {
+        linked = polls.firstWhere((p) => p.id == linkedPollId);
+      } catch (_) {
+        linked = null;
+      }
     }
 
     // Se não tem vínculo e não é admin → não mostra nada
@@ -434,16 +471,16 @@ class _LinkedPollStrip extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: linked != null
           ? _LinkedRow(
-              poll:     linked,
-              groupId:  groupId,
-              isAdmin:  isAdmin,
-              isDark:   isDark,
+              poll: linked,
+              groupId: groupId,
+              isAdmin: isAdmin,
+              isDark: isDark,
               onUnlink: onUnlink,
-              onOpen:   (ctx) => _openPollModal(ctx, ref, linked!),
+              onOpen: (ctx) => _openPollModal(ctx, ref, linked!),
             )
           : _UnlinkRow(
-              isDark:  isDark,
-              onTap:   () => _openPicker(context, polls),
+              isDark: isDark,
+              onTap: () => _openPicker(context, polls),
             ),
     );
   }
@@ -455,27 +492,29 @@ class _LinkedPollStrip extends ConsumerWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _PollPickerSheet(
-        polls:  open,
+        polls: open,
         onPick: onLink,
       ),
     );
   }
 
-  Future<void> _openPollModal(BuildContext context, WidgetRef ref, PollSummary summary) async {
+  Future<void> _openPollModal(
+      BuildContext context, WidgetRef ref, PollSummary summary) async {
     try {
-      final detail = await ref.read(pollsDsProvider).getPoll(groupId, summary.id);
+      final detail =
+          await ref.read(pollsDsProvider).getPoll(groupId, summary.id);
       if (!context.mounted) return;
       final sheet = detail.isEvent
           ? EventDetailSheet(
-              poll:      detail,
-              groupId:   groupId,
-              isAdmin:   isAdmin,
+              poll: detail,
+              groupId: groupId,
+              isAdmin: isAdmin,
               onUpdated: (_) {},
             )
           : PollDetailSheet(
-              poll:      detail,
-              groupId:   groupId,
-              isAdmin:   isAdmin,
+              poll: detail,
+              groupId: groupId,
+              isAdmin: isAdmin,
               onUpdated: (_) {},
             );
       showModalBottomSheet(
@@ -489,22 +528,26 @@ class _LinkedPollStrip extends ConsumerWidget {
 }
 
 class _LinkedRow extends StatelessWidget {
-  final PollSummary  poll;
-  final String       groupId;
-  final bool         isAdmin;
-  final bool         isDark;
+  final PollSummary poll;
+  final String groupId;
+  final bool isAdmin;
+  final bool isDark;
   final VoidCallback onUnlink;
   final void Function(BuildContext) onOpen;
   const _LinkedRow({
-    required this.poll, required this.groupId, required this.isAdmin,
-    required this.isDark, required this.onUnlink, required this.onOpen,
+    required this.poll,
+    required this.groupId,
+    required this.isAdmin,
+    required this.isDark,
+    required this.onUnlink,
+    required this.onOpen,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color      = poll.isEvent ? AppColors.violet600 : AppColors.blue600;
-    final responses  = poll.totalVoters;
-    final label      = poll.isEvent ? 'Evento' : 'Votação';
+    final color = poll.isEvent ? AppColors.violet600 : AppColors.blue600;
+    final responses = poll.totalVoters;
+    final label = poll.isEvent ? 'Evento' : 'Votação';
     final statusText = poll.isOpen ? 'Aberta' : 'Encerrada';
     final statusColor = poll.isOpen ? AppColors.emerald500 : AppColors.slate400;
 
@@ -530,18 +573,20 @@ class _LinkedRow extends StatelessWidget {
                 child: Text(
                   poll.title,
                   style: TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
                     color: isDark ? AppColors.slate100 : AppColors.slate800,
                   ),
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
 
               // Badge status (Aberta / Encerrada)
               _Badge(
                 label: statusText,
-                fg:    statusColor,
-                bg:    statusColor.withValues(alpha: .1),
+                fg: statusColor,
+                bg: statusColor.withValues(alpha: .1),
                 border: statusColor.withValues(alpha: .3),
               ),
 
@@ -550,8 +595,8 @@ class _LinkedRow extends StatelessWidget {
                 const SizedBox(width: 6),
                 _Badge(
                   label: '✓ Votou',
-                  fg:    AppColors.blue600,
-                  bg:    AppColors.blue600.withValues(alpha: .08),
+                  fg: AppColors.blue600,
+                  bg: AppColors.blue600.withValues(alpha: .08),
                   border: AppColors.blue600.withValues(alpha: .25),
                 ),
               ],
@@ -561,7 +606,8 @@ class _LinkedRow extends StatelessWidget {
                 const SizedBox(width: 8),
                 GestureDetector(
                   onTap: onUnlink,
-                  child: Icon(Icons.close_rounded, size: 16,
+                  child: Icon(Icons.close_rounded,
+                      size: 16,
                       color: isDark ? AppColors.slate500 : AppColors.slate400),
                 ),
               ],
@@ -588,46 +634,51 @@ class _LinkedRow extends StatelessWidget {
 
 class _Badge extends StatelessWidget {
   final String label;
-  final Color  fg, bg, border;
-  const _Badge({required this.label, required this.fg,
-      required this.bg, required this.border});
+  final Color fg, bg, border;
+  const _Badge(
+      {required this.label,
+      required this.fg,
+      required this.bg,
+      required this.border});
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-    decoration: BoxDecoration(
-      color:        bg,
-      borderRadius: BorderRadius.circular(20),
-      border:       Border.all(color: border),
-    ),
-    child: Text(label,
-        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: fg)),
-  );
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: border),
+        ),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 10, fontWeight: FontWeight.w600, color: fg)),
+      );
 }
 
 class _UnlinkRow extends StatelessWidget {
-  final bool         isDark;
+  final bool isDark;
   final VoidCallback onTap;
   const _UnlinkRow({required this.isDark, required this.onTap});
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Row(children: [
-      Icon(Icons.add_link_rounded, size: 14,
-          color: isDark ? AppColors.slate500 : AppColors.slate400),
-      const SizedBox(width: 8),
-      Text('Vincular votação ou evento',
-          style: TextStyle(
-            fontSize: 12,
-            color: isDark ? AppColors.slate500 : AppColors.slate400,
-          )),
-    ]),
-  );
+        onTap: onTap,
+        child: Row(children: [
+          Icon(Icons.add_link_rounded,
+              size: 14,
+              color: isDark ? AppColors.slate500 : AppColors.slate400),
+          const SizedBox(width: 8),
+          Text('Vincular votação ou evento',
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? AppColors.slate500 : AppColors.slate400,
+              )),
+        ]),
+      );
 }
 
 class _PollPickerSheet extends StatelessWidget {
-  final List<PollSummary>      polls;
+  final List<PollSummary> polls;
   final void Function(String) onPick;
   const _PollPickerSheet({required this.polls, required this.onPick});
 
@@ -645,7 +696,8 @@ class _PollPickerSheet extends StatelessWidget {
           // Handle
           Container(
             margin: const EdgeInsets.only(top: 12, bottom: 8),
-            width: 36, height: 4,
+            width: 36,
+            height: 4,
             decoration: BoxDecoration(
               color: isDark ? AppColors.slate700 : AppColors.slate200,
               borderRadius: BorderRadius.circular(2),
@@ -655,7 +707,8 @@ class _PollPickerSheet extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
             child: Text('Vincular votação / evento',
                 style: TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
                   color: isDark ? Colors.white : AppColors.slate900,
                 )),
           ),
@@ -663,7 +716,8 @@ class _PollPickerSheet extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.all(32),
               child: Column(children: [
-                Icon(Icons.poll_outlined, size: 36,
+                Icon(Icons.poll_outlined,
+                    size: 36,
                     color: isDark ? AppColors.slate600 : AppColors.slate300),
                 const SizedBox(height: 10),
                 Text('Nenhuma votação/evento aberto',
@@ -680,26 +734,35 @@ class _PollPickerSheet extends StatelessWidget {
               child: ListView.separated(
                 shrinkWrap: true,
                 itemCount: polls.length,
-                separatorBuilder: (_, __) => Divider(height: 1,
+                separatorBuilder: (_, __) => Divider(
+                    height: 1,
                     color: isDark ? AppColors.slate800 : AppColors.slate100),
                 itemBuilder: (_, i) {
-                  final p     = polls[i];
-                  final color = p.isEvent ? AppColors.violet600 : AppColors.blue600;
+                  final p = polls[i];
+                  final color =
+                      p.isEvent ? AppColors.violet600 : AppColors.blue600;
                   return ListTile(
                     leading: p.eventIcon != null && p.eventIcon!.isNotEmpty
                         ? Text(p.eventIcon!,
                             style: const TextStyle(fontSize: 20))
-                        : Icon(p.isEvent ? Icons.event_rounded : Icons.poll_rounded,
-                            size: 20, color: color),
+                        : Icon(
+                            p.isEvent
+                                ? Icons.event_rounded
+                                : Icons.poll_rounded,
+                            size: 20,
+                            color: color),
                     title: Text(p.title,
                         style: TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
                           color: isDark ? Colors.white : AppColors.slate900,
                         )),
                     subtitle: Text(p.isEvent ? 'Evento' : 'Votação',
                         style: TextStyle(fontSize: 12, color: color)),
-                    trailing: Icon(Icons.link_rounded, size: 18,
-                        color: isDark ? AppColors.slate500 : AppColors.slate400),
+                    trailing: Icon(Icons.link_rounded,
+                        size: 18,
+                        color:
+                            isDark ? AppColors.slate500 : AppColors.slate400),
                     onTap: () {
                       Navigator.pop(context);
                       onPick(p.id);
@@ -731,152 +794,120 @@ class _MatchSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fmt = DateFormat('dd/MM', 'pt_BR');
+    final safeSelected = selected.clamp(0, headers.length - 1);
     return Container(
       color: AppColors.slate800,
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Row(
-          children: List.generate(headers.length, (i) {
-            final h      = headers[i];
-            final active = i == selected;
-            final date   = h.playedAt.toLocal();
-            return GestureDetector(
-              onTap: () => onSelect(i),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: active ? AppColors.blue600 : AppColors.slate700,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Text(
-                    fmt.format(date),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: active ? Colors.white : AppColors.slate300,
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Flexible(
-                    child: Text(
-                      h.placeName.isNotEmpty ? h.placeName : 'Partida',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: active ? Colors.white.withValues(alpha: .85) : AppColors.slate400,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Row(
+        children: [
+          _SelectorArrow(
+            icon: Icons.chevron_left_rounded,
+            enabled: safeSelected > 0,
+            onTap: () => onSelect(safeSelected - 1),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${safeSelected + 1}/${headers.length}',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.slate300,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(headers.length, (i) {
+                  final h = headers[i];
+                  final active = i == safeSelected;
+                  final date = h.playedAt.toLocal();
+                  return GestureDetector(
+                    onTap: () => onSelect(i),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: active ? AppColors.blue600 : AppColors.slate700,
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Text(
+                          fmt.format(date),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: active ? Colors.white : AppColors.slate300,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          h.placeName.isNotEmpty ? h.placeName : 'Partida',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: active
+                                ? Colors.white.withValues(alpha: .85)
+                                : AppColors.slate400,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ]),
                     ),
-                  ),
-                ]),
+                  );
+                }),
               ),
-            );
-          }),
-        ),
+            ),
+          ),
+          const SizedBox(width: 2),
+          _SelectorArrow(
+            icon: Icons.chevron_right_rounded,
+            enabled: safeSelected < headers.length - 1,
+            onTap: () => onSelect(safeSelected + 1),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ── Sheet: criar nova partida (quando já há partida ativa) ───────────────────
-
-class _CreateMatchSheet extends StatelessWidget {
-  final GlobalKey<FormState> formKey;
-  final TextEditingController placeCtrl;
-  final DateTime   date;
-  final TimeOfDay  time;
-  final VoidCallback onPickDate, onPickTime, onCreate;
-  final bool       mutating;
-
-  const _CreateMatchSheet({
-    required this.formKey, required this.placeCtrl,
-    required this.date, required this.time,
-    required this.onPickDate, required this.onPickTime,
-    required this.onCreate, required this.mutating,
+class _SelectorArrow extends StatelessWidget {
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+  const _SelectorArrow({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fmt    = DateFormat('dd/MM/yyyy', 'pt_BR');
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 24),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        // Handle
-        Container(
-          width: 36, height: 4,
+  Widget build(BuildContext context) => InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          width: 32,
+          height: 32,
           decoration: BoxDecoration(
-            color: isDark ? AppColors.slate700 : AppColors.slate200,
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: BorderRadius.circular(18),
+            color: enabled
+                ? AppColors.slate700.withValues(alpha: .8)
+                : AppColors.slate900.withValues(alpha: .25),
+          ),
+          child: Icon(
+            icon,
+            size: 19,
+            color: enabled ? AppColors.slate200 : AppColors.slate600,
           ),
         ),
-        const SizedBox(height: 16),
-        Text('Nova Partida',
-            style: TextStyle(
-              fontSize: 17, fontWeight: FontWeight.w800,
-              color: isDark ? Colors.white : AppColors.slate900,
-            )),
-        const SizedBox(height: 16),
-        Form(
-          key: formKey,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextFormField(
-              controller: placeCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Local *',
-                prefixIcon: Icon(Icons.location_on_outlined),
-                border: OutlineInputBorder(),
-              ),
-              validator: (v) => (v?.trim().isEmpty ?? true) ? 'Informe o local' : null,
-            ),
-            const SizedBox(height: 12),
-            InkWell(
-              onTap: onPickDate,
-              borderRadius: BorderRadius.circular(4),
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Data *',
-                  prefixIcon: Icon(Icons.calendar_today_outlined),
-                  border: OutlineInputBorder(),
-                ),
-                child: Text(fmt.format(date), style: const TextStyle(fontSize: 16)),
-              ),
-            ),
-            const SizedBox(height: 12),
-            InkWell(
-              onTap: onPickTime,
-              borderRadius: BorderRadius.circular(4),
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Horário *',
-                  prefixIcon: Icon(Icons.access_time_outlined),
-                  border: OutlineInputBorder(),
-                ),
-                child: Text(time.format(context), style: const TextStyle(fontSize: 16)),
-              ),
-            ),
-          ]),
-        ),
-        const SizedBox(height: 20),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: mutating ? null : onCreate,
-            icon: mutating
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.add),
-            label: const Text('Criar Partida'),
-          ),
-        ),
-      ]),
-    );
-  }
+      );
 }
+
+// ── Sheet: criar nova partida (quando já há partida ativa) ───────────────────
 
 // ── Banner de pré-visualização ────────────────────────────────────────────────
 
@@ -884,7 +915,10 @@ class _PreviewBanner extends StatelessWidget {
   final MatchStep previewStep;
   final MatchStep currentStep;
   final VoidCallback onDismiss;
-  const _PreviewBanner({required this.previewStep, required this.currentStep, required this.onDismiss});
+  const _PreviewBanner(
+      {required this.previewStep,
+      required this.currentStep,
+      required this.onDismiss});
 
   @override
   Widget build(BuildContext context) {
@@ -893,17 +927,22 @@ class _PreviewBanner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Row(
         children: [
-          const Icon(Icons.visibility_outlined, size: 14, color: AppColors.orange700),
+          const Icon(Icons.visibility_outlined,
+              size: 14, color: AppColors.orange700),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
               'Pré-visualização · etapa real: ${currentStep.label}',
-              style: const TextStyle(fontSize: 12, color: AppColors.orange700, fontWeight: FontWeight.w500),
+              style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.orange700,
+                  fontWeight: FontWeight.w500),
             ),
           ),
           GestureDetector(
             onTap: onDismiss,
-            child: const Icon(Icons.close, size: 16, color: AppColors.orange700),
+            child:
+                const Icon(Icons.close, size: 16, color: AppColors.orange700),
           ),
         ],
       ),
@@ -949,13 +988,18 @@ class _CreateMatchView extends StatelessWidget {
               key: formKey,
               child: Card(
                 elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Nova Partida', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                      Text('Nova Partida',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700)),
                       const SizedBox(height: 20),
                       // Local
                       TextFormField(
@@ -965,7 +1009,9 @@ class _CreateMatchView extends StatelessWidget {
                           prefixIcon: Icon(Icons.location_on_outlined),
                           border: OutlineInputBorder(),
                         ),
-                        validator: (v) => (v?.trim().isEmpty ?? true) ? 'Informe o local' : null,
+                        validator: (v) => (v?.trim().isEmpty ?? true)
+                            ? 'Informe o local'
+                            : null,
                       ),
                       const SizedBox(height: 16),
                       // Data
@@ -978,7 +1024,8 @@ class _CreateMatchView extends StatelessWidget {
                             prefixIcon: Icon(Icons.calendar_today_outlined),
                             border: OutlineInputBorder(),
                           ),
-                          child: Text(fmt.format(date), style: const TextStyle(fontSize: 16)),
+                          child: Text(fmt.format(date),
+                              style: const TextStyle(fontSize: 16)),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -992,7 +1039,8 @@ class _CreateMatchView extends StatelessWidget {
                             prefixIcon: Icon(Icons.access_time_outlined),
                             border: OutlineInputBorder(),
                           ),
-                          child: Text(time.format(context), style: const TextStyle(fontSize: 16)),
+                          child: Text(time.format(context),
+                              style: const TextStyle(fontSize: 16)),
                         ),
                       ),
                     ],
@@ -1017,7 +1065,11 @@ class _CreateMatchView extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: mutating ? null : onCreate,
                   icon: mutating
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.add),
                   label: const Text('Criar Partida'),
                 ),
@@ -1045,7 +1097,9 @@ class _WaitingForMatchView extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
           decoration: BoxDecoration(
-            color:        isDark ? AppColors.slate800.withValues(alpha: 0.5) : Colors.white,
+            color: isDark
+                ? AppColors.slate800.withValues(alpha: 0.5)
+                : Colors.white,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -1055,12 +1109,14 @@ class _WaitingForMatchView extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 48, height: 48,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: isDark ? AppColors.slate700 : AppColors.slate100,
                 ),
-                child: const Icon(Icons.access_time_rounded, size: 22, color: AppColors.slate400),
+                child: const Icon(Icons.access_time_rounded,
+                    size: 22, color: AppColors.slate400),
               ),
               const SizedBox(height: 12),
               Text(
@@ -1095,18 +1151,20 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.error_outline, size: 48, color: AppColors.rose400),
-          const SizedBox(height: 12),
-          Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 16),
-          FilledButton(onPressed: onRetry, child: const Text('Tentar novamente')),
-        ],
-      ),
-    ),
-  );
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline,
+                  size: 48, color: AppColors.rose400),
+              const SizedBox(height: 12),
+              Text(message, textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              FilledButton(
+                  onPressed: onRetry, child: const Text('Tentar novamente')),
+            ],
+          ),
+        ),
+      );
 }

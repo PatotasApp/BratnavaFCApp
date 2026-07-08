@@ -767,6 +767,12 @@ class UpcomingMatchDetails {
       .where((p) => p.inviteResponse == InviteResponse.accepted)
       .length;
 
+  int get acceptedGuestCount => allPlayers
+      .where((p) => p.inviteResponse == InviteResponse.accepted && p.isGuest)
+      .length;
+
+  int get acceptedMemberCount => acceptedCount - acceptedGuestCount;
+
   int get pendingCount => _acceptationOpen
       ? allPlayers
           .where((p) => p.inviteResponse == InviteResponse.pending)

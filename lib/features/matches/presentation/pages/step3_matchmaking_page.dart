@@ -25,22 +25,20 @@ class Step3MatchmakingPage extends ConsumerStatefulWidget {
 }
 
 class _Step3State extends ConsumerState<Step3MatchmakingPage> {
-  int  _strategyType       = 3;
-  int  _playersPerTeam     = 6;
+  int _strategyType = 3;
+  int _playersPerTeam = 6;
   bool _includeGoalkeepers = true;
 
   // Cores
-  bool    _editingColors     = false;
+  bool _editingColors = false;
   String? _selectedTeamAColorId;
   String? _selectedTeamBColorId;
-
-  // Geração
-  bool _generatedOnce = false;
 
   bool get _isAdmin {
     final acc = ref.read(accountStoreProvider).activeAccount;
     final gid = acc?.activeGroupId ?? '';
-    return gid.isNotEmpty && (acc?.isGroupAdmin(gid) ?? false) || (acc?.isAdmin ?? false);
+    return gid.isNotEmpty && (acc?.isGroupAdmin(gid) ?? false) ||
+        (acc?.isAdmin ?? false);
   }
 
   @override
@@ -62,7 +60,8 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
 
   Future<void> _applyColors() async {
     if (_selectedTeamAColorId == null || _selectedTeamBColorId == null) return;
-    await ref.read(matchNotifierProvider.notifier)
+    await ref
+        .read(matchNotifierProvider.notifier)
         .setColors(_selectedTeamAColorId!, _selectedTeamBColorId!);
     // Only close editor on success; error path is handled by ref.listen
     if (ref.read(matchNotifierProvider).error == null) {
@@ -72,11 +71,10 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
 
   Future<void> _generateTeams() async {
     await ref.read(matchNotifierProvider.notifier).generateTeams(
-      strategyType:       _strategyType,
-      playersPerTeam:     _playersPerTeam,
-      includeGoalkeepers: _includeGoalkeepers,
-    );
-    setState(() => _generatedOnce = true);
+          strategyType: _strategyType,
+          playersPerTeam: _playersPerTeam,
+          includeGoalkeepers: _includeGoalkeepers,
+        );
   }
 
   Future<void> _startMatch() async {
@@ -92,8 +90,12 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
       final bChanged = prev?.teamBColor?.id != next.teamBColor?.id;
       if (aChanged || bChanged) {
         setState(() {
-          if (next.teamAColor != null) _selectedTeamAColorId = next.teamAColor!.id;
-          if (next.teamBColor != null) _selectedTeamBColorId = next.teamBColor!.id;
+          if (next.teamAColor != null) {
+            _selectedTeamAColorId = next.teamAColor!.id;
+          }
+          if (next.teamBColor != null) {
+            _selectedTeamBColorId = next.teamBColor!.id;
+          }
           _editingColors = false; // fecha o painel após aplicar
         });
       }
@@ -105,25 +107,18 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
       }
     });
 
-    final s      = ref.watch(matchNotifierProvider);
+    final s = ref.watch(matchNotifierProvider);
     final colors = s.availableColors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final acc    = ref.watch(accountStoreProvider).activeAccount;
-    final gid    = acc?.activeGroupId ?? '';
-    final icons  = GroupIcons.from(ref.watch(groupSettingsProvider(gid)).valueOrNull);
+    final acc = ref.watch(accountStoreProvider).activeAccount;
+    final gid = acc?.activeGroupId ?? '';
+    final icons =
+        GroupIcons.from(ref.watch(groupSettingsProvider(gid)).valueOrNull);
 
-    final colorsSet   = s.colorsLocked || (s.teamAColor != null && s.teamBColor != null);
-    final hasOptions  = s.teamGenOptions.isNotEmpty;
-    final teamsSet    = s.teamsAssigned;
-
-    final teamAColor = colors.firstWhere(
-      (c) => c.id == _selectedTeamAColorId,
-      orElse: () => s.teamAColor ?? (colors.isNotEmpty ? colors[0] : _nullColor),
-    );
-    final teamBColor = colors.firstWhere(
-      (c) => c.id == _selectedTeamBColorId,
-      orElse: () => s.teamBColor ?? (colors.length > 1 ? colors[1] : _nullColor),
-    );
+    final colorsSet =
+        s.colorsLocked || (s.teamAColor != null && s.teamBColor != null);
+    final hasOptions = s.teamGenOptions.isNotEmpty;
+    final teamsSet = s.teamsAssigned;
 
     return RefreshIndicator(
       onRefresh: () => ref.read(matchNotifierProvider.notifier).refresh(),
@@ -133,6 +128,75 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (_isAdmin) ...[
+              _SectionCard(
+                isDark: isDark,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    DropdownButtonFormField<int>(
+                      initialValue: _strategyType,
+                      decoration: const InputDecoration(
+                        labelText: 'Algoritmo',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: _kStrategies
+                          .map((s) => DropdownMenuItem(
+                              value: s.id, child: Text(s.label)))
+                          .toList(),
+                      onChanged: (v) => setState(() => _strategyType = v ?? 3),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      initialValue: '$_playersPerTeam',
+                      decoration: const InputDecoration(
+                        labelText: 'Players/Team',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      keyboardType: TextInputType.number,
+                      onChanged: (v) {
+                        final n = int.tryParse(v);
+                        if (n != null && n > 0) {
+                          setState(() => _playersPerTeam = n);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    CheckboxListTile(
+                      value: _includeGoalkeepers,
+                      onChanged: (v) =>
+                          setState(() => _includeGoalkeepers = v ?? true),
+                      title: const Text('Incluir goleiros',
+                          style: TextStyle(fontSize: 14)),
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      height: 46,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.slate900),
+                        onPressed: s.mutating ? null : _generateTeams,
+                        child: s.mutating
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
+                            : const Text('Gerar times',
+                                style: TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
 
             // ── Seção: Cores dos times ──────────────────────────────────────
             if (_isAdmin && colors.isNotEmpty) ...[
@@ -149,7 +213,9 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 14,
-                            color: isDark ? AppColors.slate100 : AppColors.slate900,
+                            color: isDark
+                                ? AppColors.slate100
+                                : AppColors.slate900,
                           ),
                         ),
                         const Spacer(),
@@ -162,8 +228,11 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
                           onTap: (i) {
                             if (colorsSet && !_editingColors && i == 0) {
                               setState(() => _editingColors = true);
-                            } else if (i == (colorsSet && !_editingColors ? 1 : 1)) {
-                              ref.read(matchNotifierProvider.notifier).setColorsRandom();
+                            } else if (i ==
+                                (colorsSet && !_editingColors ? 1 : 1)) {
+                              ref
+                                  .read(matchNotifierProvider.notifier)
+                                  .setColorsRandom();
                             }
                           },
                         ),
@@ -176,7 +245,11 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
                       // Cores já definidas — exibição compacta
                       Text(
                         'Cores já definidas.',
-                        style: TextStyle(fontSize: 12, color: isDark ? AppColors.slate400 : AppColors.slate500),
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? AppColors.slate400
+                                : AppColors.slate500),
                       ),
                       const SizedBox(height: 10),
                       Row(
@@ -191,19 +264,23 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(child: _ColorPickerSection(
+                          Expanded(
+                              child: _ColorPickerSection(
                             label: 'TIME A',
                             colors: colors,
                             selectedId: _selectedTeamAColorId,
-                            onChanged: (id) => setState(() => _selectedTeamAColorId = id),
+                            onChanged: (id) =>
+                                setState(() => _selectedTeamAColorId = id),
                             isDark: isDark,
                           )),
                           const SizedBox(width: 12),
-                          Expanded(child: _ColorPickerSection(
+                          Expanded(
+                              child: _ColorPickerSection(
                             label: 'TIME B',
                             colors: colors,
                             selectedId: _selectedTeamBColorId,
-                            onChanged: (id) => setState(() => _selectedTeamBColorId = id),
+                            onChanged: (id) =>
+                                setState(() => _selectedTeamBColorId = id),
                             isDark: isDark,
                           )),
                         ],
@@ -223,92 +300,40 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
               const SizedBox(height: 12),
             ],
 
-            // ── Seção: Gerar Times ──────────────────────────────────────────
-            if (_isAdmin) ...[
-              _SectionCard(
-                isDark: isDark,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Algoritmo
-                    DropdownButtonFormField<int>(
-                      value: _strategyType,
-                      decoration: const InputDecoration(
-                        labelText: 'Algoritmo',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      items: _kStrategies
-                          .map((s) => DropdownMenuItem(value: s.id, child: Text(s.label)))
-                          .toList(),
-                      onChanged: (v) => setState(() => _strategyType = v ?? 3),
-                    ),
-                    const SizedBox(height: 12),
-                    // Players/Team
-                    TextFormField(
-                      initialValue: '$_playersPerTeam',
-                      decoration: const InputDecoration(
-                        labelText: 'Players/Team',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      keyboardType: TextInputType.number,
-                      onChanged: (v) {
-                        final n = int.tryParse(v);
-                        if (n != null && n > 0) setState(() => _playersPerTeam = n);
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    // Checkbox Incluir goleiros
-                    CheckboxListTile(
-                      value: _includeGoalkeepers,
-                      onChanged: (v) => setState(() => _includeGoalkeepers = v ?? true),
-                      title: const Text('Incluir goleiros', style: TextStyle(fontSize: 14)),
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                    const SizedBox(height: 4),
-                    // Botão Gerar times
-                    SizedBox(
-                      height: 46,
-                      child: FilledButton(
-                        style: FilledButton.styleFrom(backgroundColor: AppColors.slate900),
-                        onPressed: s.mutating ? null : _generateTeams,
-                        child: s.mutating
-                            ? const SizedBox(width: 18, height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Text('Gerar times', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-
             // ── Seção: Opções geradas ───────────────────────────────────────
             if (hasOptions) ...[
               _TeamGenOptionsSection(
-                options:     s.teamGenOptions,
+                options: s.teamGenOptions,
                 selectedIdx: s.selectedTeamGenIdx,
-                teamAColor:  s.teamAColor,
-                teamBColor:  s.teamBColor,
-                isAdmin:     _isAdmin,
-                mutating:    s.mutating,
-                isDark:      isDark,
-                onSelectIdx: (i) => ref.read(matchNotifierProvider.notifier).selectTeamGenOption(i),
-                onConfirm:   () => ref.read(matchNotifierProvider.notifier).assignTeamsFromGenerated(),
+                teamAColor: s.teamAColor,
+                teamBColor: s.teamBColor,
+                isAdmin: _isAdmin,
+                mutating: s.mutating,
+                isDark: isDark,
+                onSelectIdx: (i) => ref
+                    .read(matchNotifierProvider.notifier)
+                    .selectTeamGenOption(i),
+                onConfirm: () => ref
+                    .read(matchNotifierProvider.notifier)
+                    .assignTeamsFromGenerated(),
                 onRegenerate: _generateTeams,
+              ),
+              const SizedBox(height: 12),
+            ] else ...[
+              _DashedHint(
+                text: _isAdmin
+                    ? 'Clique em Gerar times para ver as opções de sorteio.'
+                    : 'Aguardando o admin montar os times.',
+                isDark: isDark,
               ),
               const SizedBox(height: 12),
             ],
 
             // ── Times já atribuídos (sem opções no carrossel) ───────────────
-            if (!hasOptions && teamsSet) ...[
+            if (teamsSet) ...[
               _AssignedTeamsSection(
-                s:       s,
-                isDark:  isDark,
+                s: s,
+                isDark: isDark,
                 isAdmin: _isAdmin,
               ),
               const SizedBox(height: 12),
@@ -319,28 +344,46 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
                   final gid = acc?.activeGroupId ?? '';
                   final dio = ref.read(dioProvider);
                   showMatchCardDialog(
-                    context: context, s: s, groupId: gid, dio: dio);
+                      context: context, s: s, groupId: gid, dio: dio);
                 },
-                icon: const Icon(Icons.auto_awesome_rounded, size: 16),
-                label: const Text('Card da partida',
+                icon: const Icon(Icons.share_outlined, size: 16),
+                label: const Text('Gerar card para o Instagram',
                     style: TextStyle(fontSize: 13)),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 44),
+                ),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: () {
+                  final acc = ref.read(accountStoreProvider).activeAccount;
+                  final gid = acc?.activeGroupId ?? '';
+                  final dio = ref.read(dioProvider);
+                  showMatchCardDialog(
+                      context: context, s: s, groupId: gid, dio: dio);
+                },
+                icon: const Icon(Icons.share_outlined, size: 16),
+                label: const Text('Compartilhar escalação',
+                    style: TextStyle(fontSize: 13)),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 44),
+                  foregroundColor: AppColors.blue600,
+                  side: const BorderSide(color: AppColors.blue600),
                 ),
               ),
               const SizedBox(height: 12),
 
               if (s.unassignedPlayers.isNotEmpty) ...[
                 _UnassignedSection(
-                  players:    s.unassignedPlayers,
-                  isAdmin:    _isAdmin,
-                  isDark:     isDark,
+                  players: s.unassignedPlayers,
+                  isAdmin: _isAdmin,
+                  isDark: isDark,
                   teamALabel: s.teamAColor?.name ?? 'Time A',
                   teamBLabel: s.teamBColor?.name ?? 'Time B',
                   teamAColor: s.teamAColor?.color,
                   teamBColor: s.teamBColor?.color,
-                  icons:      icons,
-                  onAssign:   (pid, toA) => ref
+                  icons: icons,
+                  onAssign: (pid, toA) => ref
                       .read(matchNotifierProvider.notifier)
                       .assignUnassigned(pid, toA),
                 ),
@@ -353,32 +396,22 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
                   child: FilledButton.icon(
                     onPressed: s.mutating ? null : _startMatch,
                     icon: s.mutating
-                        ? const SizedBox(width: 18, height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
                         : const Icon(Icons.sports_soccer_rounded, size: 18),
                     label: s.mutating
                         ? const SizedBox.shrink()
-                        : const Text('Iniciar partida', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                        : const Text('Iniciar partida',
+                            style: TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.w600)),
                   ),
                 ),
                 const SizedBox(height: 12),
               ],
             ],
-
-            // ── Placeholder (nem times nem opções) ──────────────────────────
-            if (!hasOptions && !teamsSet && !_generatedOnce)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 32),
-                child: Center(
-                  child: Text(
-                    _isAdmin
-                        ? 'Configure as opções acima e clique em "Gerar times".'
-                        : 'Aguardando o admin montar os times.',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppColors.slate400, fontSize: 13),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
@@ -387,8 +420,6 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
 }
 
 // ── Placeholder de cor nula ───────────────────────────────────────────────────
-
-final _nullColor = TeamColorInfo(id: '', name: '—', hexValue: '#cbd5e1');
 
 // ── Opções geradas + carrossel ────────────────────────────────────────────────
 
@@ -418,13 +449,15 @@ class _TeamGenOptionsSection extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<_TeamGenOptionsSection> createState() => _TeamGenOptionsSectionState();
+  ConsumerState<_TeamGenOptionsSection> createState() =>
+      _TeamGenOptionsSectionState();
 }
 
-class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> {
-  bool    _showExplanation = false;
+class _TeamGenOptionsSectionState
+    extends ConsumerState<_TeamGenOptionsSection> {
+  bool _showExplanation = false;
   String? _sel1Id;
-  bool?   _sel1IsTeamA;
+  bool? _sel1IsTeamA;
 
   @override
   void didUpdateWidget(_TeamGenOptionsSection old) {
@@ -438,22 +471,35 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
   void _onFieldTap(String id, bool isTeamA) {
     if (!widget.isAdmin) return;
     if (_sel1Id == null) {
-      setState(() { _sel1Id = id; _sel1IsTeamA = isTeamA; });
+      setState(() {
+        _sel1Id = id;
+        _sel1IsTeamA = isTeamA;
+      });
       return;
     }
     if (_sel1Id == id) {
-      setState(() { _sel1Id = null; _sel1IsTeamA = null; });
+      setState(() {
+        _sel1Id = null;
+        _sel1IsTeamA = null;
+      });
       return;
     }
     if (_sel1IsTeamA == isTeamA) {
-      setState(() { _sel1Id = id; _sel1IsTeamA = isTeamA; });
+      setState(() {
+        _sel1Id = id;
+        _sel1IsTeamA = isTeamA;
+      });
       return;
     }
     // Different teams — swap
     final id1 = _sel1Id!;
     final id1IsA = _sel1IsTeamA!;
-    setState(() { _sel1Id = null; _sel1IsTeamA = null; });
-    final opt = widget.options[widget.selectedIdx.clamp(0, widget.options.length - 1)];
+    setState(() {
+      _sel1Id = null;
+      _sel1IsTeamA = null;
+    });
+    final opt =
+        widget.options[widget.selectedIdx.clamp(0, widget.options.length - 1)];
     final p1 = id1IsA
         ? opt.teamA.firstWhere((p) => p.playerId == id1)
         : opt.teamB.firstWhere((p) => p.playerId == id1);
@@ -463,27 +509,32 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
     List<TeamGenPlayer> newA, newB;
     if (id1IsA) {
       newA = opt.teamA.map((p) => p.playerId == id1 ? p2 : p).toList();
-      newB = opt.teamB.map((p) => p.playerId == id  ? p1 : p).toList();
+      newB = opt.teamB.map((p) => p.playerId == id ? p1 : p).toList();
     } else {
-      newA = opt.teamA.map((p) => p.playerId == id  ? p1 : p).toList();
+      newA = opt.teamA.map((p) => p.playerId == id ? p1 : p).toList();
       newB = opt.teamB.map((p) => p.playerId == id1 ? p2 : p).toList();
     }
-    ref.read(matchNotifierProvider.notifier).editTeamGenOption(widget.selectedIdx, newA, newB);
+    ref
+        .read(matchNotifierProvider.notifier)
+        .editTeamGenOption(widget.selectedIdx, newA, newB);
   }
 
   @override
   Widget build(BuildContext context) {
-    final opt   = widget.options[widget.selectedIdx.clamp(0, widget.options.length - 1)];
+    final opt =
+        widget.options[widget.selectedIdx.clamp(0, widget.options.length - 1)];
     final total = widget.options.length;
-    final cur   = widget.selectedIdx + 1;
-    final exp   = opt.explanation;
+    final cur = widget.selectedIdx + 1;
+    final exp = opt.explanation;
 
     final aColor = widget.teamAColor?.color ?? AppColors.blue500;
     final bColor = widget.teamBColor?.color ?? AppColors.slate400;
-    final aName  = widget.teamAColor?.name  ?? 'Time A';
-    final bName  = widget.teamBColor?.name  ?? 'Time B';
-    final gid    = ref.watch(accountStoreProvider).activeAccount?.activeGroupId ?? '';
-    final icons  = GroupIcons.from(ref.watch(groupSettingsProvider(gid)).valueOrNull);
+    final aName = widget.teamAColor?.name ?? 'Time A';
+    final bName = widget.teamBColor?.name ?? 'Time B';
+    final gid =
+        ref.watch(accountStoreProvider).activeAccount?.activeGroupId ?? '';
+    final icons =
+        GroupIcons.from(ref.watch(groupSettingsProvider(gid)).valueOrNull);
 
     return _SectionCard(
       isDark: widget.isDark,
@@ -496,27 +547,31 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
               Text(
                 'Opções geradas',
                 style: TextStyle(
-                  fontWeight: FontWeight.w700, fontSize: 14,
-                  color: widget.isDark ? AppColors.slate100 : AppColors.slate900,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color:
+                      widget.isDark ? AppColors.slate100 : AppColors.slate900,
                 ),
               ),
               const Spacer(),
               // Dots
               Row(
-                children: List.generate(total, (i) => GestureDetector(
-                  onTap: () => widget.onSelectIdx(i),
-                  child: Container(
-                    width: i == widget.selectedIdx ? 18 : 8,
-                    height: 8,
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(4),
-                      color: i == widget.selectedIdx
-                          ? Theme.of(context).colorScheme.primary
-                          : AppColors.slate300,
-                    ),
-                  ),
-                )),
+                children: List.generate(
+                    total,
+                    (i) => GestureDetector(
+                          onTap: () => widget.onSelectIdx(i),
+                          child: Container(
+                            width: i == widget.selectedIdx ? 18 : 8,
+                            height: 8,
+                            margin: const EdgeInsets.symmetric(horizontal: 2),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(4),
+                              color: i == widget.selectedIdx
+                                  ? Theme.of(context).colorScheme.primary
+                                  : AppColors.slate300,
+                            ),
+                          ),
+                        )),
               ),
               const SizedBox(width: 8),
               // Setas
@@ -526,7 +581,9 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
                 onTap: () => widget.onSelectIdx(widget.selectedIdx - 1),
               ),
               const SizedBox(width: 4),
-              Text('$cur/$total', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              Text('$cur/$total',
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w600)),
               const SizedBox(width: 4),
               _NavArrow(
                 icon: Icons.chevron_right,
@@ -554,16 +611,30 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
           ),
 
           // ── Stats: Ataque / Defesa / Físico ──────────────────────────────
-          if (opt.attackDiff != null || opt.defenseDiff != null || opt.physicalDiff != null) ...[
+          if (opt.attackDiff != null ||
+              opt.defenseDiff != null ||
+              opt.physicalDiff != null) ...[
             const SizedBox(height: 8),
             Row(
               children: [
                 if (opt.attackDiff != null)
-                  Expanded(child: _DimStat(label: 'Ataque',  diff: opt.attackDiff!,   isDark: widget.isDark)),
+                  Expanded(
+                      child: _DimStat(
+                          label: 'Ataque',
+                          diff: opt.attackDiff!,
+                          isDark: widget.isDark)),
                 if (opt.defenseDiff != null)
-                  Expanded(child: _DimStat(label: 'Defesa',  diff: opt.defenseDiff!,  isDark: widget.isDark)),
+                  Expanded(
+                      child: _DimStat(
+                          label: 'Defesa',
+                          diff: opt.defenseDiff!,
+                          isDark: widget.isDark)),
                 if (opt.physicalDiff != null)
-                  Expanded(child: _DimStat(label: 'Físico',  diff: opt.physicalDiff!, isDark: widget.isDark)),
+                  Expanded(
+                      child: _DimStat(
+                          label: 'Físico',
+                          diff: opt.physicalDiff!,
+                          isDark: widget.isDark)),
               ],
             ),
           ],
@@ -575,11 +646,13 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
               onTap: () => setState(() => _showExplanation = !_showExplanation),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline, size: 14, color: AppColors.slate400),
+                  const Icon(Icons.info_outline,
+                      size: 14, color: AppColors.slate400),
                   const SizedBox(width: 4),
                   Text(
                     _showExplanation ? 'Ocultar análise' : 'Ver análise',
-                    style: const TextStyle(fontSize: 12, color: AppColors.slate400),
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.slate400),
                   ),
                 ],
               ),
@@ -596,15 +669,21 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
           if (opt.teamA.isNotEmpty || opt.teamB.isNotEmpty) ...[
             HorizontalTeamField(
               teamA: opt.teamA
-                  .map((p) => FieldPlayer(id: p.playerId, name: p.name, isGoalkeeper: p.isGoalkeeper))
+                  .map((p) => FieldPlayer(
+                      id: p.playerId,
+                      name: p.name,
+                      isGoalkeeper: p.isGoalkeeper))
                   .toList(),
               teamB: opt.teamB
-                  .map((p) => FieldPlayer(id: p.playerId, name: p.name, isGoalkeeper: p.isGoalkeeper))
+                  .map((p) => FieldPlayer(
+                      id: p.playerId,
+                      name: p.name,
+                      isGoalkeeper: p.isGoalkeeper))
                   .toList(),
-              teamAColor:    aColor,
-              teamBColor:    bColor,
-              canInteract:   widget.isAdmin,
-              sel1Id:        _sel1Id,
+              teamAColor: aColor,
+              teamBColor: bColor,
+              canInteract: widget.isAdmin,
+              sel1Id: _sel1Id,
               onPlayerClick: _onFieldTap,
             ),
             if (widget.isAdmin) ...[
@@ -615,7 +694,9 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
                     : 'Toque em um jogador para selecioná-lo',
                 style: TextStyle(
                   fontSize: 11,
-                  color: _sel1Id != null ? Colors.amber.shade700 : AppColors.slate400,
+                  color: _sel1Id != null
+                      ? Colors.amber.shade700
+                      : AppColors.slate400,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -626,22 +707,25 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
           // ── Jogadores não atribuídos (ex: goleiros) ───────────────────────
           if (opt.unassigned.isNotEmpty) ...[
             _UnassignedGenSection(
-              players:    opt.unassigned,
-              isAdmin:    widget.isAdmin,
-              isDark:     widget.isDark,
+              players: opt.unassigned,
+              isAdmin: widget.isAdmin,
+              isDark: widget.isDark,
               teamALabel: aName,
               teamBLabel: bName,
               teamAColor: aColor,
               teamBColor: bColor,
-              icons:      icons,
+              icons: icons,
               onAssign: (pid, toA) {
-                final player = opt.unassigned.firstWhere((p) => p.playerId == pid);
+                final player =
+                    opt.unassigned.firstWhere((p) => p.playerId == pid);
                 ref.read(matchNotifierProvider.notifier).editTeamGenOption(
-                  widget.selectedIdx,
-                  toA ? [...opt.teamA, player] : opt.teamA,
-                  toA ? opt.teamB : [...opt.teamB, player],
-                  unassigned: opt.unassigned.where((p) => p.playerId != pid).toList(),
-                );
+                      widget.selectedIdx,
+                      toA ? [...opt.teamA, player] : opt.teamA,
+                      toA ? opt.teamB : [...opt.teamB, player],
+                      unassigned: opt.unassigned
+                          .where((p) => p.playerId != pid)
+                          .toList(),
+                    );
               },
             ),
             const SizedBox(height: 10),
@@ -653,7 +737,10 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
             const SizedBox(height: 10),
             Text(
               'Escolha uma opção acima e confirme aqui.',
-              style: TextStyle(fontSize: 12, color: widget.isDark ? AppColors.slate400 : AppColors.slate500),
+              style: TextStyle(
+                  fontSize: 12,
+                  color:
+                      widget.isDark ? AppColors.slate400 : AppColors.slate500),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -663,7 +750,8 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
                   child: OutlinedButton.icon(
                     onPressed: widget.mutating ? null : widget.onRegenerate,
                     icon: const Icon(Icons.refresh, size: 15),
-                    label: const Text('Gerar prévia', style: TextStyle(fontSize: 13)),
+                    label: const Text('Gerar prévia',
+                        style: TextStyle(fontSize: 13)),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -671,9 +759,13 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
                   child: FilledButton(
                     onPressed: widget.mutating ? null : widget.onConfirm,
                     child: widget.mutating
-                        ? const SizedBox(width: 16, height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text('Setar times', style: TextStyle(fontSize: 13)),
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Text('Setar times',
+                            style: TextStyle(fontSize: 13)),
                   ),
                 ),
               ],
@@ -689,8 +781,8 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
 
 class _AssignedTeamsSection extends ConsumerStatefulWidget {
   final MatchState s;
-  final bool       isDark;
-  final bool       isAdmin;
+  final bool isDark;
+  final bool isAdmin;
 
   const _AssignedTeamsSection({
     required this.s,
@@ -699,47 +791,66 @@ class _AssignedTeamsSection extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<_AssignedTeamsSection> createState() => _AssignedTeamsSectionState();
+  ConsumerState<_AssignedTeamsSection> createState() =>
+      _AssignedTeamsSectionState();
 }
 
 class _AssignedTeamsSectionState extends ConsumerState<_AssignedTeamsSection> {
   String? _sel1Id;
-  bool?   _sel1IsTeamA;
-  bool    _swapping = false;
+  bool? _sel1IsTeamA;
+  bool _swapping = false;
 
   void _onFieldTap(String id, bool isTeamA) {
     if (!widget.isAdmin) return;
     if (_sel1Id == null) {
-      setState(() { _sel1Id = id; _sel1IsTeamA = isTeamA; });
+      setState(() {
+        _sel1Id = id;
+        _sel1IsTeamA = isTeamA;
+      });
       return;
     }
     if (_sel1Id == id) {
-      setState(() { _sel1Id = null; _sel1IsTeamA = null; });
+      setState(() {
+        _sel1Id = null;
+        _sel1IsTeamA = null;
+      });
       return;
     }
     if (_sel1IsTeamA == isTeamA) {
-      setState(() { _sel1Id = id; _sel1IsTeamA = isTeamA; });
+      setState(() {
+        _sel1Id = id;
+        _sel1IsTeamA = isTeamA;
+      });
       return;
     }
     // Different teams — call API
     final id1 = _sel1Id!;
-    setState(() { _sel1Id = null; _sel1IsTeamA = null; _swapping = true; });
-    ref.read(matchNotifierProvider.notifier)
+    setState(() {
+      _sel1Id = null;
+      _sel1IsTeamA = null;
+      _swapping = true;
+    });
+    ref
+        .read(matchNotifierProvider.notifier)
         .swapPlayers(id1, id)
-        .whenComplete(() { if (mounted) setState(() => _swapping = false); });
+        .whenComplete(() {
+      if (mounted) setState(() => _swapping = false);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final s      = widget.s;
+    final s = widget.s;
     final aColor = s.teamAColor?.color ?? AppColors.blue500;
     final bColor = s.teamBColor?.color ?? AppColors.slate400;
 
     final fieldA = s.teamAPlayers
-        .map((p) => FieldPlayer(id: p.playerId, name: p.playerName, isGoalkeeper: p.isGoalkeeper))
+        .map((p) => FieldPlayer(
+            id: p.playerId, name: p.playerName, isGoalkeeper: p.isGoalkeeper))
         .toList();
     final fieldB = s.teamBPlayers
-        .map((p) => FieldPlayer(id: p.playerId, name: p.playerName, isGoalkeeper: p.isGoalkeeper))
+        .map((p) => FieldPlayer(
+            id: p.playerId, name: p.playerName, isGoalkeeper: p.isGoalkeeper))
         .toList();
 
     return _SectionCard(
@@ -748,19 +859,21 @@ class _AssignedTeamsSectionState extends ConsumerState<_AssignedTeamsSection> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HorizontalTeamField(
-            teamA:         fieldA,
-            teamB:         fieldB,
-            teamAColor:    aColor,
-            teamBColor:    bColor,
-            canInteract:   widget.isAdmin && !_swapping,
-            sel1Id:        _sel1Id,
+            teamA: fieldA,
+            teamB: fieldB,
+            teamAColor: aColor,
+            teamBColor: bColor,
+            canInteract: widget.isAdmin && !_swapping,
+            sel1Id: _sel1Id,
             onPlayerClick: _onFieldTap,
           ),
           if (widget.isAdmin) ...[
             const SizedBox(height: 6),
             if (_swapping)
               const Center(
-                child: SizedBox(width: 14, height: 14,
+                child: SizedBox(
+                    width: 14,
+                    height: 14,
                     child: CircularProgressIndicator(strokeWidth: 2)),
               )
             else
@@ -770,7 +883,9 @@ class _AssignedTeamsSectionState extends ConsumerState<_AssignedTeamsSection> {
                     : 'Toque em um jogador para selecioná-lo',
                 style: TextStyle(
                   fontSize: 11,
-                  color: _sel1Id != null ? Colors.amber.shade700 : AppColors.slate400,
+                  color: _sel1Id != null
+                      ? Colors.amber.shade700
+                      : AppColors.slate400,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -807,7 +922,8 @@ class _UnassignedSection extends StatelessWidget {
   });
 
   static String _initial(String name) {
-    final parts = name.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+    final parts =
+        name.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
     if (parts.isEmpty) return '?';
     return parts[0][0].toUpperCase();
   }
@@ -827,7 +943,8 @@ class _UnassignedSection extends StatelessWidget {
           // Header com ícone amber
           Row(
             children: [
-              const Icon(Icons.person_off_outlined, size: 15, color: AppColors.amber500),
+              const Icon(Icons.person_off_outlined,
+                  size: 15, color: AppColors.amber500),
               const SizedBox(width: 6),
               Text(
                 'Não atribuídos (${players.length})',
@@ -841,55 +958,65 @@ class _UnassignedSection extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           ...players.map((p) => Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
-              children: [
-                // Avatar amber
-                Container(
-                  width: 26, height: 26,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.amber200,
-                  ),
-                  child: Center(
-                    child: Text(
-                      _initial(p.playerName),
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.amber500,
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    // Avatar amber
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.amber200,
+                      ),
+                      child: Center(
+                        child: Text(
+                          _initial(p.playerName),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.amber500,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        p.playerName,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: isDark ? AppColors.slate100 : AppColors.slate800,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            p.playerName,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: isDark
+                                  ? AppColors.slate100
+                                  : AppColors.slate800,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (p.isGoalkeeper)
+                            renderGroupIcon(icons.goalkeeper,
+                                size: 11, color: AppColors.slate400),
+                        ],
                       ),
-                      if (p.isGoalkeeper)
-                        renderGroupIcon(icons.goalkeeper, size: 11, color: AppColors.slate400),
+                    ),
+                    if (isAdmin) ...[
+                      const SizedBox(width: 6),
+                      _AssignButton(
+                          label: '→ $teamALabel',
+                          color: colorA,
+                          onTap: () => onAssign(p.playerId, true)),
+                      const SizedBox(width: 4),
+                      _AssignButton(
+                          label: '→ $teamBLabel',
+                          color: colorB,
+                          onTap: () => onAssign(p.playerId, false)),
                     ],
-                  ),
+                  ],
                 ),
-                if (isAdmin) ...[
-                  const SizedBox(width: 6),
-                  _AssignButton(label: '→ $teamALabel', color: colorA, onTap: () => onAssign(p.playerId, true)),
-                  const SizedBox(width: 4),
-                  _AssignButton(label: '→ $teamBLabel', color: colorB, onTap: () => onAssign(p.playerId, false)),
-                ],
-              ],
-            ),
-          )),
+              )),
         ],
       ),
     );
@@ -922,7 +1049,8 @@ class _UnassignedGenSection extends StatelessWidget {
   });
 
   static String _initial(String name) {
-    final parts = name.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+    final parts =
+        name.trim().split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
     if (parts.isEmpty) return '?';
     return parts[0][0].toUpperCase();
   }
@@ -939,7 +1067,8 @@ class _UnassignedGenSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.person_off_outlined, size: 15, color: AppColors.amber500),
+              const Icon(Icons.person_off_outlined,
+                  size: 15, color: AppColors.amber500),
               const SizedBox(width: 6),
               Text(
                 'Não atribuídos (${players.length})',
@@ -953,61 +1082,72 @@ class _UnassignedGenSection extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           ...players.map((p) => Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
-              children: [
-                Container(
-                  width: 26, height: 26,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.amber200,
-                  ),
-                  child: Center(
-                    child: Text(
-                      _initial(p.name),
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.amber500,
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.amber200,
                       ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        p.name,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: isDark ? AppColors.slate100 : AppColors.slate800,
+                      child: Center(
+                        child: Text(
+                          _initial(p.name),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.amber500,
+                          ),
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      if (p.isGoalkeeper)
-                        renderGroupIcon(icons.goalkeeper, size: 11, color: AppColors.slate400),
-                    ],
-                  ),
-                ),
-                if (p.weight > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: Text(
-                      p.weight.toStringAsFixed(3),
-                      style: const TextStyle(fontSize: 10, color: AppColors.slate400),
                     ),
-                  ),
-                if (isAdmin) ...[
-                  _AssignButton(label: '→ $teamALabel', color: teamAColor, onTap: () => onAssign(p.playerId, true)),
-                  const SizedBox(width: 4),
-                  _AssignButton(label: '→ $teamBLabel', color: teamBColor, onTap: () => onAssign(p.playerId, false)),
-                ],
-              ],
-            ),
-          )),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            p.name,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: isDark
+                                  ? AppColors.slate100
+                                  : AppColors.slate800,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (p.isGoalkeeper)
+                            renderGroupIcon(icons.goalkeeper,
+                                size: 11, color: AppColors.slate400),
+                        ],
+                      ),
+                    ),
+                    if (p.weight > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Text(
+                          p.weight.toStringAsFixed(3),
+                          style: const TextStyle(
+                              fontSize: 10, color: AppColors.slate400),
+                        ),
+                      ),
+                    if (isAdmin) ...[
+                      _AssignButton(
+                          label: '→ $teamALabel',
+                          color: teamAColor,
+                          onTap: () => onAssign(p.playerId, true)),
+                      const SizedBox(width: 4),
+                      _AssignButton(
+                          label: '→ $teamBLabel',
+                          color: teamBColor,
+                          onTap: () => onAssign(p.playerId, false)),
+                    ],
+                  ],
+                ),
+              )),
         ],
       ),
     );
@@ -1021,7 +1161,8 @@ class _AssignButton extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
 
-  const _AssignButton({required this.label, required this.color, required this.onTap});
+  const _AssignButton(
+      {required this.label, required this.color, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1037,7 +1178,8 @@ class _AssignButton extends StatelessWidget {
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
-      child: Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
+      child: Text(label,
+          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
     );
   }
 }
@@ -1057,7 +1199,8 @@ class _ColorChip extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 20, height: 20,
+          width: 20,
+          height: 20,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: color!.color,
@@ -1073,8 +1216,12 @@ class _ColorChip extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: const TextStyle(fontSize: 10, color: AppColors.slate400)),
-            Text(color!.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            Text(label,
+                style:
+                    const TextStyle(fontSize: 10, color: AppColors.slate400)),
+            Text(color!.name,
+                style:
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
           ],
         ),
       ],
@@ -1092,8 +1239,11 @@ class _ColorPickerSection extends StatelessWidget {
   final bool isDark;
 
   const _ColorPickerSection({
-    required this.label, required this.colors, this.selectedId,
-    required this.onChanged, required this.isDark,
+    required this.label,
+    required this.colors,
+    this.selectedId,
+    required this.onChanged,
+    required this.isDark,
   });
 
   @override
@@ -1106,25 +1256,32 @@ class _ColorPickerSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11, color: AppColors.slate500)),
+        Text(label,
+            style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 11,
+                color: AppColors.slate500)),
         const SizedBox(height: 6),
         Wrap(
-          spacing: 6, runSpacing: 6,
+          spacing: 6,
+          runSpacing: 6,
           children: colors.take(8).map((c) {
-            final isSel   = c.id == selectedId;
+            final isSel = c.id == selectedId;
             final isLight = c.color.computeLuminance() > 0.7;
             final borderColor = isSel
                 ? (isLight ? AppColors.slate600 : AppColors.slate900)
                 : (isLight ? AppColors.slate400 : AppColors.slate300);
-            final checkColor  = isLight ? AppColors.slate800 : Colors.white;
+            final checkColor = isLight ? AppColors.slate800 : Colors.white;
             return GestureDetector(
               onTap: () => onChanged(c.id),
               child: Container(
-                width: 30, height: 30,
+                width: 30,
+                height: 30,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: c.color,
-                  border: Border.all(color: borderColor, width: isSel ? 2 : 1.5),
+                  border:
+                      Border.all(color: borderColor, width: isSel ? 2 : 1.5),
                 ),
                 child: isSel
                     ? Icon(Icons.check, size: 14, color: checkColor)
@@ -1137,7 +1294,8 @@ class _ColorPickerSection extends StatelessWidget {
         Row(
           children: [
             Container(
-              width: 10, height: 10,
+              width: 10,
+              height: 10,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: selected.color,
@@ -1150,7 +1308,9 @@ class _ColorPickerSection extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            Text(selected.name, style: const TextStyle(fontSize: 11, color: AppColors.slate500)),
+            Text(selected.name,
+                style:
+                    const TextStyle(fontSize: 11, color: AppColors.slate500)),
           ],
         ),
       ],
@@ -1165,7 +1325,8 @@ class _TabBar extends StatelessWidget {
   final int selectedIdx;
   final void Function(int) onTap;
 
-  const _TabBar({required this.tabs, required this.selectedIdx, required this.onTap});
+  const _TabBar(
+      {required this.tabs, required this.selectedIdx, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1181,12 +1342,14 @@ class _TabBar extends StatelessWidget {
             decoration: BoxDecoration(
               color: sel ? AppColors.slate900 : Colors.transparent,
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: sel ? AppColors.slate900 : AppColors.slate300),
+              border: Border.all(
+                  color: sel ? AppColors.slate900 : AppColors.slate300),
             ),
             child: Text(
               tabs[i],
               style: TextStyle(
-                fontSize: 11, fontWeight: FontWeight.w600,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
                 color: sel ? Colors.white : AppColors.slate500,
               ),
             ),
@@ -1204,21 +1367,25 @@ class _NavArrow extends StatelessWidget {
   final bool enabled;
   final VoidCallback onTap;
 
-  const _NavArrow({required this.icon, required this.enabled, required this.onTap});
+  const _NavArrow(
+      {required this.icon, required this.enabled, required this.onTap});
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-    onTap: enabled ? onTap : null,
-    child: Container(
-      width: 26, height: 26,
-      decoration: BoxDecoration(
-        border: Border.all(color: enabled ? AppColors.slate400 : AppColors.slate200),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Icon(icon, size: 16,
-          color: enabled ? AppColors.slate600 : AppColors.slate300),
-    ),
-  );
+        onTap: enabled ? onTap : null,
+        child: Container(
+          width: 26,
+          height: 26,
+          decoration: BoxDecoration(
+            border: Border.all(
+                color: enabled ? AppColors.slate400 : AppColors.slate200),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(icon,
+              size: 16,
+              color: enabled ? AppColors.slate600 : AppColors.slate300),
+        ),
+      );
 }
 
 // ── Chip de peso ──────────────────────────────────────────────────────────────
@@ -1231,8 +1398,11 @@ class _StatChip extends StatelessWidget {
   final bool isDark;
 
   const _StatChip({
-    required this.icon, required this.label,
-    required this.valueA, required this.valueB, required this.isDark,
+    required this.icon,
+    required this.label,
+    required this.valueA,
+    required this.valueB,
+    required this.isDark,
   });
 
   @override
@@ -1242,20 +1412,29 @@ class _StatChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? AppColors.slate800 : AppColors.slate50,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
+        border:
+            Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 13, color: AppColors.slate400),
           const SizedBox(width: 4),
-          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.slate400)),
+          Text(label,
+              style: const TextStyle(fontSize: 11, color: AppColors.slate400)),
           const SizedBox(width: 6),
           Text(valueA.toStringAsFixed(3),
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.blue500)),
-          Text(' / ', style: const TextStyle(fontSize: 11, color: AppColors.slate400)),
+              style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.blue500)),
+          const Text(' / ',
+              style: TextStyle(fontSize: 11, color: AppColors.slate400)),
           Text(valueB.toStringAsFixed(3),
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.slate500)),
+              style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.slate500)),
         ],
       ),
     );
@@ -1277,8 +1456,10 @@ class _DiffChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: isDark
-            ? (isGood ? AppColors.emerald500.withValues(alpha: 0.15) : AppColors.amber500.withValues(alpha: 0.15))
-            : (isGood ? AppColors.emerald50   : AppColors.amber50),
+            ? (isGood
+                ? AppColors.emerald500.withValues(alpha: 0.15)
+                : AppColors.amber500.withValues(alpha: 0.15))
+            : (isGood ? AppColors.emerald50 : AppColors.amber50),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isGood ? AppColors.emerald200 : AppColors.amber200,
@@ -1287,12 +1468,16 @@ class _DiffChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('Diff', style: TextStyle(fontSize: 11, color: isGood ? AppColors.emerald700 : AppColors.orange700)),
+          Text('Diff',
+              style: TextStyle(
+                  fontSize: 11,
+                  color: isGood ? AppColors.emerald700 : AppColors.orange700)),
           const SizedBox(width: 4),
           Text(
             value.toStringAsFixed(3),
             style: TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w700,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
               color: isGood ? AppColors.emerald700 : AppColors.orange700,
             ),
           ),
@@ -1309,7 +1494,8 @@ class _DimStat extends StatelessWidget {
   final double diff;
   final bool isDark;
 
-  const _DimStat({required this.label, required this.diff, required this.isDark});
+  const _DimStat(
+      {required this.label, required this.diff, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
@@ -1319,12 +1505,14 @@ class _DimStat extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? AppColors.slate800 : AppColors.slate50,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
+        border:
+            Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: const TextStyle(fontSize: 10, color: AppColors.slate400)),
+          Text(label,
+              style: const TextStyle(fontSize: 10, color: AppColors.slate400)),
           const SizedBox(width: 4),
           Text(
             diff.toStringAsFixed(2),
@@ -1351,15 +1539,20 @@ class _ExplanationBlock extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? AppColors.slate800 : AppColors.slate50,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
+        border:
+            Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (exp.resumo.isNotEmpty)        _ExpSection(bold: 'Resumo:',    text: exp.resumo),
-          if (exp.analiseTimeA.isNotEmpty)   _ExpSection(bold: 'Time A:',   text: exp.analiseTimeA),
-          if (exp.analiseTimeB.isNotEmpty)   _ExpSection(bold: 'Time B:',   text: exp.analiseTimeB),
-          if (exp.conclusao.isNotEmpty)      _ExpSection(bold: 'Conclusão:', text: exp.conclusao),
+          if (exp.resumo.isNotEmpty)
+            _ExpSection(bold: 'Resumo:', text: exp.resumo),
+          if (exp.analiseTimeA.isNotEmpty)
+            _ExpSection(bold: 'Time A:', text: exp.analiseTimeA),
+          if (exp.analiseTimeB.isNotEmpty)
+            _ExpSection(bold: 'Time B:', text: exp.analiseTimeB),
+          if (exp.conclusao.isNotEmpty)
+            _ExpSection(bold: 'Conclusão:', text: exp.conclusao),
         ],
       ),
     );
@@ -1373,17 +1566,21 @@ class _ExpSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: RichText(
-      text: TextSpan(
-        style: const TextStyle(fontSize: 11, color: AppColors.slate600, height: 1.4),
-        children: [
-          TextSpan(text: '$bold ', style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.slate800)),
-          TextSpan(text: text),
-        ],
-      ),
-    ),
-  );
+        padding: const EdgeInsets.only(bottom: 6),
+        child: RichText(
+          text: TextSpan(
+            style: const TextStyle(
+                fontSize: 11, color: AppColors.slate600, height: 1.4),
+            children: [
+              TextSpan(
+                  text: '$bold ',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, color: AppColors.slate800)),
+              TextSpan(text: text),
+            ],
+          ),
+        ),
+      );
 }
 
 // ── Card de seção ─────────────────────────────────────────────────────────────
@@ -1393,21 +1590,61 @@ class _SectionCard extends StatelessWidget {
   final bool isDark;
   final Color? borderColor;
 
-  const _SectionCard({required this.child, required this.isDark, this.borderColor});
+  const _SectionCard(
+      {required this.child, required this.isDark, this.borderColor});
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: isDark ? AppColors.slate900.withValues(alpha: 0.6) : Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(
-        color: borderColor ?? (isDark ? AppColors.slate700.withValues(alpha: 0.6) : AppColors.slate200),
-      ),
-      boxShadow: isDark ? null : [
-        BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 4, offset: const Offset(0, 2)),
-      ],
-    ),
-    child: child,
-  );
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color:
+              isDark ? AppColors.slate900.withValues(alpha: 0.6) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: borderColor ??
+                (isDark
+                    ? AppColors.slate700.withValues(alpha: 0.6)
+                    : AppColors.slate200),
+          ),
+          boxShadow: isDark
+              ? null
+              : [
+                  BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2)),
+                ],
+        ),
+        child: child,
+      );
+}
+
+class _DashedHint extends StatelessWidget {
+  final String text;
+  final bool isDark;
+  const _DashedHint({required this.text, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 28),
+        decoration: BoxDecoration(
+          color:
+              isDark ? AppColors.slate900.withValues(alpha: .35) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark ? AppColors.slate700 : AppColors.slate200,
+            style: BorderStyle.solid,
+          ),
+        ),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 13,
+            height: 1.35,
+            color: isDark ? AppColors.slate400 : AppColors.slate500,
+          ),
+        ),
+      );
 }
