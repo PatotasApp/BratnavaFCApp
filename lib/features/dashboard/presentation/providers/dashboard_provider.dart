@@ -13,10 +13,8 @@ import '../../domain/entities/recent_match.dart';
 
 // ── Helper top-level (Riverpod não permite funções dentro de lambdas de provider) ──
 
-Future<UpcomingMatchDetails> _loadMatchDetails(
-    MatchRemoteDataSource matchDs,
-    PollsRemoteDataSource pollsDs,
-    MatchHeaderDto        header) async {
+Future<UpcomingMatchDetails> _loadMatchDetails(MatchRemoteDataSource matchDs,
+    PollsRemoteDataSource pollsDs, MatchHeaderDto header) async {
   try {
     // Busca detalhes e aceitação em paralelo (aceitação traz contagens mesmo
     // quando o /details não retorna jogadores na fase de acceptation).
@@ -36,7 +34,7 @@ Future<UpcomingMatchDetails> _loadMatchDetails(
 
     final futures = await Future.wait([detailsFuture, acceptFuture]);
 
-    final data       = futures[0];
+    final data = futures[0];
     final acceptData = futures[1];
 
     // ── Parsers locais ─────────────────────────────────────────────────────
@@ -44,14 +42,15 @@ Future<UpcomingMatchDetails> _loadMatchDetails(
     List<MatchPlayerInfo> parsePlayers(dynamic raw, int teamNum,
         {int? forceInviteResponse}) {
       if (raw == null || raw is! List) return [];
-      return (raw as List).whereType<Map<String, dynamic>>().map((e) {
-        final hasTeam   = e.containsKey('team')           || e.containsKey('Team');
-        final hasInvite = e.containsKey('inviteResponse') || e.containsKey('InviteResponse');
+      return raw.whereType<Map<String, dynamic>>().map((e) {
+        final hasTeam = e.containsKey('team') || e.containsKey('Team');
+        final hasInvite =
+            e.containsKey('inviteResponse') || e.containsKey('InviteResponse');
         final patched = {
           ...e,
-          if (!hasTeam)   'team':           teamNum,
+          if (!hasTeam) 'team': teamNum,
           if (!hasInvite && forceInviteResponse != null)
-                          'inviteResponse':  forceInviteResponse,
+            'inviteResponse': forceInviteResponse,
         };
         return MatchPlayerInfo.fromJson(patched);
       }).toList();
@@ -66,13 +65,19 @@ Future<UpcomingMatchDetails> _loadMatchDetails(
     List<MatchPlayerInfo> allPlayers = [];
 
     if (data != null) {
-      final aPlayers  = parsePlayers(data['teamAPlayers']  ?? data['TeamAPlayers'],  1);
-      final bPlayers  = parsePlayers(data['teamBPlayers']  ?? data['TeamBPlayers'],  2);
+      final aPlayers =
+          parsePlayers(data['teamAPlayers'] ?? data['TeamAPlayers'], 1);
+      final bPlayers =
+          parsePlayers(data['teamBPlayers'] ?? data['TeamBPlayers'], 2);
       final unassigned = parsePlayers(
-        data['unassignedPlayers'] ?? data['UnassignedPlayers'] ??
-        data['pendingPlayers']    ?? data['PendingPlayers'] ??
-        data['players']           ?? data['Players'] ??
-        data['matchPlayers']      ?? data['MatchPlayers'],
+        data['unassignedPlayers'] ??
+            data['UnassignedPlayers'] ??
+            data['pendingPlayers'] ??
+            data['PendingPlayers'] ??
+            data['players'] ??
+            data['Players'] ??
+            data['matchPlayers'] ??
+            data['MatchPlayers'],
         0,
       );
       allPlayers = [...aPlayers, ...bPlayers, ...unassigned];
@@ -83,14 +88,20 @@ Future<UpcomingMatchDetails> _loadMatchDetails(
     // todos ficarem como "pending"). Se /acceptation retornou dados, usa eles.
     if (needsAcceptation && acceptData != null) {
       final fromAccept = [
-        ...parsePlayers(acceptData['acceptedPlayers'] ?? acceptData['AcceptedPlayers'],
-            0, forceInviteResponse: 3),
-        ...parsePlayers(acceptData['rejectedPlayers'] ?? acceptData['RejectedPlayers'],
-            0, forceInviteResponse: 2),
         ...parsePlayers(
-          acceptData['pendingPlayers'] ?? acceptData['PendingPlayers'] ??
-          acceptData['unrespondedPlayers'] ?? acceptData['players'] ?? acceptData['Players'],
-          0, forceInviteResponse: 1,
+            acceptData['acceptedPlayers'] ?? acceptData['AcceptedPlayers'], 0,
+            forceInviteResponse: 3),
+        ...parsePlayers(
+            acceptData['rejectedPlayers'] ?? acceptData['RejectedPlayers'], 0,
+            forceInviteResponse: 2),
+        ...parsePlayers(
+          acceptData['pendingPlayers'] ??
+              acceptData['PendingPlayers'] ??
+              acceptData['unrespondedPlayers'] ??
+              acceptData['players'] ??
+              acceptData['Players'],
+          0,
+          forceInviteResponse: 1,
         ),
       ];
       if (fromAccept.isNotEmpty) allPlayers = fromAccept;
@@ -99,14 +110,20 @@ Future<UpcomingMatchDetails> _loadMatchDetails(
     // Fallback final: /details também não retornou jogadores nem /acceptation.
     if (allPlayers.isEmpty && acceptData != null && !needsAcceptation) {
       allPlayers = [
-        ...parsePlayers(acceptData['acceptedPlayers'] ?? acceptData['AcceptedPlayers'],
-            0, forceInviteResponse: 3),
-        ...parsePlayers(acceptData['rejectedPlayers'] ?? acceptData['RejectedPlayers'],
-            0, forceInviteResponse: 2),
         ...parsePlayers(
-          acceptData['pendingPlayers'] ?? acceptData['PendingPlayers'] ??
-          acceptData['unrespondedPlayers'] ?? acceptData['players'] ?? acceptData['Players'],
-          0, forceInviteResponse: 1,
+            acceptData['acceptedPlayers'] ?? acceptData['AcceptedPlayers'], 0,
+            forceInviteResponse: 3),
+        ...parsePlayers(
+            acceptData['rejectedPlayers'] ?? acceptData['RejectedPlayers'], 0,
+            forceInviteResponse: 2),
+        ...parsePlayers(
+          acceptData['pendingPlayers'] ??
+              acceptData['PendingPlayers'] ??
+              acceptData['unrespondedPlayers'] ??
+              acceptData['players'] ??
+              acceptData['Players'],
+          0,
+          forceInviteResponse: 1,
         ),
       ];
     }
@@ -122,20 +139,20 @@ Future<UpcomingMatchDetails> _loadMatchDetails(
 
     String? linkedEventTitle;
     String? linkedEventIcon;
-    bool    linkedIsEvent = false;
+    bool linkedIsEvent = false;
     String? myVoteText;
 
     final pollId = header.linkedPollId;
     if (pollId != null && pollId.isNotEmpty) {
       try {
-        final poll       = await pollsDs.getPoll(header.groupId, pollId);
+        final poll = await pollsDs.getPoll(header.groupId, pollId);
         linkedEventTitle = poll.title;
-        linkedEventIcon  = poll.eventIcon;
-        linkedIsEvent    = poll.isEvent;
+        linkedEventIcon = poll.eventIcon;
+        linkedIsEvent = poll.isEvent;
 
         if (poll.myVotedOptionIds.isNotEmpty) {
           try {
-            final opt  = poll.options
+            final opt = poll.options
                 .firstWhere((o) => poll.myVotedOptionIds.contains(o.id));
             myVoteText = opt.text;
           } catch (_) {
@@ -146,14 +163,14 @@ Future<UpcomingMatchDetails> _loadMatchDetails(
     }
 
     return UpcomingMatchDetails(
-      header:           header,
-      allPlayers:       allPlayers,
-      teamAColor:       teamAColor,
-      teamBColor:       teamBColor,
+      header: header,
+      allPlayers: allPlayers,
+      teamAColor: teamAColor,
+      teamBColor: teamBColor,
       linkedEventTitle: linkedEventTitle,
-      linkedEventIcon:  linkedEventIcon,
-      linkedIsEvent:    linkedIsEvent,
-      myVoteText:       myVoteText,
+      linkedEventIcon: linkedEventIcon,
+      linkedIsEvent: linkedIsEvent,
+      myVoteText: myVoteText,
     );
   } catch (_) {
     return UpcomingMatchDetails(header: header);
@@ -199,8 +216,8 @@ final currentMatchProvider =
 
 // ── Últimas partidas do jogador ───────────────────────────────────────────────
 
-final recentMatchesProvider =
-    FutureProvider.autoDispose.family<List<RecentMatch>, ({String groupId, String playerId})>(
+final recentMatchesProvider = FutureProvider.autoDispose
+    .family<List<RecentMatch>, ({String groupId, String playerId})>(
   (ref, args) {
     final ds = ref.watch(_dashboardDsProvider);
     return ds.fetchRecentMatches(args.groupId, args.playerId);
@@ -216,9 +233,9 @@ final activePlayerIdProvider = StateProvider<String?>((ref) => null);
 /// Jogador ativo resolvido (usa o activePlayerId do account store ou
 /// o primeiro da lista). Não autoDispose pelo mesmo motivo acima.
 final activePlayerProvider = Provider<MyPlayer?>((ref) {
-  final playersAsync  = ref.watch(myPlayersProvider);
+  final playersAsync = ref.watch(myPlayersProvider);
   final accountActive = ref.watch(accountStoreProvider).activeAccount;
-  final manualId      = ref.watch(activePlayerIdProvider);
+  final manualId = ref.watch(activePlayerIdProvider);
 
   // Enquanto re-fetch está em andamento (troca de conta), valueOrNull ainda
   // contém os jogadores da conta anterior. Retorna null para não exibir dados
@@ -240,32 +257,40 @@ final activePlayerProvider = Provider<MyPlayer?>((ref) {
 
 // ── Próximas partidas: headers simples ────────────────────────────────────────
 
-final upcomingMatchesProvider =
-    FutureProvider.autoDispose.family<List<MatchHeaderDto>, String>((ref, groupId) {
+final upcomingMatchesProvider = FutureProvider.autoDispose
+    .family<List<MatchHeaderDto>, String>((ref, groupId) {
   return ref.watch(_matchDsProvider).fetchUpcomingMatches(groupId);
 });
 
 // ── Próximas partidas: headers + detalhes completos (dashboard rich cards) ────
 
-final upcomingMatchesFullProvider =
-    FutureProvider.autoDispose.family<List<UpcomingMatchDetails>, String>(
-        (ref, groupId) async {
+final upcomingMatchesFullProvider = FutureProvider.autoDispose
+    .family<List<UpcomingMatchDetails>, String>((ref, groupId) async {
   final matchDs = ref.read(_matchDsProvider);
   final pollsDs = ref.read(_pollsDsProvider);
   final headers = await matchDs.fetchUpcomingMatches(groupId);
   if (headers.isEmpty) return [];
-  return Future.wait(headers.map((h) => _loadMatchDetails(matchDs, pollsDs, h)));
+  return Future.wait(
+      headers.map((h) => _loadMatchDetails(matchDs, pollsDs, h)));
 });
 
 // ── Próximos eventos (dashboard carrossel) ────────────────────────────────────
 
-final upcomingEventsProvider =
-    FutureProvider.autoDispose.family<List<CalendarEvent>, String>((ref, groupId) async {
-  final ds    = ref.read(_calendarDsProvider);
-  final now   = DateTime.now();
-  final end   = now.add(const Duration(days: 21));
-  final start = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-  final endS  = '${end.year}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}';
-  final all   = await ds.fetchEvents(groupId, start, endS);
-  return all.where((e) => e.type != 'match').toList();
+final upcomingEventsProvider = FutureProvider.autoDispose
+    .family<List<CalendarEvent>, String>((ref, groupId) async {
+  final ds = ref.read(_calendarDsProvider);
+  final now = DateTime.now();
+  final end = DateTime(now.year, now.month + 4, now.day);
+  final start =
+      '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  final endS =
+      '${end.year}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}';
+  final all = await ds.fetchEvents(groupId, start, endS);
+  final events = all.where((e) => e.type != 'match').toList()
+    ..sort((a, b) {
+      final aTime = a.time ?? '00:00';
+      final bTime = b.time ?? '00:00';
+      return '${a.date}T$aTime'.compareTo('${b.date}T$bTime');
+    });
+  return events.take(5).toList();
 });
