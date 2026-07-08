@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
+import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../domain/entities/match_models.dart';
 import '../providers/match_provider.dart';
 
@@ -31,6 +33,7 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
     final gid         = account?.activeGroupId ?? activePlayer?.groupId ?? '';
     final isGroupAdmin = gid.isNotEmpty && (account?.isGroupAdmin(gid) ?? false);
     final isAdmin     = (account?.isAdmin ?? false) || isGroupAdmin;
+    final icons       = GroupIcons.from(ref.watch(groupSettingsProvider(gid)).valueOrNull);
     final pct         = s.maxPlayers > 0 ? accepted.length / s.maxPlayers : 0.0;
 
     return Column(
@@ -77,6 +80,7 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
                       variant: _InviteVariant.accepted,
                       myId:    myId,
                       isAdmin: isAdmin,
+                      icons:   icons,
                       mutating: s.mutating,
                       onAccept: (pid) => ref.read(matchNotifierProvider.notifier).acceptInvite(pid),
                       onReject: (pid) => ref.read(matchNotifierProvider.notifier).rejectInvite(pid),
@@ -90,6 +94,7 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
                       variant: _InviteVariant.rejected,
                       myId:    myId,
                       isAdmin: isAdmin,
+                      icons:   icons,
                       mutating: s.mutating,
                       onAccept: (pid) => ref.read(matchNotifierProvider.notifier).acceptInvite(pid),
                       onReject: (pid) => ref.read(matchNotifierProvider.notifier).rejectInvite(pid),
@@ -103,6 +108,7 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
                       variant: _InviteVariant.pending,
                       myId:    myId,
                       isAdmin: isAdmin,
+                      icons:   icons,
                       mutating: s.mutating,
                       onAccept: (pid) => ref.read(matchNotifierProvider.notifier).acceptInvite(pid),
                       onReject: (pid) => ref.read(matchNotifierProvider.notifier).rejectInvite(pid),
@@ -212,6 +218,7 @@ class _InviteCard extends StatelessWidget {
   final _InviteVariant       variant;
   final String               myId;
   final bool                 isAdmin;
+  final GroupIcons           icons;
   final bool                 mutating;
   final void Function(String pid)  onAccept;
   final void Function(String pid)  onReject;
@@ -224,6 +231,7 @@ class _InviteCard extends StatelessWidget {
     required this.variant,
     required this.myId,
     required this.isAdmin,
+    this.icons = GroupIcons.defaults,
     required this.mutating,
     required this.onAccept,
     required this.onReject,
@@ -319,6 +327,7 @@ class _InviteCard extends StatelessWidget {
                       isMe:     p.playerId == myId,
                       isGuest:  false,
                       isAdmin:  isAdmin,
+                      icons:    icons,
                       variant:  variant,
                       mutating: mutating,
                       onAccept: onAccept,
@@ -350,6 +359,7 @@ class _InviteCard extends StatelessWidget {
                         isMe:     p.playerId == myId,
                         isGuest:  true,
                         isAdmin:  isAdmin,
+                        icons:    icons,
                         variant:  variant,
                         mutating: mutating,
                         onAccept: onAccept,
@@ -375,6 +385,7 @@ class _PlayerRow extends StatelessWidget {
   final bool isMe;
   final bool isGuest;
   final bool isAdmin;
+  final GroupIcons icons;
   final _InviteVariant variant;
   final bool mutating;
   final void Function(String) onAccept;
@@ -386,6 +397,7 @@ class _PlayerRow extends StatelessWidget {
     required this.isMe,
     required this.isGuest,
     required this.isAdmin,
+    this.icons = GroupIcons.defaults,
     required this.variant,
     required this.mutating,
     required this.onAccept,
@@ -465,8 +477,8 @@ class _PlayerRow extends StatelessWidget {
                       opacity: mutating ? 0.5 : 1,
                       child: Tooltip(
                         message: player.isGoalkeeper ? 'Goleiro – toque para mudar para linha' : 'Linha – toque para mudar para goleiro',
-                        child: Icon(
-                          player.isGoalkeeper ? Icons.sports_handball : Icons.sports_soccer,
+                        child: renderGroupIcon(
+                          player.isGoalkeeper ? icons.goalkeeper : icons.player,
                           size: 14,
                           color: AppColors.slate400,
                         ),
@@ -474,7 +486,7 @@ class _PlayerRow extends StatelessWidget {
                     ),
                   )
                 else if (player.isGoalkeeper)
-                  const Icon(Icons.sports_handball, size: 14, color: AppColors.slate400),
+                  renderGroupIcon(icons.goalkeeper, size: 14, color: AppColors.slate400),
 
                 if (isMe)
                   Container(

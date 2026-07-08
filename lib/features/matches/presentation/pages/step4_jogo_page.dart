@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../auth/presentation/providers/account_store.dart';
+import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../domain/entities/match_models.dart';
 import '../providers/match_provider.dart';
 import '../widgets/goal_entry_row.dart';
@@ -126,6 +128,9 @@ class _Step4State extends ConsumerState<Step4JogoPage> {
     final s       = ref.watch(matchNotifierProvider);
     final fmt     = DateFormat('dd/MM/yyyy HH:mm', 'pt_BR');
     final dateStr = s.playedAt != null ? fmt.format(s.playedAt!.toLocal()) : '—';
+    final acc     = ref.watch(accountStoreProvider).activeAccount;
+    final gid     = acc?.activeGroupId ?? '';
+    final icons   = GroupIcons.from(ref.watch(groupSettingsProvider(gid)).valueOrNull);
 
     final allPlayers = s.participants.isNotEmpty
         ? s.participants
@@ -195,6 +200,7 @@ class _Step4State extends ConsumerState<Step4JogoPage> {
                       teamAColor: s.teamAColor?.color,
                       teamBColor: s.teamBColor?.color,
                       mutating:   s.mutating,
+                      icons:      icons,
                       onMinuteChanged: (v) => setState(() => _goalMinute = v),
                       onScorerChanged: (id) => setState(() {
                         _scorerMpId = id;

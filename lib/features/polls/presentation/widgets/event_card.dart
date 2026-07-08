@@ -98,6 +98,14 @@ class EventCard extends StatelessWidget {
                         _Pill(label: 'Respondeu', color: Colors.blue.shade600, bg: Colors.blue.shade50),
                       const SizedBox(width: 4),
                       _StatusBadge(isOpen: poll.isOpen),
+                      if (poll.allowGuests) ...[
+                        const SizedBox(width: 4),
+                        const _Pill(
+                          label: 'Convidados',
+                          color: Color(0xFF7C3AED),
+                          bg: Color(0xFFF5F3FF),
+                        ),
+                      ],
                     ],
                   ),
                   if (poll.description != null) ...[

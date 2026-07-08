@@ -79,8 +79,7 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
 
   // Não usar ref.read aqui — precisa de ref.watch para reagir ao refreshRoles().
   bool _isAdmin(Account? acc, String groupId) {
-    return (acc?.isAdmin ?? false) ||
-        (groupId.isNotEmpty && (acc?.isGroupAdmin(groupId) ?? false));
+    return groupId.isNotEmpty && (acc?.isGroupAdmin(groupId) ?? false);
   }
 
   // ── Cria partida (Step 1) ─────────────────────────────────────────────────

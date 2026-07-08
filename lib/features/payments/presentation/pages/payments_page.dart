@@ -6,6 +6,7 @@ import '../../../../core/utils/date_utils.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../members/presentation/providers/members_provider.dart';
 import '../../data/datasources/payments_remote_datasource.dart';
 import '../../data/datasources/transactions_remote_datasource.dart';
@@ -1130,6 +1131,7 @@ class _MonthlyTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final icons = GroupIcons.from(ref.watch(groupSettingsProvider(groupId)).valueOrNull);
 
     return isAdmin
         ? _AdminMonthlyView(
@@ -1139,6 +1141,7 @@ class _MonthlyTab extends ConsumerWidget {
             onYearChanged:       onYearChanged,
             onOpenSheet:         onOpenSheet,
             onToggleGoalkeeper:  onToggleGoalkeeper,
+            icons:               icons,
             ref:                 ref,
           )
         : _UserMonthlyView(
@@ -1161,6 +1164,7 @@ class _AdminMonthlyView extends StatefulWidget {
   final void Function(int) onYearChanged;
   final Future<void> Function(BuildContext, PlayerRow, int) onOpenSheet;
   final Future<void> Function(PlayerRow)? onToggleGoalkeeper;
+  final GroupIcons icons;
   final WidgetRef ref;
 
   const _AdminMonthlyView({
@@ -1170,6 +1174,7 @@ class _AdminMonthlyView extends StatefulWidget {
     required this.onYearChanged,
     required this.onOpenSheet,
     this.onToggleGoalkeeper,
+    this.icons = GroupIcons.defaults,
     required this.ref,
   });
 
@@ -1194,7 +1199,7 @@ class _AdminMonthlyViewState extends State<_AdminMonthlyView> {
         Row(children: [
           _YearPicker(year: widget.year, isDark: widget.isDark, onChanged: widget.onYearChanged),
           const SizedBox(width: 12),
-          gridAsync.maybeWhen(
+          Expanded(child: gridAsync.maybeWhen(
             data: (grid) => grid.monthlyFee != null
                 ? Wrap(
                     spacing: 8,
@@ -1231,7 +1236,7 @@ class _AdminMonthlyViewState extends State<_AdminMonthlyView> {
                     ),
                   ),
             orElse: () => const SizedBox.shrink(),
-          ),
+          )),
         ]),
         const SizedBox(height: 16),
 
@@ -1256,6 +1261,7 @@ class _AdminMonthlyViewState extends State<_AdminMonthlyView> {
               isDark:              widget.isDark,
               onTap:               (row, month) => widget.onOpenSheet(context, row, month),
               onToggleGoalkeeper:  widget.onToggleGoalkeeper,
+              icons:               widget.icons,
             );
           },
         ),
@@ -1389,6 +1395,7 @@ class _MonthlyGrid extends StatelessWidget {
   final bool          isDark;
   final void Function(PlayerRow, int) onTap;
   final Future<void> Function(PlayerRow)? onToggleGoalkeeper;
+  final GroupIcons icons;
 
   const _MonthlyGrid({
     required this.grid,
@@ -1396,6 +1403,7 @@ class _MonthlyGrid extends StatelessWidget {
     required this.isDark,
     required this.onTap,
     this.onToggleGoalkeeper,
+    this.icons = GroupIcons.defaults,
   });
 
   @override
@@ -1477,15 +1485,12 @@ class _MonthlyGrid extends StatelessWidget {
                                         : (isDark ? AppColors.slate600 : AppColors.slate200),
                                   ),
                                 ),
-                                child: Text(
-                                  row.isGoalkeeper ? 'GK' : 'LN',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w700,
-                                    color: row.isGoalkeeper
-                                        ? AppColors.violet600
-                                        : (isDark ? AppColors.slate400 : AppColors.slate500),
-                                  ),
+                                child: renderGroupIcon(
+                                  row.isGoalkeeper ? icons.goalkeeper : icons.player,
+                                  size: 11,
+                                  color: row.isGoalkeeper
+                                      ? AppColors.violet600
+                                      : (isDark ? AppColors.slate400 : AppColors.slate500),
                                 ),
                               ),
                             ),
@@ -2224,24 +2229,24 @@ class _PaymentRow extends StatelessWidget {
                   color: isDark ? AppColors.slate100 : AppColors.slate800,
                 )),
             const SizedBox(height: 2),
-            Row(children: [
-              Text('R\$ ${payment.finalAmount.toStringAsFixed(2)}',
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: isDark ? AppColors.slate400 : AppColors.slate500)),
-              if (payment.discount > 0) ...[
-                const SizedBox(width: 6),
-                Text('(desc. R\$ ${payment.discount.toStringAsFixed(2)})',
-                    style: const TextStyle(fontSize: 11, color: AppColors.green600)),
-              ],
-              if (payment.paidAt != null) ...[
-                const SizedBox(width: 6),
-                Text('· ${_fmtDate(payment.paidAt!)}',
+            Wrap(
+              spacing: 6,
+              runSpacing: 2,
+              children: [
+                Text('R\$ ${payment.finalAmount.toStringAsFixed(2)}',
                     style: TextStyle(
                         fontSize: 11,
                         color: isDark ? AppColors.slate400 : AppColors.slate500)),
+                if (payment.discount > 0)
+                  Text('(desc. R\$ ${payment.discount.toStringAsFixed(2)})',
+                      style: const TextStyle(fontSize: 11, color: AppColors.green600)),
+                if (payment.paidAt != null)
+                  Text('· ${_fmtDate(payment.paidAt!)}',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? AppColors.slate400 : AppColors.slate500)),
               ],
-            ]),
+            ),
           ]),
         ),
         _StatusBadge(paid: paid),

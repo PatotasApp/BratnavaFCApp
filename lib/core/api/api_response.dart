@@ -7,6 +7,12 @@ List<dynamic> unwrapList(dynamic raw) {
   if (raw is Map) {
     final data = raw['data'] ?? raw['Data'];
     if (data is List) return data;
+    if (data is Map) {
+      final items = data['items'] ?? data['Items'];
+      if (items is List) return items;
+    }
+    final items = raw['items'] ?? raw['Items'];
+    if (items is List) return items;
   }
   return [];
 }

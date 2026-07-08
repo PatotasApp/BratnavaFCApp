@@ -23,6 +23,26 @@ final historyProvider =
   },
 );
 
+typedef HistoryPageArgs = ({
+  String groupId,
+  int page,
+  int pageSize,
+  String? playerId,
+});
+
+final historyPageProvider =
+    FutureProvider.autoDispose.family<PagedHistoryMatches, HistoryPageArgs>(
+  (ref, args) {
+    final ds = ref.watch(_historyDsProvider);
+    return ds.fetchHistoryPage(
+      args.groupId,
+      page: args.page,
+      pageSize: args.pageSize,
+      playerId: args.playerId,
+    );
+  },
+);
+
 // ── My match IDs (for "only my matches" filter) ──────────────────────────────
 
 typedef MyMatchIdsArgs = ({String groupId, String playerId});

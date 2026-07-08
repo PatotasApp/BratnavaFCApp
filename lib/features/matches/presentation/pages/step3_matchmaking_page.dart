@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
+import '../../../../shared/presentation/widgets/horizontal_team_field.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../domain/entities/match_models.dart';
 import '../providers/match_provider.dart';
 import '../widgets/match_flyer.dart';
@@ -105,6 +108,9 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
     final s      = ref.watch(matchNotifierProvider);
     final colors = s.availableColors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final acc    = ref.watch(accountStoreProvider).activeAccount;
+    final gid    = acc?.activeGroupId ?? '';
+    final icons  = GroupIcons.from(ref.watch(groupSettingsProvider(gid)).valueOrNull);
 
     final colorsSet   = s.colorsLocked || (s.teamAColor != null && s.teamBColor != null);
     final hasOptions  = s.teamGenOptions.isNotEmpty;
@@ -302,11 +308,8 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
             if (!hasOptions && teamsSet) ...[
               _AssignedTeamsSection(
                 s:       s,
-                isAdmin: _isAdmin,
                 isDark:  isDark,
-                onNoShow: (matchPlayerId, noShow) => ref
-                    .read(matchNotifierProvider.notifier)
-                    .setNoShow(matchPlayerId, noShow),
+                isAdmin: _isAdmin,
               ),
               const SizedBox(height: 12),
               // ── Card da partida ───────────────────────────────────────
@@ -336,6 +339,7 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
                   teamBLabel: s.teamBColor?.name ?? 'Time B',
                   teamAColor: s.teamAColor?.color,
                   teamBColor: s.teamBColor?.color,
+                  icons:      icons,
                   onAssign:   (pid, toA) => ref
                       .read(matchNotifierProvider.notifier)
                       .assignUnassigned(pid, toA),
@@ -419,53 +423,52 @@ class _TeamGenOptionsSection extends ConsumerStatefulWidget {
 
 class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> {
   bool    _showExplanation = false;
-  String? _selectedA;
-  String? _selectedB;
+  String? _sel1Id;
+  bool?   _sel1IsTeamA;
 
   @override
   void didUpdateWidget(_TeamGenOptionsSection old) {
     super.didUpdateWidget(old);
     if (old.selectedIdx != widget.selectedIdx) {
-      _selectedA = null;
-      _selectedB = null;
+      _sel1Id = null;
+      _sel1IsTeamA = null;
     }
   }
 
-  void _moveToB() {
-    if (_selectedA == null) return;
+  void _onFieldTap(String id, bool isTeamA) {
+    if (!widget.isAdmin) return;
+    if (_sel1Id == null) {
+      setState(() { _sel1Id = id; _sel1IsTeamA = isTeamA; });
+      return;
+    }
+    if (_sel1Id == id) {
+      setState(() { _sel1Id = null; _sel1IsTeamA = null; });
+      return;
+    }
+    if (_sel1IsTeamA == isTeamA) {
+      setState(() { _sel1Id = id; _sel1IsTeamA = isTeamA; });
+      return;
+    }
+    // Different teams — swap
+    final id1 = _sel1Id!;
+    final id1IsA = _sel1IsTeamA!;
+    setState(() { _sel1Id = null; _sel1IsTeamA = null; });
     final opt = widget.options[widget.selectedIdx.clamp(0, widget.options.length - 1)];
-    final player = opt.teamA.firstWhere((p) => p.playerId == _selectedA);
-    ref.read(matchNotifierProvider.notifier).editTeamGenOption(
-      widget.selectedIdx,
-      opt.teamA.where((p) => p.playerId != _selectedA).toList(),
-      [...opt.teamB, player],
-    );
-    setState(() { _selectedA = null; _selectedB = null; });
-  }
-
-  void _moveToA() {
-    if (_selectedB == null) return;
-    final opt = widget.options[widget.selectedIdx.clamp(0, widget.options.length - 1)];
-    final player = opt.teamB.firstWhere((p) => p.playerId == _selectedB);
-    ref.read(matchNotifierProvider.notifier).editTeamGenOption(
-      widget.selectedIdx,
-      [...opt.teamA, player],
-      opt.teamB.where((p) => p.playerId != _selectedB).toList(),
-    );
-    setState(() { _selectedA = null; _selectedB = null; });
-  }
-
-  void _swap() {
-    if (_selectedA == null || _selectedB == null) return;
-    final opt = widget.options[widget.selectedIdx.clamp(0, widget.options.length - 1)];
-    final pA = opt.teamA.firstWhere((p) => p.playerId == _selectedA);
-    final pB = opt.teamB.firstWhere((p) => p.playerId == _selectedB);
-    ref.read(matchNotifierProvider.notifier).editTeamGenOption(
-      widget.selectedIdx,
-      opt.teamA.map((p) => p.playerId == _selectedA ? pB : p).toList(),
-      opt.teamB.map((p) => p.playerId == _selectedB ? pA : p).toList(),
-    );
-    setState(() { _selectedA = null; _selectedB = null; });
+    final p1 = id1IsA
+        ? opt.teamA.firstWhere((p) => p.playerId == id1)
+        : opt.teamB.firstWhere((p) => p.playerId == id1);
+    final p2 = isTeamA
+        ? opt.teamA.firstWhere((p) => p.playerId == id)
+        : opt.teamB.firstWhere((p) => p.playerId == id);
+    List<TeamGenPlayer> newA, newB;
+    if (id1IsA) {
+      newA = opt.teamA.map((p) => p.playerId == id1 ? p2 : p).toList();
+      newB = opt.teamB.map((p) => p.playerId == id  ? p1 : p).toList();
+    } else {
+      newA = opt.teamA.map((p) => p.playerId == id  ? p1 : p).toList();
+      newB = opt.teamB.map((p) => p.playerId == id1 ? p2 : p).toList();
+    }
+    ref.read(matchNotifierProvider.notifier).editTeamGenOption(widget.selectedIdx, newA, newB);
   }
 
   @override
@@ -479,6 +482,8 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
     final bColor = widget.teamBColor?.color ?? AppColors.slate400;
     final aName  = widget.teamAColor?.name  ?? 'Time A';
     final bName  = widget.teamBColor?.name  ?? 'Time B';
+    final gid    = ref.watch(accountStoreProvider).activeAccount?.activeGroupId ?? '';
+    final icons  = GroupIcons.from(ref.watch(groupSettingsProvider(gid)).valueOrNull);
 
     return _SectionCard(
       isDark: widget.isDark,
@@ -587,37 +592,39 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
 
           const SizedBox(height: 14),
 
-          // ── Listas de jogadores com seleção ───────────────────────────────
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: _TeamPlayerList(
-                teamName:        aName,
-                color:           aColor,
-                players:         opt.teamA,
-                isDark:          widget.isDark,
-                selectedPlayerId: _selectedA,
-                onPlayerTap: widget.isAdmin ? (pid) => setState(() {
-                  _selectedA = _selectedA == pid ? null : pid;
-                }) : null,
-              )),
-              const SizedBox(width: 8),
-              Expanded(child: _TeamPlayerList(
-                teamName:        bName,
-                color:           bColor,
-                players:         opt.teamB,
-                isDark:          widget.isDark,
-                selectedPlayerId: _selectedB,
-                onPlayerTap: widget.isAdmin ? (pid) => setState(() {
-                  _selectedB = _selectedB == pid ? null : pid;
-                }) : null,
-              )),
+          // ── Campo interativo ──────────────────────────────────────────────
+          if (opt.teamA.isNotEmpty || opt.teamB.isNotEmpty) ...[
+            HorizontalTeamField(
+              teamA: opt.teamA
+                  .map((p) => FieldPlayer(id: p.playerId, name: p.name, isGoalkeeper: p.isGoalkeeper))
+                  .toList(),
+              teamB: opt.teamB
+                  .map((p) => FieldPlayer(id: p.playerId, name: p.name, isGoalkeeper: p.isGoalkeeper))
+                  .toList(),
+              teamAColor:    aColor,
+              teamBColor:    bColor,
+              canInteract:   widget.isAdmin,
+              sel1Id:        _sel1Id,
+              onPlayerClick: _onFieldTap,
+            ),
+            if (widget.isAdmin) ...[
+              const SizedBox(height: 6),
+              Text(
+                _sel1Id != null
+                    ? 'Toque em um jogador do outro time para trocar'
+                    : 'Toque em um jogador para selecioná-lo',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: _sel1Id != null ? Colors.amber.shade700 : AppColors.slate400,
+                ),
+                textAlign: TextAlign.center,
+              ),
             ],
-          ),
+            const SizedBox(height: 14),
+          ],
 
           // ── Jogadores não atribuídos (ex: goleiros) ───────────────────────
           if (opt.unassigned.isNotEmpty) ...[
-            const SizedBox(height: 10),
             _UnassignedGenSection(
               players:    opt.unassigned,
               isAdmin:    widget.isAdmin,
@@ -626,6 +633,7 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
               teamBLabel: bName,
               teamAColor: aColor,
               teamBColor: bColor,
+              icons:      icons,
               onAssign: (pid, toA) {
                 final player = opt.unassigned.firstWhere((p) => p.playerId == pid);
                 ref.read(matchNotifierProvider.notifier).editTeamGenOption(
@@ -636,97 +644,7 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
                 );
               },
             ),
-          ],
-
-
-          if (widget.isAdmin) ...[
             const SizedBox(height: 10),
-
-            // ── Botões mover / trocar ─────────────────────────────────────
-            Builder(builder: (context) {
-              final canMoveToA  = _selectedB != null && _selectedA == null;
-              final canMoveToB  = _selectedA != null && _selectedB == null;
-              final canSwap     = _selectedA != null && _selectedB != null;
-              // Fallback visual para cores claras
-              final uiA = aColor.computeLuminance() > 0.7 ? AppColors.slate600 : aColor;
-              final uiB = bColor.computeLuminance() > 0.7 ? AppColors.slate600 : bColor;
-              return Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: canMoveToA ? uiA : AppColors.slate400,
-                        backgroundColor: canMoveToA ? uiA.withValues(alpha: 0.08) : null,
-                        side: BorderSide(
-                          color: canMoveToA ? uiA : AppColors.slate300,
-                          width: canMoveToA ? 1.5 : 1,
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                      ),
-                      onPressed: canMoveToA ? _moveToA : null,
-                      icon: const Icon(Icons.chevron_left, size: 16),
-                      label: Text('<< $aName', style: const TextStyle(fontSize: 12)),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    child: canSwap
-                        ? IconButton(
-                            onPressed: _swap,
-                            icon: Icon(Icons.swap_horiz, size: 22,
-                                color: Theme.of(context).colorScheme.primary),
-                            style: IconButton.styleFrom(
-                              minimumSize: const Size(36, 36),
-                              padding: EdgeInsets.zero,
-                            ),
-                          )
-                        : const Icon(Icons.swap_horiz, size: 18, color: AppColors.slate300),
-                  ),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: canMoveToB ? uiB : AppColors.slate400,
-                        backgroundColor: canMoveToB ? uiB.withValues(alpha: 0.08) : null,
-                        side: BorderSide(
-                          color: canMoveToB ? uiB : AppColors.slate300,
-                          width: canMoveToB ? 1.5 : 1,
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                      ),
-                      onPressed: canMoveToB ? _moveToB : null,
-                      icon: Text('$bName >>', style: const TextStyle(fontSize: 12)),
-                      label: const Icon(Icons.chevron_right, size: 16),
-                    ),
-                  ),
-                ],
-              );
-            }),
-
-            // ── Hint ──────────────────────────────────────────────────────
-            const SizedBox(height: 6),
-            Builder(builder: (context) {
-              final canSwap = _selectedA != null && _selectedB != null;
-              String hint;
-              if (canSwap) {
-                hint = 'Toque ⇄ para trocar os jogadores selecionados';
-              } else if (_selectedA != null) {
-                hint = 'Toque em "$bName >>" para mover para o $bName';
-              } else if (_selectedB != null) {
-                hint = 'Toque em "<< $aName" para mover para o $aName';
-              } else {
-                hint = 'Toque em um jogador para movê-lo de time';
-              }
-              return Text(
-                hint,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: (_selectedA != null || _selectedB != null)
-                      ? Colors.amber.shade700
-                      : AppColors.slate400,
-                ),
-                textAlign: TextAlign.center,
-              );
-            }),
           ],
 
           if (widget.isAdmin) ...[
@@ -769,163 +687,94 @@ class _TeamGenOptionsSectionState extends ConsumerState<_TeamGenOptionsSection> 
 
 // ── Times já atribuídos ───────────────────────────────────────────────────────
 
-class _AssignedTeamsSection extends StatelessWidget {
+class _AssignedTeamsSection extends ConsumerStatefulWidget {
   final MatchState s;
-  final bool isAdmin;
-  final bool isDark;
-  final void Function(String matchPlayerId, bool noShow)? onNoShow;
+  final bool       isDark;
+  final bool       isAdmin;
 
   const _AssignedTeamsSection({
     required this.s,
-    required this.isAdmin,
     required this.isDark,
-    this.onNoShow,
+    required this.isAdmin,
   });
 
-  static String _initial(String name) {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts[0][0].toUpperCase();
-    return (parts[0][0] + parts.last[0]).toUpperCase();
-  }
+  @override
+  ConsumerState<_AssignedTeamsSection> createState() => _AssignedTeamsSectionState();
+}
 
-  Widget _buildPlayerList(List<MatchPlayerInfo> players, Color color, String teamName) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 10, height: 10,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color,
-                  border: Border.all(
-                    color: color.computeLuminance() > 0.7
-                        ? AppColors.slate400
-                        : Colors.transparent,
-                    width: 1,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  teamName,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700, fontSize: 13,
-                    color: isDark ? AppColors.slate100 : AppColors.slate900,
-                  ),
-                ),
-              ),
-              Icon(Icons.sports_soccer, size: 13, color: color.withValues(alpha: 0.7)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 4),
-        ...players.map((p) {
-          final absent = p.didNotPlay;
-          return Container(
-            margin: const EdgeInsets.symmetric(vertical: 2),
-            padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
-            decoration: BoxDecoration(
-              color: absent ? AppColors.rose50.withValues(alpha: isDark ? 0.1 : 1) : Colors.transparent,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 24, height: 24,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: absent
-                        ? AppColors.rose200.withValues(alpha: 0.4)
-                        : color.withValues(alpha: 0.15),
-                  ),
-                  child: Center(
-                    child: Text(
-                      _initial(p.playerName),
-                      style: TextStyle(
-                        fontSize: 9, fontWeight: FontWeight.w700,
-                        color: absent ? AppColors.rose400 : color,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        p.playerName,
-                        style: TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.w500,
-                          color: absent
-                              ? (isDark ? AppColors.slate500 : AppColors.slate400)
-                              : (isDark ? AppColors.slate100 : AppColors.slate800),
-                          decoration: absent ? TextDecoration.lineThrough : null,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (p.isGoalkeeper)
-                        const Text('Goleiro', style: TextStyle(fontSize: 9, color: AppColors.slate400)),
-                    ],
-                  ),
-                ),
-                if (isAdmin && onNoShow != null)
-                  GestureDetector(
-                    onTap: () => onNoShow!(p.matchPlayerId, !absent),
-                    child: Tooltip(
-                      message: absent ? 'Marcar como presente' : 'Marcar como não foi',
-                      child: Container(
-                        width: 26, height: 26,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: absent
-                              ? AppColors.rose50.withValues(alpha: isDark ? 0.15 : 1)
-                              : (isDark ? AppColors.slate800 : AppColors.slate100),
-                          border: Border.all(
-                            color: absent ? AppColors.rose200 : (isDark ? AppColors.slate600 : AppColors.slate300),
-                          ),
-                        ),
-                        child: Icon(
-                          absent ? Icons.person_off_rounded : Icons.person_rounded,
-                          size: 13,
-                          color: absent ? AppColors.rose400 : (isDark ? AppColors.slate400 : AppColors.slate500),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          );
-        }),
-      ],
-    );
+class _AssignedTeamsSectionState extends ConsumerState<_AssignedTeamsSection> {
+  String? _sel1Id;
+  bool?   _sel1IsTeamA;
+  bool    _swapping = false;
+
+  void _onFieldTap(String id, bool isTeamA) {
+    if (!widget.isAdmin) return;
+    if (_sel1Id == null) {
+      setState(() { _sel1Id = id; _sel1IsTeamA = isTeamA; });
+      return;
+    }
+    if (_sel1Id == id) {
+      setState(() { _sel1Id = null; _sel1IsTeamA = null; });
+      return;
+    }
+    if (_sel1IsTeamA == isTeamA) {
+      setState(() { _sel1Id = id; _sel1IsTeamA = isTeamA; });
+      return;
+    }
+    // Different teams — call API
+    final id1 = _sel1Id!;
+    setState(() { _sel1Id = null; _sel1IsTeamA = null; _swapping = true; });
+    ref.read(matchNotifierProvider.notifier)
+        .swapPlayers(id1, id)
+        .whenComplete(() { if (mounted) setState(() => _swapping = false); });
   }
 
   @override
   Widget build(BuildContext context) {
+    final s      = widget.s;
     final aColor = s.teamAColor?.color ?? AppColors.blue500;
     final bColor = s.teamBColor?.color ?? AppColors.slate400;
-    final aName  = s.teamAColor?.name  ?? 'Time A';
-    final bName  = s.teamBColor?.name  ?? 'Time B';
+
+    final fieldA = s.teamAPlayers
+        .map((p) => FieldPlayer(id: p.playerId, name: p.playerName, isGoalkeeper: p.isGoalkeeper))
+        .toList();
+    final fieldB = s.teamBPlayers
+        .map((p) => FieldPlayer(id: p.playerId, name: p.playerName, isGoalkeeper: p.isGoalkeeper))
+        .toList();
 
     return _SectionCard(
-      isDark: isDark,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      isDark: widget.isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(child: _buildPlayerList(s.teamAPlayers, aColor, aName)),
-          const SizedBox(width: 8),
-          Expanded(child: _buildPlayerList(s.teamBPlayers, bColor, bName)),
+          HorizontalTeamField(
+            teamA:         fieldA,
+            teamB:         fieldB,
+            teamAColor:    aColor,
+            teamBColor:    bColor,
+            canInteract:   widget.isAdmin && !_swapping,
+            sel1Id:        _sel1Id,
+            onPlayerClick: _onFieldTap,
+          ),
+          if (widget.isAdmin) ...[
+            const SizedBox(height: 6),
+            if (_swapping)
+              const Center(
+                child: SizedBox(width: 14, height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2)),
+              )
+            else
+              Text(
+                _sel1Id != null
+                    ? 'Toque em um jogador do outro time para trocar'
+                    : 'Toque em um jogador para selecioná-lo',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: _sel1Id != null ? Colors.amber.shade700 : AppColors.slate400,
+                ),
+                textAlign: TextAlign.center,
+              ),
+          ],
         ],
       ),
     );
@@ -942,6 +791,7 @@ class _UnassignedSection extends StatelessWidget {
   final String teamBLabel;
   final Color? teamAColor;
   final Color? teamBColor;
+  final GroupIcons icons;
   final void Function(String pid, bool toA) onAssign;
 
   const _UnassignedSection({
@@ -953,6 +803,7 @@ class _UnassignedSection extends StatelessWidget {
     this.teamBLabel = 'B',
     this.teamAColor,
     this.teamBColor,
+    this.icons = GroupIcons.defaults,
   });
 
   static String _initial(String name) {
@@ -1026,7 +877,7 @@ class _UnassignedSection extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       if (p.isGoalkeeper)
-                        const Text('Goleiro', style: TextStyle(fontSize: 9, color: AppColors.slate400)),
+                        renderGroupIcon(icons.goalkeeper, size: 11, color: AppColors.slate400),
                     ],
                   ),
                 ),
@@ -1055,6 +906,7 @@ class _UnassignedGenSection extends StatelessWidget {
   final String teamBLabel;
   final Color teamAColor;
   final Color teamBColor;
+  final GroupIcons icons;
   final void Function(String pid, bool toA) onAssign;
 
   const _UnassignedGenSection({
@@ -1066,6 +918,7 @@ class _UnassignedGenSection extends StatelessWidget {
     required this.teamAColor,
     required this.teamBColor,
     required this.onAssign,
+    this.icons = GroupIcons.defaults,
   });
 
   static String _initial(String name) {
@@ -1135,7 +988,7 @@ class _UnassignedGenSection extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       if (p.isGoalkeeper)
-                        const Text('Goleiro', style: TextStyle(fontSize: 9, color: AppColors.slate400)),
+                        renderGroupIcon(icons.goalkeeper, size: 11, color: AppColors.slate400),
                     ],
                   ),
                 ),
@@ -1185,134 +1038,6 @@ class _AssignButton extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
       child: Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
-    );
-  }
-}
-
-// ── Lista de jogadores de um time ─────────────────────────────────────────────
-
-class _TeamPlayerList extends StatelessWidget {
-  final String teamName;
-  final Color  color;
-  final List<TeamGenPlayer> players;
-  final bool   isDark;
-  final String? selectedPlayerId;
-  final void Function(String)? onPlayerTap;
-
-  const _TeamPlayerList({
-    required this.teamName, required this.color,
-    required this.players,  required this.isDark,
-    this.selectedPlayerId,  this.onPlayerTap,
-  });
-
-  static String _initial(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'))
-        .where((s) => s.isNotEmpty).toList();
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts[0][0].toUpperCase();
-    return (parts[0][0] + parts.last[0]).toUpperCase();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Cores claras (ex: branco) ficam invisíveis — usa slate como fallback visual
-    final isLight    = color.computeLuminance() > 0.7;
-    final uiColor    = isLight ? AppColors.slate600 : color;
-    final dotBorder  = isLight ? AppColors.slate400 : Colors.transparent;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header do time
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: uiColor.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 10, height: 10,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color,
-                  border: Border.all(color: dotBorder, width: 1),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  teamName,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700, fontSize: 13,
-                    color: isDark ? AppColors.slate100 : AppColors.slate900,
-                  ),
-                ),
-              ),
-              Icon(Icons.sports_soccer, size: 13, color: uiColor.withValues(alpha: 0.7)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 4),
-        ...players.map((p) {
-          final isSelected = selectedPlayerId == p.playerId;
-          return GestureDetector(
-            onTap: onPlayerTap != null ? () => onPlayerTap!(p.playerId) : null,
-            child: Container(
-              margin: const EdgeInsets.symmetric(vertical: 2),
-              padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
-              decoration: BoxDecoration(
-                color: isSelected ? uiColor.withValues(alpha: 0.12) : Colors.transparent,
-                borderRadius: BorderRadius.circular(6),
-                border: isSelected
-                    ? Border.all(color: uiColor.withValues(alpha: 0.5))
-                    : null,
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 24, height: 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: uiColor.withValues(alpha: isSelected ? 0.25 : 0.12),
-                    ),
-                    child: Center(
-                      child: Text(
-                        _initial(p.name),
-                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: uiColor),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          p.name,
-                          style: TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w500,
-                            color: isDark ? AppColors.slate100 : AppColors.slate800,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (p.isGoalkeeper)
-                          const Text('Goleiro', style: TextStyle(fontSize: 9, color: AppColors.slate400)),
-                      ],
-                    ),
-                  ),
-                  if (p.weight > 0)
-                    Text(
-                      p.weight.toStringAsFixed(3),
-                      style: const TextStyle(fontSize: 11, color: AppColors.slate400),
-                    ),
-                ],
-              ),
-            ),
-          );
-        }),
-      ],
     );
   }
 }

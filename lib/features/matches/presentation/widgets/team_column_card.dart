@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../domain/entities/match_models.dart';
 
 /// Card de coluna de time exibido no MatchMaking (Step 3).
@@ -10,6 +11,7 @@ class TeamColumnCard extends StatelessWidget {
   final List<MatchPlayerInfo> players;
   final bool isAdmin;
   final bool loading;
+  final GroupIcons icons;
 
   /// Chamado para mover o jogador para o outro time.
   final void Function(String playerId)? onMoveToOther;
@@ -27,6 +29,7 @@ class TeamColumnCard extends StatelessWidget {
     this.color,
     this.isAdmin      = false,
     this.loading      = false,
+    this.icons        = GroupIcons.defaults,
     this.onMoveToOther,
     this.onSwapSelect,
     this.swapCandidateId,
@@ -91,6 +94,7 @@ class TeamColumnCard extends StatelessWidget {
             ...players.map((p) => _PlayerRow(
               player:          p,
               isAdmin:         isAdmin,
+              icons:           icons,
               isSwapCandidate: swapCandidateId == p.playerId,
               onMoveToOther:   onMoveToOther != null ? () => onMoveToOther!(p.playerId) : null,
               onSwapSelect:    onSwapSelect  != null ? () => onSwapSelect!(p.playerId)  : null,
@@ -105,6 +109,7 @@ class _PlayerRow extends StatelessWidget {
   final MatchPlayerInfo player;
   final bool isAdmin;
   final bool isSwapCandidate;
+  final GroupIcons icons;
   final VoidCallback? onMoveToOther;
   final VoidCallback? onSwapSelect;
 
@@ -112,6 +117,7 @@ class _PlayerRow extends StatelessWidget {
     required this.player,
     required this.isAdmin,
     required this.isSwapCandidate,
+    this.icons = GroupIcons.defaults,
     this.onMoveToOther,
     this.onSwapSelect,
   });
@@ -135,7 +141,7 @@ class _PlayerRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 if (player.isGoalkeeper)
-                  const Text('Goleiro', style: TextStyle(fontSize: 10, color: AppColors.slate400)),
+                  renderGroupIcon(icons.goalkeeper, size: 12, color: AppColors.slate400),
               ],
             ),
           ),

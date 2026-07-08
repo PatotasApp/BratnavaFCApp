@@ -7,13 +7,15 @@ class BetRemoteDataSource {
 
   // ── Endpoints ─────────────────────────────────────────────────────────────
 
-  static String _current(String gid)                  => '/api/bet/group/$gid/current';
-  static String _bettable(String gid)                 => '/api/Bet/group/$gid/bettable-matches';
-  static String _context(String gid, String mid)      => '/api/Bet/group/$gid/match/$mid/context';
-  static String _bet(String gid, String mid)          => '/api/bet/group/$gid/match/$mid';
-  static String _leaderboard(String gid)              => '/api/bet/group/$gid/leaderboard';
-  static String _balance(String gid)                  => '/api/bet/group/$gid/balance';
-  static String _history(String gid)                  => '/api/bet/group/$gid/history';
+  static String _current(String gid) => '/api/bet/group/$gid/current';
+  static String _bettable(String gid) => '/api/Bet/group/$gid/bettable-matches';
+  static String _context(String gid, String mid) =>
+      '/api/Bet/group/$gid/match/$mid/context';
+  static String _bet(String gid, String mid) =>
+      '/api/bet/group/$gid/match/$mid';
+  static String _leaderboard(String gid) => '/api/bet/group/$gid/leaderboard';
+  static String _balance(String gid) => '/api/bet/group/$gid/balance';
+  static String _history(String gid) => '/api/bet/group/$gid/history';
 
   // ── Bettable matches list ─────────────────────────────────────────────────
 
@@ -35,7 +37,7 @@ class BetRemoteDataSource {
   Future<CurrentMatchBetContext?> fetchContextForMatch(
       String groupId, String matchId) async {
     try {
-      final res  = await _dio.get(_context(groupId, matchId));
+      final res = await _dio.get(_context(groupId, matchId));
       final data = _unwrapMap(res.data);
       if (data == null) return null;
       return CurrentMatchBetContext.fromJson(data);
@@ -49,7 +51,7 @@ class BetRemoteDataSource {
 
   Future<CurrentMatchBetContext?> fetchCurrent(String groupId) async {
     try {
-      final res  = await _dio.get(_current(groupId));
+      final res = await _dio.get(_current(groupId));
       final data = _unwrapMap(res.data);
       if (data == null) return null;
       return CurrentMatchBetContext.fromJson(data);
@@ -88,7 +90,7 @@ class BetRemoteDataSource {
   // ── Balance ───────────────────────────────────────────────────────────────
 
   Future<int> fetchBalance(String groupId) async {
-    final res  = await _dio.get(_balance(groupId));
+    final res = await _dio.get(_balance(groupId));
     final data = _unwrapMap(res.data);
     return (data?['balance'] as num?)?.toInt() ?? 0;
   }
@@ -96,7 +98,10 @@ class BetRemoteDataSource {
   // ── History ───────────────────────────────────────────────────────────────
 
   Future<List<MatchBetHistoryDto>> fetchHistory(String groupId) async {
-    final res = await _dio.get(_history(groupId));
+    final res = await _dio.get(
+      _history(groupId),
+      queryParameters: const {'page': 1, 'pageSize': 200},
+    );
     final raw = _unwrapList(res.data);
     return raw
         .whereType<Map<String, dynamic>>()
@@ -115,9 +120,15 @@ class BetRemoteDataSource {
 
   Map<String, dynamic>? _unwrapMap(dynamic data) {
     if (data is Map<String, dynamic>) {
-      if (data['data'] is Map<String, dynamic>) return data['data'] as Map<String, dynamic>;
-      if (data['Data'] is Map<String, dynamic>) return data['Data'] as Map<String, dynamic>;
-      if (data.containsKey('success') || data.containsKey('Success')) return null;
+      if (data['data'] is Map<String, dynamic>) {
+        return data['data'] as Map<String, dynamic>;
+      }
+      if (data['Data'] is Map<String, dynamic>) {
+        return data['Data'] as Map<String, dynamic>;
+      }
+      if (data.containsKey('success') || data.containsKey('Success')) {
+        return null;
+      }
       return data;
     }
     return null;
@@ -128,6 +139,12 @@ class BetRemoteDataSource {
     if (data is Map) {
       final inner = data['data'] ?? data['Data'];
       if (inner is List) return inner;
+      if (inner is Map) {
+        final items = inner['items'] ?? inner['Items'];
+        if (items is List) return items;
+      }
+      final items = data['items'] ?? data['Items'];
+      if (items is List) return items;
     }
     return [];
   }

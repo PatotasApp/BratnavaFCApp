@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../domain/entities/match_models.dart';
 
 class InlineGoalTracker extends StatelessWidget {
@@ -15,6 +16,7 @@ class InlineGoalTracker extends StatelessWidget {
   final Color?  teamAColor;
   final Color?  teamBColor;
   final bool    mutating;
+  final GroupIcons icons;
   final ValueChanged<int>     onMinuteChanged;
   final ValueChanged<String?> onScorerChanged;
   final ValueChanged<String?> onAssistChanged;
@@ -36,6 +38,7 @@ class InlineGoalTracker extends StatelessWidget {
     this.teamAColor,
     this.teamBColor,
     required this.mutating,
+    this.icons = GroupIcons.defaults,
     required this.onMinuteChanged,
     required this.onScorerChanged,
     required this.onAssistChanged,
@@ -113,6 +116,7 @@ class InlineGoalTracker extends StatelessWidget {
                   color:     teamAColor,
                   players:   teamAPlayers,
                   selectedId: scorerMpId,
+                  icons:     icons,
                   onTap:     onScorerChanged,
                 )),
                 const SizedBox(width: 8),
@@ -122,6 +126,7 @@ class InlineGoalTracker extends StatelessWidget {
                     color:     teamBColor,
                     players:   teamBPlayers,
                     selectedId: scorerMpId,
+                    icons:     icons,
                     onTap:     onScorerChanged,
                   )),
               ],
@@ -198,6 +203,7 @@ class _PlayerColumn extends StatelessWidget {
   final Color?  color;
   final List<MatchPlayerInfo> players;
   final String? selectedId;
+  final GroupIcons icons;
   final ValueChanged<String?> onTap;
 
   const _PlayerColumn({
@@ -205,6 +211,7 @@ class _PlayerColumn extends StatelessWidget {
     this.color,
     required this.players,
     required this.selectedId,
+    this.icons = GroupIcons.defaults,
     required this.onTap,
   });
 
@@ -236,7 +243,7 @@ class _PlayerColumn extends StatelessWidget {
               ),
               child: Row(children: [
                 if (p.isGoalkeeper)
-                  const Icon(Icons.sports_handball, size: 12, color: AppColors.slate400),
+                  renderGroupIcon(icons.goalkeeper, size: 12, color: AppColors.slate400),
                 if (p.isGoalkeeper) const SizedBox(width: 4),
                 Expanded(
                   child: Text(

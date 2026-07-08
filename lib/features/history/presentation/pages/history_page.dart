@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
+import '../../data/datasources/history_remote_datasource.dart';
 import '../../domain/entities/history_match.dart';
 import '../providers/history_provider.dart';
 
@@ -18,8 +19,9 @@ class HistoryPage extends ConsumerStatefulWidget {
 }
 
 class _HistoryPageState extends ConsumerState<HistoryPage> {
-  static const _pageSize = 20;
-  int  _page     = 1;
+  static const _pageSizeOptions = [5, 10, 20, 50];
+  int _page = 1;
+  int _pageSize = 5;
   bool _onlyMine = false;
   final _scrollCtrl = ScrollController();
 
@@ -39,30 +41,26 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
     );
   }
 
+  void _changePageSize(int size) {
+    if (!_pageSizeOptions.contains(size)) return;
+    setState(() {
+      _pageSize = size;
+      _page = 1;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final account      = ref.watch(accountStoreProvider).activeAccount;
+    final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
-    final groupId      = account?.activeGroupId ?? activePlayer?.groupId;
-    final myPlayerId   = account?.activePlayerId ?? activePlayer?.playerId;
-    final isDark       = Theme.of(context).brightness == Brightness.dark;
-
-    // Always eagerly watch so data is ready when the filter is toggled.
-    AsyncValue<Set<String>>? myMatchIdsAsync;
-    if (groupId != null && myPlayerId != null) {
-      myMatchIdsAsync = ref.watch(
-        myMatchIdsProvider((groupId: groupId, playerId: myPlayerId)),
-      );
-    }
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId;
+    final myPlayerId = account?.activePlayerId ?? activePlayer?.playerId;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return RefreshIndicator(
       onRefresh: () async {
         if (groupId != null) {
-          ref.invalidate(historyProvider(groupId));
-          if (myPlayerId != null) {
-            ref.invalidate(
-                myMatchIdsProvider((groupId: groupId, playerId: myPlayerId)));
-          }
+          ref.invalidate(historyPageProvider);
           setState(() => _page = 1);
         }
       },
@@ -72,9 +70,10 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
           // ── Header ──────────────────────────────────────────────────
           SliverToBoxAdapter(
             child: _Header(
-              groupId:   groupId,
-              isDark:    isDark,
-              onlyMine:  _onlyMine,
+              groupId: groupId,
+              isDark: isDark,
+              onlyMine: _onlyMine,
+              playerId: _onlyMine ? myPlayerId : null,
               canFilter: myPlayerId != null,
               onToggleMine: () => setState(() {
                 _onlyMine = !_onlyMine;
@@ -82,7 +81,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
               }),
               onRefresh: groupId == null
                   ? null
-                  : () => ref.invalidate(historyProvider(groupId)),
+                  : () => ref.invalidate(historyPageProvider),
             ),
           ),
 
@@ -93,13 +92,15 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
           ] else ...[
             SliverToBoxAdapter(
               child: _HistoryList(
-                groupId:         groupId,
-                page:            _page,
-                pageSize:        _pageSize,
-                isDark:          isDark,
-                onlyMine:        _onlyMine,
-                myMatchIdsAsync: myMatchIdsAsync,
-                onPageChanged:   _changePage,
+                groupId: groupId,
+                page: _page,
+                pageSize: _pageSize,
+                pageSizeOptions: _pageSizeOptions,
+                isDark: isDark,
+                onlyMine: _onlyMine,
+                playerId: _onlyMine ? myPlayerId : null,
+                onPageChanged: _changePage,
+                onPageSizeChanged: _changePageSize,
               ),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -113,10 +114,11 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
 // ── Header ─────────────────────────────────────────────────────────────────
 
 class _Header extends ConsumerWidget {
-  final String?      groupId;
-  final bool         isDark;
-  final bool         onlyMine;
-  final bool         canFilter;
+  final String? groupId;
+  final bool isDark;
+  final bool onlyMine;
+  final String? playerId;
+  final bool canFilter;
   final VoidCallback onToggleMine;
   final VoidCallback? onRefresh;
 
@@ -124,6 +126,7 @@ class _Header extends ConsumerWidget {
     required this.groupId,
     required this.isDark,
     required this.onlyMine,
+    required this.playerId,
     required this.canFilter,
     required this.onToggleMine,
     this.onRefresh,
@@ -132,14 +135,20 @@ class _Header extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final histAsync = groupId != null
-        ? ref.watch(historyProvider(groupId!))
-        : const AsyncValue<List<HistoryMatch>>.data([]);
+        ? ref.watch(
+            historyPageProvider((
+              groupId: groupId!,
+              page: 1,
+              pageSize: 1,
+              playerId: playerId,
+            )),
+          )
+        : const AsyncValue<PagedHistoryMatches>.data(
+            PagedHistoryMatches(items: [], total: 0, page: 1, pageSize: 1),
+          );
 
     final isLoading = histAsync.isLoading;
-    final total     = histAsync.valueOrNull?.where((m) {
-      final s = m.statusName?.toLowerCase().trim() ?? '';
-      return s.contains('final') || s == 'done' || s == 'finalizado';
-    }).length ?? 0;
+    final total = histAsync.valueOrNull?.total ?? 0;
 
     return Container(
       margin: const EdgeInsets.all(16),
@@ -147,7 +156,7 @@ class _Header extends ConsumerWidget {
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
-          end:   Alignment.bottomRight,
+          end: Alignment.bottomRight,
           colors: [
             Color(0xFF0f172a),
             Color(0xFF1e293b),
@@ -166,152 +175,157 @@ class _Header extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-          // Icon box
-          Container(
-            width: 52, height: 52,
-            decoration: BoxDecoration(
-              color:        Colors.white.withAlpha(25),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withAlpha(50)),
-            ),
-            child: const Icon(
-              Icons.history_rounded,
-              color: Colors.white,
-              size:  26,
-            ),
-          ),
-          const SizedBox(width: 16),
-          // Title + subtitle
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Histórico',
-                  style: TextStyle(
-                    fontSize:   22,
-                    fontWeight: FontWeight.w900,
-                    color:      Colors.white,
-                  ),
+          Row(
+            children: [
+              // Icon box
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(25),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white.withAlpha(50)),
                 ),
-                const SizedBox(height: 2),
-                if (isLoading)
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 10, height: 10,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 1.5,
+                child: const Icon(
+                  Icons.history_rounded,
+                  color: Colors.white,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Title + subtitle
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Histórico',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    if (isLoading)
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 10,
+                            height: 10,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: Colors.white.withAlpha(128),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Carregando...',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white.withAlpha(128),
+                            ),
+                          ),
+                        ],
+                      )
+                    else if (groupId == null)
+                      Text(
+                        'Crie ou entre em um grupo',
+                        style: TextStyle(
+                          fontSize: 12,
                           color: Colors.white.withAlpha(128),
                         ),
-                      ),
-                      const SizedBox(width: 6),
+                      )
+                    else
                       Text(
-                        'Carregando...',
+                        '$total partida${total != 1 ? 's' : ''} '
+                        'registrada${total != 1 ? 's' : ''}',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.white.withAlpha(128),
                         ),
                       ),
-                    ],
-                  )
-                else if (groupId == null)
-                  Text(
-                    'Crie ou entre em um grupo',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withAlpha(128),
+                  ],
+                ),
+              ),
+              // Refresh button
+              if (onRefresh != null)
+                GestureDetector(
+                  onTap: isLoading ? null : onRefresh,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withAlpha(25),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withAlpha(50)),
                     ),
-                  )
-                else
-                  Text(
-                    '$total partida${total != 1 ? 's' : ''} '
-                    'registrada${total != 1 ? 's' : ''}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withAlpha(128),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.refresh_rounded,
+                          size: 14,
+                          color: Colors.white.withAlpha(204),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Atualizar',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withAlpha(204),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
-          // Refresh button
-          if (onRefresh != null)
+
+          // ── "Só minhas" filter chip ──────────────────────────────────
+          if (canFilter) ...[
+            const SizedBox(height: 12),
             GestureDetector(
-              onTap: isLoading ? null : onRefresh,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              onTap: onToggleMine,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                 decoration: BoxDecoration(
-                  color:        Colors.white.withAlpha(25),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withAlpha(50)),
+                  color: onlyMine ? Colors.white : Colors.white.withAlpha(25),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: onlyMine ? Colors.white : Colors.white.withAlpha(80),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      Icons.refresh_rounded,
-                      size:  14,
-                      color: Colors.white.withAlpha(204),
+                      Icons.person_rounded,
+                      size: 13,
+                      color: onlyMine
+                          ? const Color(0xFF0f172a)
+                          : Colors.white.withAlpha(204),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 5),
                     Text(
-                      'Atualizar',
+                      'Só minhas partidas',
                       style: TextStyle(
-                        fontSize:   12,
-                        fontWeight: FontWeight.w500,
-                        color:      Colors.white.withAlpha(204),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: onlyMine
+                            ? const Color(0xFF0f172a)
+                            : Colors.white.withAlpha(204),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-        ],
-      ),
-
-      // ── "Só minhas" filter chip ──────────────────────────────────
-      if (canFilter) ...[
-        const SizedBox(height: 12),
-        GestureDetector(
-          onTap: onToggleMine,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            decoration: BoxDecoration(
-              color: onlyMine ? Colors.white : Colors.white.withAlpha(25),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: onlyMine ? Colors.white : Colors.white.withAlpha(80),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.person_rounded,
-                  size:  13,
-                  color: onlyMine
-                      ? const Color(0xFF0f172a)
-                      : Colors.white.withAlpha(204),
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  'Só minhas partidas',
-                  style: TextStyle(
-                    fontSize:   12,
-                    fontWeight: FontWeight.w600,
-                    color: onlyMine
-                        ? const Color(0xFF0f172a)
-                        : Colors.white.withAlpha(204),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
+          ],
         ],
       ),
     );
@@ -332,7 +346,7 @@ class _NoGroup extends StatelessWidget {
         children: [
           Icon(
             Icons.group_outlined,
-            size:  40,
+            size: 40,
             color: isDark ? AppColors.slate600 : AppColors.slate300,
           ),
           const SizedBox(height: 12),
@@ -352,27 +366,38 @@ class _NoGroup extends StatelessWidget {
 // ── List ──────────────────────────────────────────────────────────────────────
 
 class _HistoryList extends ConsumerWidget {
-  final String      groupId;
-  final int         page;
-  final int         pageSize;
-  final bool        isDark;
-  final bool        onlyMine;
-  final AsyncValue<Set<String>>? myMatchIdsAsync;
-  final void        Function(int) onPageChanged;
+  final String groupId;
+  final int page;
+  final int pageSize;
+  final List<int> pageSizeOptions;
+  final bool isDark;
+  final bool onlyMine;
+  final String? playerId;
+  final void Function(int) onPageChanged;
+  final void Function(int) onPageSizeChanged;
 
   const _HistoryList({
     required this.groupId,
     required this.page,
     required this.pageSize,
+    required this.pageSizeOptions,
     required this.isDark,
     required this.onlyMine,
-    this.myMatchIdsAsync,
+    required this.playerId,
     required this.onPageChanged,
+    required this.onPageSizeChanged,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(historyProvider(groupId));
+    final async = ref.watch(
+      historyPageProvider((
+        groupId: groupId,
+        page: page,
+        pageSize: pageSize,
+        playerId: playerId,
+      )),
+    );
 
     return async.when(
       loading: () => _Skeletons(isDark: isDark),
@@ -387,26 +412,15 @@ class _HistoryList extends ConsumerWidget {
           ),
         ),
       ),
-      data: (all) {
+      data: (pageData) {
         // Only finalized matches belong in history
-        final finalized = all.where((m) {
+        final finalized = pageData.items.where((m) {
           final s = m.statusName?.toLowerCase().trim() ?? '';
           return s.contains('final') || s == 'done' || s == 'finalizado';
         }).toList();
 
         // Apply "só minhas" filter if active — show spinner while IDs are loading
-        if (onlyMine) {
-          if (myMatchIdsAsync == null || myMatchIdsAsync!.isLoading) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 48),
-              child: Center(child: CircularProgressIndicator()),
-            );
-          }
-        }
-        final myMatchIds = myMatchIdsAsync?.valueOrNull;
-        final filtered = (onlyMine && myMatchIds != null)
-            ? finalized.where((m) => myMatchIds.contains(m.id)).toList()
-            : finalized;
+        final filtered = finalized;
 
         // Sort newest first
         final sorted = [...filtered]..sort((a, b) {
@@ -415,30 +429,61 @@ class _HistoryList extends ConsumerWidget {
             return db.compareTo(da);
           });
 
-        if (sorted.isEmpty) return _EmptyState(isDark: isDark, onlyMine: onlyMine);
+        if (sorted.isEmpty) {
+          return _EmptyState(isDark: isDark, onlyMine: onlyMine);
+        }
 
-        final totalPages = (sorted.length / pageSize).ceil().clamp(1, 9999);
-        final safeP      = page.clamp(1, totalPages);
-        final start      = (safeP - 1) * pageSize;
-        final paged      = sorted.skip(start).take(pageSize).toList();
+        final total = pageData.total;
+        final totalPages = (total / pageSize).ceil().clamp(1, 9999);
+        final safeP = pageData.page.clamp(1, totalPages);
+        final paged = sorted;
 
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
             children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    'Por pagina',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? AppColors.slate400 : AppColors.slate500,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  DropdownButton<int>(
+                    value: pageSize,
+                    isDense: true,
+                    dropdownColor: isDark ? AppColors.slate800 : Colors.white,
+                    items: pageSizeOptions
+                        .map((n) => DropdownMenuItem(
+                              value: n,
+                              child: Text('$n'),
+                            ))
+                        .toList(),
+                    onChanged: (n) {
+                      if (n != null) onPageSizeChanged(n);
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
               ...paged.map((m) => _MatchCard(
-                match:  m,
-                isDark: isDark,
-                onTap:  () => context.go('/app/history/${m.groupId}/${m.id}'),
-              )),
+                    match: m,
+                    isDark: isDark,
+                    onTap: () =>
+                        context.go('/app/history/${m.groupId}/${m.id}'),
+                  )),
               const SizedBox(height: 12),
-              if (sorted.length > pageSize)
+              if (total > pageSize)
                 _Pagination(
-                  page:       safeP,
+                  page: safeP,
                   totalPages: totalPages,
-                  total:      sorted.length,
-                  isDark:     isDark,
-                  onPage:     onPageChanged,
+                  total: total,
+                  isDark: isDark,
+                  onPage: onPageChanged,
                 ),
             ],
           ),
@@ -452,7 +497,7 @@ class _HistoryList extends ConsumerWidget {
 
 class _MatchCard extends StatelessWidget {
   final HistoryMatch match;
-  final bool         isDark;
+  final bool isDark;
   final VoidCallback onTap;
 
   const _MatchCard({
@@ -478,10 +523,10 @@ class _MatchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final aColor  = _parseHex(match.teamAColorHex);
-    final bColor  = _parseHex(match.teamBColorHex);
+    final aColor = _parseHex(match.teamAColorHex);
+    final bColor = _parseHex(match.teamBColorHex);
     final hasScore = match.hasScore;
-    final dates   = _formatDate(match.playedAt);
+    final dates = _formatDate(match.playedAt);
 
     // Accent strip color
     Color? accentA, accentB;
@@ -508,7 +553,7 @@ class _MatchCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
-          color:        isDark ? AppColors.slate900 : Colors.white,
+          color: isDark ? AppColors.slate900 : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -524,8 +569,7 @@ class _MatchCard extends StatelessWidget {
                 _AccentStrip(colorA: accentA, colorB: accentB),
 
                 // Date box
-                if (dates != null)
-                  _DateBox(dates: dates, isDark: isDark),
+                if (dates != null) _DateBox(dates: dates, isDark: isDark),
 
                 // Body
                 Expanded(
@@ -538,16 +582,21 @@ class _MatchCard extends StatelessWidget {
                         // Place name as primary title
                         if (match.placeName != null)
                           Row(children: [
-                            Icon(Icons.location_on_rounded, size: 11,
-                                color: isDark ? AppColors.slate500 : AppColors.slate400),
+                            Icon(Icons.location_on_rounded,
+                                size: 11,
+                                color: isDark
+                                    ? AppColors.slate500
+                                    : AppColors.slate400),
                             const SizedBox(width: 3),
                             Expanded(
                               child: Text(
                                 match.placeName!,
                                 style: TextStyle(
-                                  fontSize:   13,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w600,
-                                  color: isDark ? Colors.white : AppColors.slate900,
+                                  color: isDark
+                                      ? Colors.white
+                                      : AppColors.slate900,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -567,7 +616,8 @@ class _MatchCard extends StatelessWidget {
                                 children: [
                                   _TeamDot(color: aColor),
                                   const Padding(
-                                    padding: EdgeInsets.symmetric(horizontal: 3),
+                                    padding:
+                                        EdgeInsets.symmetric(horizontal: 3),
                                     child: Text(
                                       'vs',
                                       style: TextStyle(
@@ -599,10 +649,12 @@ class _MatchCard extends StatelessWidget {
                                 match.linkedPollType == 'event'
                                     ? Icons.celebration_rounded
                                     : Icons.how_to_vote_rounded,
-                                size:  11,
+                                size: 11,
                                 color: match.linkedPollType == 'event'
                                     ? const Color(0xFFFBBF24)
-                                    : (isDark ? AppColors.slate500 : AppColors.slate400),
+                                    : (isDark
+                                        ? AppColors.slate500
+                                        : AppColors.slate400),
                               ),
                               const SizedBox(width: 3),
                               Expanded(
@@ -610,7 +662,9 @@ class _MatchCard extends StatelessWidget {
                                   match.linkedPollTitle!,
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: isDark ? AppColors.slate500 : AppColors.slate400,
+                                    color: isDark
+                                        ? AppColors.slate500
+                                        : AppColors.slate400,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -626,8 +680,8 @@ class _MatchCard extends StatelessWidget {
 
                 // Score pill or chevron
                 Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                   child: Center(
                     child: hasScore
                         ? _ScorePill(
@@ -636,7 +690,7 @@ class _MatchCard extends StatelessWidget {
                           )
                         : Icon(
                             Icons.chevron_right_rounded,
-                            size:  18,
+                            size: 18,
                             color: isDark
                                 ? AppColors.slate600
                                 : AppColors.slate300,
@@ -673,7 +727,7 @@ class _AccentStrip extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
-          end:   Alignment.bottomCenter,
+          end: Alignment.bottomCenter,
           stops: const [0.5, 0.5],
           colors: [colorA ?? AppColors.slate400, colorB!],
         ),
@@ -693,7 +747,7 @@ class _DateBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width:   58,
+      width: 58,
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
       decoration: BoxDecoration(
         color: isDark ? AppColors.slate800.withAlpha(120) : AppColors.slate50,
@@ -709,8 +763,8 @@ class _DateBox extends StatelessWidget {
           Text(
             dates.month.toUpperCase(),
             style: TextStyle(
-              fontSize:      9,
-              fontWeight:    FontWeight.w700,
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
               letterSpacing: 1.2,
               color: isDark ? AppColors.slate500 : AppColors.slate400,
             ),
@@ -718,9 +772,9 @@ class _DateBox extends StatelessWidget {
           Text(
             dates.day,
             style: TextStyle(
-              fontSize:   22,
+              fontSize: 22,
               fontWeight: FontWeight.w900,
-              height:     1,
+              height: 1,
               color: isDark ? AppColors.slate100 : AppColors.slate800,
             ),
           ),
@@ -749,7 +803,7 @@ class _ScorePill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color:        isDark ? Colors.white : AppColors.slate900,
+        color: isDark ? Colors.white : AppColors.slate900,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -758,7 +812,7 @@ class _ScorePill extends StatelessWidget {
           Text(
             '$a',
             style: TextStyle(
-              fontSize:   15,
+              fontSize: 15,
               fontWeight: FontWeight.w900,
               color: isDark ? AppColors.slate900 : Colors.white,
             ),
@@ -776,7 +830,7 @@ class _ScorePill extends StatelessWidget {
           Text(
             '$b',
             style: TextStyle(
-              fontSize:   15,
+              fontSize: 15,
               fontWeight: FontWeight.w900,
               color: isDark ? AppColors.slate900 : Colors.white,
             ),
@@ -798,7 +852,7 @@ class _TeamDot extends StatelessWidget {
     if (color == null) return const SizedBox.shrink();
     final isWhite = color == const Color(0xFFFFFFFF);
     return Container(
-      width:  13,
+      width: 13,
       height: 13,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
@@ -808,7 +862,10 @@ class _TeamDot extends StatelessWidget {
           width: 1,
         ),
         boxShadow: isWhite
-            ? [BoxShadow(color: AppColors.slate300.withAlpha(100), blurRadius: 2)]
+            ? [
+                BoxShadow(
+                    color: AppColors.slate300.withAlpha(100), blurRadius: 2)
+              ]
             : null,
       ),
     );
@@ -819,23 +876,23 @@ class _TeamDot extends StatelessWidget {
 
 class _StatusBadge extends StatelessWidget {
   final String status;
-  final bool   isDark;
+  final bool isDark;
 
   const _StatusBadge({required this.status, required this.isDark});
 
   static const _meta = {
-    'final':      (Color(0xFFecfdf5), Color(0xFF059669)),
+    'final': (Color(0xFFecfdf5), Color(0xFF059669)),
     'finalizado': (Color(0xFFecfdf5), Color(0xFF059669)),
-    'done':       (Color(0xFFecfdf5), Color(0xFF059669)),
-    'pós-jogo':   (Color(0xFFfff7ed), Color(0xFFea580c)),
-    'postgame':   (Color(0xFFfff7ed), Color(0xFFea580c)),
-    'playing':    (Color(0xFFeff6ff), Color(0xFF2563eb)),
-    'started':    (Color(0xFFeff6ff), Color(0xFF2563eb)),
-    'live':       (Color(0xFFeff6ff), Color(0xFF2563eb)),
-    'teams':      (Color(0xFFf5f3ff), Color(0xFF7c3aed)),
-    'matchmaking':(Color(0xFFf5f3ff), Color(0xFF7c3aed)),
-    'accept':     (Color(0xFFfffbeb), Color(0xFFd97706)),
-    'aceitação':  (Color(0xFFfffbeb), Color(0xFFd97706)),
+    'done': (Color(0xFFecfdf5), Color(0xFF059669)),
+    'pós-jogo': (Color(0xFFfff7ed), Color(0xFFea580c)),
+    'postgame': (Color(0xFFfff7ed), Color(0xFFea580c)),
+    'playing': (Color(0xFFeff6ff), Color(0xFF2563eb)),
+    'started': (Color(0xFFeff6ff), Color(0xFF2563eb)),
+    'live': (Color(0xFFeff6ff), Color(0xFF2563eb)),
+    'teams': (Color(0xFFf5f3ff), Color(0xFF7c3aed)),
+    'matchmaking': (Color(0xFFf5f3ff), Color(0xFF7c3aed)),
+    'accept': (Color(0xFFfffbeb), Color(0xFFd97706)),
+    'aceitação': (Color(0xFFfffbeb), Color(0xFFd97706)),
   };
 
   @override
@@ -846,7 +903,10 @@ class _StatusBadge extends StatelessWidget {
       found = _meta[key];
     } else {
       for (final e in _meta.entries) {
-        if (key.contains(e.key)) { found = e.value; break; }
+        if (key.contains(e.key)) {
+          found = e.value;
+          break;
+        }
       }
     }
     final bg = found?.$1 ?? (isDark ? AppColors.slate800 : AppColors.slate50);
@@ -855,16 +915,16 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color:        bg,
+        color: bg,
         borderRadius: BorderRadius.circular(99),
         border: Border.all(color: fg.withAlpha(80)),
       ),
       child: Text(
         status,
         style: TextStyle(
-          fontSize:   10,
+          fontSize: 10,
           fontWeight: FontWeight.w600,
-          color:      fg,
+          color: fg,
         ),
       ),
     );
@@ -874,9 +934,9 @@ class _StatusBadge extends StatelessWidget {
 // ── Pagination ────────────────────────────────────────────────────────────────
 
 class _Pagination extends StatelessWidget {
-  final int  page;
-  final int  totalPages;
-  final int  total;
+  final int page;
+  final int totalPages;
+  final int total;
   final bool isDark;
   final void Function(int) onPage;
 
@@ -894,12 +954,12 @@ class _Pagination extends StatelessWidget {
       children: [
         // Prev
         _PagButton(
-          label:   'Anterior',
-          icon:    Icons.chevron_left_rounded,
+          label: 'Anterior',
+          icon: Icons.chevron_left_rounded,
           leading: true,
           enabled: page > 1,
-          isDark:  isDark,
-          onTap:   () => onPage(page - 1),
+          isDark: isDark,
+          onTap: () => onPage(page - 1),
         ),
         // Page info
         Expanded(
@@ -914,12 +974,12 @@ class _Pagination extends StatelessWidget {
         ),
         // Next
         _PagButton(
-          label:   'Próxima',
-          icon:    Icons.chevron_right_rounded,
+          label: 'Próxima',
+          icon: Icons.chevron_right_rounded,
           leading: false,
           enabled: page < totalPages,
-          isDark:  isDark,
-          onTap:   () => onPage(page + 1),
+          isDark: isDark,
+          onTap: () => onPage(page + 1),
         ),
       ],
     );
@@ -927,11 +987,11 @@ class _Pagination extends StatelessWidget {
 }
 
 class _PagButton extends StatelessWidget {
-  final String     label;
-  final IconData   icon;
-  final bool       leading;
-  final bool       enabled;
-  final bool       isDark;
+  final String label;
+  final IconData icon;
+  final bool leading;
+  final bool enabled;
+  final bool isDark;
   final VoidCallback onTap;
 
   const _PagButton({
@@ -952,7 +1012,7 @@ class _PagButton extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color:        isDark ? AppColors.slate900 : Colors.white,
+            color: isDark ? AppColors.slate900 : Colors.white,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -966,7 +1026,7 @@ class _PagButton extends StatelessWidget {
               Text(
                 label,
                 style: const TextStyle(
-                  fontSize:   13,
+                  fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -994,10 +1054,10 @@ class _Skeletons extends StatelessWidget {
         children: List.generate(
           6,
           (i) => Container(
-            height:       68,
-            margin:       const EdgeInsets.only(bottom: 8),
+            height: 68,
+            margin: const EdgeInsets.only(bottom: 8),
             decoration: BoxDecoration(
-              color:        isDark ? AppColors.slate800 : AppColors.slate100,
+              color: isDark ? AppColors.slate800 : AppColors.slate100,
               borderRadius: BorderRadius.circular(16),
             ),
           ),
@@ -1021,25 +1081,25 @@ class _EmptyState extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 48),
         decoration: BoxDecoration(
-          color:        isDark ? AppColors.slate900 : Colors.white,
+          color: isDark ? AppColors.slate900 : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color:     isDark ? AppColors.slate700 : AppColors.slate200,
-            style:     BorderStyle.solid,
+            color: isDark ? AppColors.slate700 : AppColors.slate200,
+            style: BorderStyle.solid,
           ),
         ),
         child: Column(
           children: [
             Icon(
               Icons.calendar_today_outlined,
-              size:  36,
+              size: 36,
               color: isDark ? AppColors.slate600 : AppColors.slate300,
             ),
             const SizedBox(height: 12),
             Text(
               'Nenhuma partida encontrada',
               style: TextStyle(
-                fontSize:   14,
+                fontSize: 14,
                 fontWeight: FontWeight.w500,
                 color: isDark ? AppColors.slate400 : AppColors.slate500,
               ),
@@ -1078,10 +1138,10 @@ class _DateParts {
 _DateParts? _formatDate(DateTime? d) {
   if (d == null) return null;
   return _DateParts(
-    day:   DateFormat('dd',             'pt_BR').format(d),
-    month: DateFormat('MMM',            'pt_BR').format(d).replaceAll('.', ''),
-    time:  DateFormat('HH:mm',          'pt_BR').format(d),
-    full:  DateFormat("EEE, dd 'de' MMM 'de' yyyy • HH:mm", 'pt_BR').format(d),
-    short: DateFormat("dd 'de' MMM",    'pt_BR').format(d),
+    day: DateFormat('dd', 'pt_BR').format(d),
+    month: DateFormat('MMM', 'pt_BR').format(d).replaceAll('.', ''),
+    time: DateFormat('HH:mm', 'pt_BR').format(d),
+    full: DateFormat("EEE, dd 'de' MMM 'de' yyyy • HH:mm", 'pt_BR').format(d),
+    short: DateFormat("dd 'de' MMM", 'pt_BR').format(d),
   );
 }

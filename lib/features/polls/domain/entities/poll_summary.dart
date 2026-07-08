@@ -28,6 +28,7 @@ class PollSummary extends Equatable {
   /// Id da partida vinculada a esta votação/evento (null = sem vínculo).
   final String? linkedMatchId;
 
+  final bool allowGuests;
   const PollSummary({
     required this.id,
     required this.title,
@@ -50,6 +51,7 @@ class PollSummary extends Equatable {
     this.costAmount,
     this.isAcceptingVotes = true,
     this.linkedMatchId,
+    this.allowGuests = false,
   });
 
   bool get isOpen  => status == 'open';
@@ -86,8 +88,9 @@ class PollSummary extends Equatable {
     costAmount:         (j['costAmount'] as num?)?.toDouble(),
     isAcceptingVotes:   j['isAcceptingVotes']   as bool?   ?? (j['status'] == 'open'),
     linkedMatchId:      (j['linkedMatchId'] ?? j['LinkedMatchId'])?.toString(),
+    allowGuests:        j['allowGuests']        as bool?   ?? false,
   );
 
   @override
-  List<Object?> get props => [id, status, hasVoted, totalVoters, isAcceptingVotes, linkedMatchId];
+  List<Object?> get props => [id, status, hasVoted, totalVoters, isAcceptingVotes, linkedMatchId, allowGuests];
 }

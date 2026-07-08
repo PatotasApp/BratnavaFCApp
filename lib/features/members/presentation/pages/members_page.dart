@@ -23,13 +23,7 @@ class MembersPage extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     if (account == null) return const SizedBox.shrink();
 
-    final isAdmin = account.roles.any(
-      (r) => r.toLowerCase() == 'admin' || r.toLowerCase() == 'godmode',
-    );
-
-    return isAdmin
-        ? _AdminUsersPage(currentUserId: account.userId, isDark: isDark)
-        : _MyProfilePage(account: account, isDark: isDark);
+    return _MyProfilePage(account: account, isDark: isDark);
   }
 }
 
@@ -731,33 +725,6 @@ class _ProfileCard extends StatelessWidget {
                     _FieldData('EMAIL', user.email.isNotEmpty ? user.email : '—'),
                     _FieldData('TELEFONE', user.phone ?? '—'),
                     _FieldData('NASCIMENTO', user.birthDate ?? '—'),
-                  ],
-                  isDark: isDark,
-                ),
-                const SizedBox(height: 16),
-                _FieldRow(
-                  fields: [
-                    _FieldData(
-                      'ROLE',
-                      user.roles.isNotEmpty ? user.roles.first : '—',
-                    ),
-                    _FieldData(
-                      'STATUS',
-                      user.isActive ? 'Ativo' : 'Inativo',
-                      valueColor: user.isActive
-                          ? AppColors.emerald500
-                          : AppColors.slate400,
-                    ),
-                    _FieldData('CRIADO EM', user.createdAt ?? '—'),
-                  ],
-                  isDark: isDark,
-                ),
-                const SizedBox(height: 16),
-                _FieldRow(
-                  fields: [
-                    _FieldData('ATUALIZADO EM', user.updatedAt ?? '—'),
-                    _FieldData('INATIVADO EM', user.inactivatedAt ?? '—'),
-                    const _FieldData('', ''),
                   ],
                   isDark: isDark,
                 ),
@@ -2173,7 +2140,6 @@ class _RoleBadge extends StatelessWidget {
 
     switch (role.toLowerCase()) {
       case 'admin':
-      case 'godmode':
         bg = const Color(0xFF7C3AED).withValues(alpha: 0.15);
         fg = const Color(0xFF7C3AED);
         break;

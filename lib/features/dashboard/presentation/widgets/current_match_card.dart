@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/horizontal_team_field.dart';
 import '../../domain/entities/current_match.dart';
 
-class CurrentMatchCard extends StatelessWidget {
+class CurrentMatchCard extends StatefulWidget {
   final CurrentMatch match;
   final String       playerId;
 
@@ -15,12 +16,27 @@ class CurrentMatchCard extends StatelessWidget {
   });
 
   @override
+  State<CurrentMatchCard> createState() => _CurrentMatchCardState();
+}
+
+class _CurrentMatchCardState extends State<CurrentMatchCard> {
+  bool _showField = false;
+
+  @override
+  void didUpdateWidget(CurrentMatchCard old) {
+    super.didUpdateWidget(old);
+    if (old.match.matchId != widget.match.matchId) {
+      _showField = false;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final match  = widget.match;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final dates  = _formatDate(match.playedAt.toLocal());
 
-    // Jogador nesta partida
-    final found       = playerId.isNotEmpty ? _findPlayer(match, playerId) : null;
+    final found       = widget.playerId.isNotEmpty ? _findPlayer(match, widget.playerId) : null;
     final isAssigned   = found != null && found.team != 0;
     final isUnassigned = found != null && found.team == 0;
 
@@ -29,7 +45,6 @@ class CurrentMatchCard extends StatelessWidget {
     final teamACount   = teamAPlayers.length;
     final teamBCount   = teamBPlayers.length;
 
-    // Mostra nomes dos jogadores nas fases de formação e jogo
     final showPlayerNames = match.stepKey == 'teams' || match.stepKey == 'playing';
     final teamANames = showPlayerNames
         ? teamAPlayers.map((p) => p.playerName).where((n) => n.isNotEmpty).toList()
@@ -38,8 +53,23 @@ class CurrentMatchCard extends StatelessWidget {
         ? teamBPlayers.map((p) => p.playerName).where((n) => n.isNotEmpty).toList()
         : <String>[];
 
-    final hasScore = match.teamAGoals > 0 || match.teamBGoals > 0 ||
-        match.status >= 4; // a partir de "Em jogo" sempre mostra
+    final hasScore = match.teamAGoals > 0 || match.teamBGoals > 0 || match.status >= 4;
+
+    // Show "Ver times" footer when teams are fully set
+    final canShowField = showPlayerNames &&
+        teamAPlayers.isNotEmpty &&
+        teamBPlayers.isNotEmpty;
+
+    // Build FieldPlayer lists from MatchPlayer
+    final fieldA = teamAPlayers
+        .map((p) => FieldPlayer(id: p.playerId, name: p.playerName, isGoalkeeper: p.isGoalkeeper))
+        .toList();
+    final fieldB = teamBPlayers
+        .map((p) => FieldPlayer(id: p.playerId, name: p.playerName, isGoalkeeper: p.isGoalkeeper))
+        .toList();
+
+    final aColor = _parseHex(match.teamAColor?.hexValue) ?? AppColors.blue500;
+    final bColor = _parseHex(match.teamBColor?.hexValue) ?? AppColors.slate400;
 
     return GestureDetector(
       onTap: () => context.go('/app/matches'),
@@ -114,7 +144,7 @@ class CurrentMatchCard extends StatelessWidget {
                           const SizedBox(height: 10),
                         ],
 
-                        // Times — Flexible em cada bloco evita overflow horizontal
+                        // Times
                         Row(
                           children: [
                             Flexible(child: _TeamBlock(color: match.teamAColor, label: 'Time A', count: teamACount, isDark: isDark, playerNames: teamANames)),
@@ -182,7 +212,7 @@ class CurrentMatchCard extends StatelessWidget {
                   ),
 
                   // Direita: situação do jogador
-                  if (playerId.isNotEmpty) ...[
+                  if (widget.playerId.isNotEmpty) ...[
                     const SizedBox(width: 16),
                     Container(
                       width: 1,
@@ -239,6 +269,54 @@ class CurrentMatchCard extends StatelessWidget {
                 ],
               ),
             ),
+
+            // ── Footer: Ver times ──────────────────────────────────────────
+            if (canShowField) ...[
+              Divider(
+                height: 1,
+                color: isDark ? AppColors.slate800 : AppColors.slate100,
+              ),
+              GestureDetector(
+                onTap: () => setState(() => _showField = !_showField),
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _showField
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        size: 16,
+                        color: isDark ? AppColors.slate400 : AppColors.slate500,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _showField ? 'Ocultar times' : 'Ver times',
+                        style: TextStyle(
+                          fontSize:   12,
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? AppColors.slate400 : AppColors.slate500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ── Campo expandido ──────────────────────────────────────────
+              if (_showField)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  child: HorizontalTeamField(
+                    teamA:      fieldA,
+                    teamB:      fieldB,
+                    teamAColor: aColor,
+                    teamBColor: bColor,
+                  ),
+                ),
+            ],
           ],
         ),
       ),

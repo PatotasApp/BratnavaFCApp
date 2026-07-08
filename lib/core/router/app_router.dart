@@ -23,8 +23,8 @@ import '../../features/bet/presentation/pages/bet_page.dart';
 import '../../features/replays/presentation/pages/replay_vault_page.dart';
 import '../../features/player_spotlight/presentation/pages/player_spotlight_page.dart';
 import '../../features/player_history/presentation/pages/player_history_page.dart';
-import '../../features/god_mode/presentation/pages/god_mode_page.dart';
 import '../../features/groups/presentation/pages/group_invites_page.dart';
+import '../../features/team_builder/presentation/pages/team_builder_page.dart';
 import '../../core/push/local_notifications.dart';
 
 // ── Placeholder para rotas ainda não implementadas ────────────────────────────
@@ -208,12 +208,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const PlayerHistoryPage(),
           ),
           GoRoute(
-            path:    '/app/admin/godmode',
-            builder: (_, __) => const GodModePage(),
-          ),
-          GoRoute(
             path:    '/app/invites',
             builder: (_, __) => const GroupInvitesPage(),
+          ),
+          GoRoute(
+            path:    '/app/team-builder',
+            builder: (_, __) => const TeamBuilderPage(),
           ),
         ],
       ),

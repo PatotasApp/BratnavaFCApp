@@ -9,6 +9,8 @@ import '../../../../core/errors/app_exception.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
+import '../../../group_settings/presentation/providers/group_settings_provider.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 
 extension _FirstOrNullExt<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
@@ -238,7 +240,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
   bool _isGroupAdmin(String groupId) {
     final account = ref.read(accountStoreProvider).activeAccount;
     if (account == null) return false;
-    return account.isAdmin || account.isGroupAdmin(groupId);
+    return account.isGroupAdmin(groupId);
   }
 
   bool _isGroupFinanceiro(String groupId) {
@@ -661,6 +663,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     final isAdminHere = _isGroupAdmin(groupId);
     final account = ref.watch(accountStoreProvider).activeAccount;
     final isCreator = _group?.createdByUserId == account?.userId;
+    final icons = GroupIcons.from(ref.watch(groupSettingsProvider(groupId)).valueOrNull);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -767,6 +770,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                 ? _isGroupFinanceiro(_expandedGroupId!)
                 : false,
             paymentMap: _paymentMap,
+            icons: icons,
             isDark: isDark,
             onEditPlayer: _showEditPlayer,
           ),
@@ -777,6 +781,9 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
 
   Widget _buildAccordion(bool isDark) {
     final account = ref.watch(accountStoreProvider).activeAccount;
+    final expandedIcons = _expandedGroupId != null
+        ? GroupIcons.from(ref.watch(groupSettingsProvider(_expandedGroupId!)).valueOrNull)
+        : GroupIcons.defaults;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -860,6 +867,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                       isAdminHere: isAdminHere,
                       isFinanceiroHere: _isGroupFinanceiro(groupId),
                       paymentMap: _paymentMap,
+                      icons: expandedIcons,
                       isDark: isDark,
                       onEditPlayer: _showEditPlayer,
                     )
@@ -1300,6 +1308,7 @@ class _GroupContent extends StatefulWidget {
   final bool isAdminHere;
   final bool isFinanceiroHere;
   final Map<String, _PaymentBadge> paymentMap;
+  final GroupIcons icons;
   final bool isDark;
   final void Function(_PlayerDto) onEditPlayer;
 
@@ -1314,6 +1323,7 @@ class _GroupContent extends StatefulWidget {
     required this.isAdminHere,
     required this.isFinanceiroHere,
     required this.paymentMap,
+    this.icons = GroupIcons.defaults,
     required this.isDark,
     required this.onEditPlayer,
   });
@@ -1337,6 +1347,7 @@ class _GroupContentState extends State<_GroupContent> {
     final isAdminHere    = widget.isAdminHere;
     final isFinanceiroHere = widget.isFinanceiroHere;
     final paymentMap     = widget.paymentMap;
+    final icons          = widget.icons;
     final isDark         = widget.isDark;
     final onEditPlayer   = widget.onEditPlayer;
 
@@ -1443,6 +1454,7 @@ class _GroupContentState extends State<_GroupContent> {
               isAdminHere: isAdminHere,
               isFinanceiroHere: isFinanceiroHere,
               paymentMap: paymentMap,
+              icons: icons,
               dim: false,
               isDark: isDark,
               onEdit: onEditPlayer,
@@ -1461,6 +1473,7 @@ class _GroupContentState extends State<_GroupContent> {
               isAdminHere: isAdminHere,
               isFinanceiroHere: isFinanceiroHere,
               paymentMap: paymentMap,
+              icons: icons,
               dim: false,
               isDark: isDark,
               onEdit: onEditPlayer,
@@ -1483,6 +1496,7 @@ class _GroupContentState extends State<_GroupContent> {
               isAdminHere: isAdminHere,
               isFinanceiroHere: isFinanceiroHere,
               paymentMap: paymentMap,
+              icons: icons,
               dim: true,
               isDark: isDark,
               onEdit: onEditPlayer,
@@ -2176,6 +2190,7 @@ class _PlayerSection extends StatelessWidget {
   final bool isAdminHere;
   final bool isFinanceiroHere;
   final Map<String, _PaymentBadge> paymentMap;
+  final GroupIcons icons;
   final bool dim;
   final bool isDark;
   final void Function(_PlayerDto) onEdit;
@@ -2192,6 +2207,7 @@ class _PlayerSection extends StatelessWidget {
     required this.isAdminHere,
     required this.isFinanceiroHere,
     required this.paymentMap,
+    this.icons = GroupIcons.defaults,
     required this.dim,
     required this.isDark,
     required this.onEdit,
@@ -2274,6 +2290,7 @@ class _PlayerSection extends StatelessWidget {
                         activePlayerId: activePlayerId,
                         isAdminHere: isAdminHere,
                         pmt: isFinanceiroHere ? paymentMap[p.id] : null,
+                        icons: icons,
                         dim: dim,
                         isDark: isDark,
                         onEdit: onEdit,
@@ -2294,6 +2311,7 @@ class _PlayerCard extends StatelessWidget {
   final String activePlayerId;
   final bool isAdminHere;
   final _PaymentBadge? pmt;   // null = not a financeiro or no data
+  final GroupIcons icons;
   final bool dim;
   final bool isDark;
   final void Function(_PlayerDto) onEdit;
@@ -2306,6 +2324,7 @@ class _PlayerCard extends StatelessWidget {
     required this.isDark,
     required this.onEdit,
     this.pmt,
+    this.icons = GroupIcons.defaults,
   });
 
   @override
@@ -2397,16 +2416,14 @@ class _PlayerCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                          if (player.isGoalkeeper) ...[
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.shield_outlined,
-                              size: 13,
-                              color: isDark
-                                  ? const Color(0xFF64748B)
-                                  : const Color(0xFF94A3B8),
-                            ),
-                          ],
+                          const SizedBox(width: 4),
+                          renderGroupIcon(
+                            player.isGoalkeeper ? icons.goalkeeper : icons.player,
+                            size: 13,
+                            color: isDark
+                                ? const Color(0xFF64748B)
+                                : const Color(0xFF94A3B8),
+                          ),
                         ],
                       ),
                       if (player.userName != null && player.userName!.isNotEmpty)
@@ -2688,7 +2705,27 @@ class _ModalSheet extends StatelessWidget {
           color: isDark ? const Color(0xFF1E293B) : Colors.white,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        child: SafeArea(top: false, child: child),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // drag handle
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 4),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.2)
+                      : Colors.black.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Flexible(child: child),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -3188,6 +3225,7 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
   late final TextEditingController _nameCtrl;
   late bool _isGuest;
   late bool _isActive;
+  late bool _isGoalkeeper;
   // mensalista ratings (1–10, null = not set)
   int? _attackRating;
   int? _defenseRating;
@@ -3205,6 +3243,7 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
     _nameCtrl      = TextEditingController(text: widget.player.name);
     _isGuest       = widget.player.isGuest;
     _isActive      = widget.player.status == 1;
+    _isGoalkeeper  = widget.player.isGoalkeeper;
     _attackRating  = widget.player.attackRating;
     _defenseRating = widget.player.defenseRating;
     _overallRating = widget.player.overallRating;
@@ -3245,6 +3284,7 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
     try {
       final dto = <String, dynamic>{
         'name': name,
+        'isGoalkeeper': _isGoalkeeper,
       };
 
       if (widget.isAdmin) {
@@ -3300,6 +3340,27 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
                     enabled: !_loading,
                     isDark: isDark,
                     onSubmitted: (_) => _save(),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      _Toggle(
+                        value: _isGoalkeeper,
+                        onChanged: _loading
+                            ? null
+                            : (v) => setState(() => _isGoalkeeper = v),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Goleiro',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: isDark
+                              ? const Color(0xFFE2E8F0)
+                              : const Color(0xFF374151),
+                        ),
+                      ),
+                    ],
                   ),
                   if (widget.isAdmin) ...[
                     const SizedBox(height: 16),

@@ -223,7 +223,7 @@ class _GroupSettingsPageWrapperState extends ConsumerState<GroupSettingsPage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final isGroupAdm = account!.isAdmin || account.isGroupAdmin(groupId);
+    final isGroupAdm = account!.isGroupAdmin(groupId);
     if (!isGroupAdm) {
       return const Scaffold(body: _NoGroupState(message: 'Verifique suas permissões'));
     }

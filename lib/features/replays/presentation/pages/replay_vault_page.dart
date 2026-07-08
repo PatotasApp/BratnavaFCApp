@@ -5,6 +5,7 @@ import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../domain/entities/replay_clip.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/utils/date_utils.dart';
+import '../../../../shared/presentation/widgets/confirm_dialog.dart';
 import '../providers/replays_provider.dart';
 import 'replay_video_player_page.dart';
 
@@ -19,11 +20,10 @@ class ReplayVaultPage extends ConsumerStatefulWidget {
 
 class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
     with SingleTickerProviderStateMixin {
-
   late final TabController _tabController;
 
-  /// matchIds that the user has collapsed.
-  final Set<String> _collapsedMatches = {};
+  /// matchIds that the user explicitly expanded. Matches start collapsed.
+  final Set<String> _expandedMatches = {};
 
   // ── Account helpers ───────────────────────────────────────────────────────
 
@@ -60,13 +60,23 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
     return result;
   }
 
-  void _toggleMatch(String matchId) => setState(() {
-    if (_collapsedMatches.contains(matchId)) {
-      _collapsedMatches.remove(matchId);
-    } else {
-      _collapsedMatches.add(matchId);
+  DateTime _matchDate(List<ReplayClip> clips) {
+    DateTime? latest;
+    for (final clip in clips) {
+      final parsed = DateTime.tryParse(clip.matchDate);
+      if (parsed == null) continue;
+      if (latest == null || parsed.isAfter(latest)) latest = parsed;
     }
-  });
+    return latest ?? DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  void _toggleMatch(String matchId) => setState(() {
+        if (_expandedMatches.contains(matchId)) {
+          _expandedMatches.remove(matchId);
+        } else {
+          _expandedMatches.add(matchId);
+        }
+      });
 
   // ── Delete confirmation ───────────────────────────────────────────────────
 
@@ -74,25 +84,14 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
     ReplayListNotifier notifier,
     ReplayClip clip,
   ) async {
-    final ok = await showDialog<bool>(
+    final ok = await showConfirmDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title:   const Text('Excluir replay'),
-        content: Text('Excluir o replay da partida em ${clip.matchPlace}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Excluir',
-                style: TextStyle(color: Colors.redAccent)),
-          ),
-        ],
-      ),
+      title: 'Excluir replay',
+      message: 'Excluir o replay da partida em ${clip.matchPlace}?',
+      confirmLabel: 'Excluir',
+      danger: true,
     );
-    if (ok != true || !mounted) return;
+    if (!ok || !mounted) return;
     try {
       await notifier.deleteClip(clip.clipId);
       if (mounted) {
@@ -103,7 +102,8 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(extractDioError(e, 'Erro ao excluir replay.'))),
+          SnackBar(
+              content: Text(extractDioError(e, 'Erro ao excluir replay.'))),
         );
       }
     }
@@ -153,7 +153,7 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: notifier.fetch,
-                icon:  const Icon(Icons.refresh),
+                icon: const Icon(Icons.refresh),
                 label: const Text('Tentar novamente'),
               ),
             ],
@@ -168,7 +168,8 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.videocam_off_outlined, size: 48, color: Colors.grey),
+                  Icon(Icons.videocam_off_outlined,
+                      size: 48, color: Colors.grey),
                   SizedBox(height: 12),
                   Text('Nenhum replay disponível.',
                       style: TextStyle(color: Colors.grey)),
@@ -178,20 +179,21 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
           );
         }
 
-        final groups  = _groupByMatch(clips);
+        final groups = _groupByMatch(clips).entries.toList()
+          ..sort((a, b) => _matchDate(b.value).compareTo(_matchDate(a.value)));
         final slivers = <Widget>[];
 
-        for (final entry in groups.entries) {
-          final matchId    = entry.key;
+        for (final entry in groups) {
+          final matchId = entry.key;
           final matchClips = entry.value;
-          final collapsed  = _collapsedMatches.contains(matchId);
+          final collapsed = !_expandedMatches.contains(matchId);
 
           // ── Group header ──────────────────────────────────────────────
           slivers.add(SliverToBoxAdapter(
             child: _MatchSectionHeader(
               matchClips: matchClips,
-              collapsed:  collapsed,
-              onToggle:   () => _toggleMatch(matchId),
+              collapsed: collapsed,
+              onToggle: () => _toggleMatch(matchId),
             ),
           ));
 
@@ -200,28 +202,27 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
             slivers.add(SliverPadding(
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
               sliver: SliverGrid(
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount:   2,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
                   crossAxisSpacing: 8,
-                  mainAxisSpacing:  8,
-                  mainAxisExtent:   168,
+                  mainAxisSpacing: 8,
+                  mainAxisExtent: 168,
                 ),
                 delegate: SliverChildBuilderDelegate(
                   (ctx, i) {
                     final clip = matchClips[i];
                     return _GridClipCard(
-                      clip:    clip,
+                      clip: clip,
                       isAdmin: isAdmin,
                       onTap: () {
                         if (groupId.isEmpty) return;
                         Navigator.of(context).push(MaterialPageRoute<void>(
                           fullscreenDialog: true,
                           builder: (_) => ReplayVideoPlayerPage(
-                            clips:        matchClips,
+                            clips: matchClips,
                             initialIndex: i,
-                            groupId:      groupId,
-                            accessToken:  accessToken,
+                            groupId: groupId,
+                            accessToken: accessToken,
                           ),
                         ));
                       },
@@ -229,19 +230,20 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
                         try {
                           await notifier.toggleLike(clip.clipId);
                         } catch (e) {
-                          _showError(extractDioError(e, 'Erro ao curtir replay.'));
+                          _showError(
+                              extractDioError(e, 'Erro ao curtir replay.'));
                         }
                       },
                       onFavorite: () async {
                         try {
                           await notifier.toggleFavorite(clip.clipId);
                         } catch (e) {
-                          _showError(extractDioError(e, 'Erro ao favoritar replay.'));
+                          _showError(
+                              extractDioError(e, 'Erro ao favoritar replay.'));
                         }
                       },
-                      onDelete: isAdmin
-                          ? () => _confirmDelete(notifier, clip)
-                          : null,
+                      onDelete:
+                          isAdmin ? () => _confirmDelete(notifier, clip) : null,
                     );
                   },
                   childCount: matchClips.length,
@@ -259,11 +261,12 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
               child: Center(
                 child: notifier.isLoadingMore
                     ? const SizedBox(
-                        width: 22, height: 22,
+                        width: 22,
+                        height: 22,
                         child: CircularProgressIndicator(strokeWidth: 2))
                     : TextButton.icon(
                         onPressed: () => notifier.fetchNext(),
-                        icon:  const Icon(Icons.expand_more_rounded, size: 18),
+                        icon: const Icon(Icons.expand_more_rounded, size: 18),
                         label: Text(
                             'Carregar mais (${notifier.total - clips.length})'),
                       ),
@@ -299,11 +302,11 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
 
   @override
   Widget build(BuildContext context) {
-    final account      = ref.watch(accountStoreProvider).activeAccount;
+    final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
-    final gid          = account?.activeGroupId ?? activePlayer?.groupId ?? '';
-    final isAdmin      = _resolvedIsAdmin(gid);
-    final accessToken  = _accessToken;
+    final gid = account?.activeGroupId ?? activePlayer?.groupId ?? '';
+    final isAdmin = _resolvedIsAdmin(gid);
+    final accessToken = _accessToken;
 
     final playersAsync = ref.watch(myPlayersProvider);
     if (gid.isEmpty && playersAsync.isLoading) {
@@ -334,12 +337,12 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
       );
     }
 
-    final allState       = ref.watch(replaysAllProvider(gid));
-    final likedState     = ref.watch(replaysLikedProvider(gid));
+    final allState = ref.watch(replaysAllProvider(gid));
+    final likedState = ref.watch(replaysLikedProvider(gid));
     final favoritesState = ref.watch(replaysFavoritesProvider(gid));
 
-    final allNotifier       = ref.read(replaysAllProvider(gid).notifier);
-    final likedNotifier     = ref.read(replaysLikedProvider(gid).notifier);
+    final allNotifier = ref.read(replaysAllProvider(gid).notifier);
+    final likedNotifier = ref.read(replaysLikedProvider(gid).notifier);
     final favoritesNotifier = ref.read(replaysFavoritesProvider(gid).notifier);
 
     return Scaffold(
@@ -351,27 +354,27 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
               controller: _tabController,
               children: [
                 _buildTabContent(
-                  state:       allState,
-                  notifier:    allNotifier,
-                  adminOnly:   true,
-                  isAdmin:     isAdmin,
-                  groupId:     gid,
+                  state: allState,
+                  notifier: allNotifier,
+                  adminOnly: true,
+                  isAdmin: isAdmin,
+                  groupId: gid,
                   accessToken: accessToken,
                 ),
                 _buildTabContent(
-                  state:       likedState,
-                  notifier:    likedNotifier,
-                  adminOnly:   false,
-                  isAdmin:     isAdmin,
-                  groupId:     gid,
+                  state: likedState,
+                  notifier: likedNotifier,
+                  adminOnly: false,
+                  isAdmin: isAdmin,
+                  groupId: gid,
                   accessToken: accessToken,
                 ),
                 _buildTabContent(
-                  state:       favoritesState,
-                  notifier:    favoritesNotifier,
-                  adminOnly:   false,
-                  isAdmin:     isAdmin,
-                  groupId:     gid,
+                  state: favoritesState,
+                  notifier: favoritesNotifier,
+                  adminOnly: false,
+                  isAdmin: isAdmin,
+                  groupId: gid,
                   accessToken: accessToken,
                 ),
               ],
@@ -386,11 +389,11 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
 // ── Grid clip card ────────────────────────────────────────────────────────────
 
 class _GridClipCard extends StatelessWidget {
-  final ReplayClip    clip;
-  final bool          isAdmin;
-  final VoidCallback  onTap;
-  final VoidCallback  onLike;
-  final VoidCallback  onFavorite;
+  final ReplayClip clip;
+  final bool isAdmin;
+  final VoidCallback onTap;
+  final VoidCallback onLike;
+  final VoidCallback onFavorite;
   final VoidCallback? onDelete;
 
   const _GridClipCard({
@@ -404,10 +407,14 @@ class _GridClipCard extends StatelessWidget {
 
   String get _eventEmoji {
     switch ((clip.eventType ?? '').toLowerCase()) {
-      case 'gol':    return '⚽';
-      case 'defesa': return '🧤';
-      case 'falta':  return '🟨';
-      default:       return '🎬';
+      case 'gol':
+        return '⚽';
+      case 'defesa':
+        return '🧤';
+      case 'falta':
+        return '🟨';
+      default:
+        return '🎬';
     }
   }
 
@@ -423,7 +430,7 @@ class _GridClipCard extends StatelessWidget {
   String get _formattedDate {
     try {
       final dt = AppDateUtils.parseOrNow(clip.matchDate);
-      return '${dt.day.toString().padLeft(2,'0')}/${dt.month.toString().padLeft(2,'0')}';
+      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}';
     } catch (_) {
       return clip.matchDate;
     }
@@ -431,27 +438,27 @@ class _GridClipCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark      = Theme.of(context).brightness == Brightness.dark;
-    final cardColor   = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final border      = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-    final textPrimary = isDark ? Colors.white             : const Color(0xFF0F172A);
-    final textSub     = isDark ? Colors.white54           : const Color(0xFF64748B);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final border = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final textPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
+    final textSub = isDark ? Colors.white54 : const Color(0xFF64748B);
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color:        cardColor,
+          color: cardColor,
           borderRadius: BorderRadius.circular(10),
-          border:       Border.all(color: border),
+          border: Border.all(color: border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-
             // ── Thumbnail ───────────────────────────────────────────────
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(9)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(9)),
               child: AspectRatio(
                 aspectRatio: 16 / 9,
                 child: Stack(
@@ -460,10 +467,11 @@ class _GridClipCard extends StatelessWidget {
                     Container(color: const Color(0xFF0F172A)),
                     Center(
                       child: Container(
-                        width: 36, height: 36,
+                        width: 36,
+                        height: 36,
                         decoration: BoxDecoration(
-                          color:  Colors.white.withValues(alpha: .15),
-                          shape:  BoxShape.circle,
+                          color: Colors.white.withValues(alpha: .15),
+                          shape: BoxShape.circle,
                           border: Border.all(color: Colors.white30),
                         ),
                         child: const Icon(Icons.play_arrow_rounded,
@@ -472,7 +480,8 @@ class _GridClipCard extends StatelessWidget {
                     ),
                     if (clip.minute != null)
                       Positioned(
-                        right: 5, bottom: 5,
+                        right: 5,
+                        bottom: 5,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 5, vertical: 2),
@@ -505,9 +514,9 @@ class _GridClipCard extends StatelessWidget {
                     Text(
                       '$_formattedDate · ${clip.matchPlace}',
                       style: TextStyle(
-                        fontSize:   11,
+                        fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color:      textPrimary,
+                        color: textPrimary,
                       ),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
@@ -532,7 +541,7 @@ class _GridClipCard extends StatelessWidget {
               child: Row(
                 children: [
                   _MiniAction(
-                    icon:  clip.isLiked
+                    icon: clip.isLiked
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
                     color: clip.isLiked ? Colors.redAccent : textSub,
@@ -540,7 +549,7 @@ class _GridClipCard extends StatelessWidget {
                     onTap: onLike,
                   ),
                   _MiniAction(
-                    icon:  clip.isFavorited
+                    icon: clip.isFavorited
                         ? Icons.star_rounded
                         : Icons.star_border_rounded,
                     color: clip.isFavorited ? Colors.amber : textSub,
@@ -549,7 +558,7 @@ class _GridClipCard extends StatelessWidget {
                   const Spacer(),
                   if (isAdmin && onDelete != null)
                     _MiniAction(
-                      icon:  Icons.delete_outline_rounded,
+                      icon: Icons.delete_outline_rounded,
                       color: Colors.redAccent.withValues(alpha: .7),
                       onTap: onDelete!,
                     ),
@@ -564,9 +573,9 @@ class _GridClipCard extends StatelessWidget {
 }
 
 class _MiniAction extends StatelessWidget {
-  final IconData     icon;
-  final Color        color;
-  final String?      label;
+  final IconData icon;
+  final Color color;
+  final String? label;
   final VoidCallback onTap;
 
   const _MiniAction({
@@ -602,8 +611,8 @@ class _MiniAction extends StatelessWidget {
 
 class _MatchSectionHeader extends StatelessWidget {
   final List<ReplayClip> matchClips;
-  final bool             collapsed;
-  final VoidCallback     onToggle;
+  final bool collapsed;
+  final VoidCallback onToggle;
 
   const _MatchSectionHeader({
     required this.matchClips,
@@ -614,8 +623,8 @@ class _MatchSectionHeader extends StatelessWidget {
   String get _formattedDate {
     try {
       final dt = AppDateUtils.parseOrNow(matchClips.first.matchDate);
-      final d  = dt.day.toString().padLeft(2, '0');
-      final m  = dt.month.toString().padLeft(2, '0');
+      final d = dt.day.toString().padLeft(2, '0');
+      final m = dt.month.toString().padLeft(2, '0');
       return '$d/$m/${dt.year}';
     } catch (_) {
       return matchClips.first.matchDate;
@@ -624,11 +633,11 @@ class _MatchSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark    = Theme.of(context).brightness == Brightness.dark;
-    final bgColor   = isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
-    final textColor = isDark ? Colors.white             : const Color(0xFF0F172A);
-    final subColor  = isDark ? Colors.white54           : Colors.black45;
-    final n         = matchClips.length;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subColor = isDark ? Colors.white54 : Colors.black45;
+    final n = matchClips.length;
 
     final radius = collapsed
         ? BorderRadius.circular(10)
@@ -637,15 +646,16 @@ class _MatchSectionHeader extends StatelessWidget {
     return GestureDetector(
       onTap: onToggle,
       child: Container(
-        margin:  const EdgeInsets.only(top: 10, left: 12, right: 12),
+        margin: const EdgeInsets.only(top: 10, left: 12, right: 12),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         decoration: BoxDecoration(color: bgColor, borderRadius: radius),
         child: Row(
           children: [
             Container(
-              width: 30, height: 30,
+              width: 30,
+              height: 30,
               decoration: BoxDecoration(
-                color:        const Color(0xFF3B82F6).withValues(alpha: .15),
+                color: const Color(0xFF3B82F6).withValues(alpha: .15),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.sports_soccer_rounded,
@@ -659,9 +669,9 @@ class _MatchSectionHeader extends StatelessWidget {
                   Text(
                     '$_formattedDate · ${matchClips.first.matchPlace}',
                     style: TextStyle(
-                      fontSize:   13,
+                      fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color:      textColor,
+                      color: textColor,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -673,7 +683,7 @@ class _MatchSectionHeader extends StatelessWidget {
               ),
             ),
             AnimatedRotation(
-              turns:    collapsed ? -0.25 : 0,
+              turns: collapsed ? -0.25 : 0,
               duration: const Duration(milliseconds: 200),
               child: Icon(Icons.keyboard_arrow_down_rounded,
                   size: 22, color: subColor),
@@ -697,8 +707,8 @@ class _ReplayHeader extends StatelessWidget {
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A)],
-          begin:  Alignment.topLeft,
-          end:    Alignment.bottomRight,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
       ),
       child: SafeArea(
@@ -711,12 +721,13 @@ class _ReplayHeader extends StatelessWidget {
               Row(
                 children: [
                   Container(
-                    width: 40, height: 40,
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      color:        Colors.white.withValues(alpha: .1),
+                      color: Colors.white.withValues(alpha: .1),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: Colors.white.withValues(alpha: .2)),
+                      border:
+                          Border.all(color: Colors.white.withValues(alpha: .2)),
                     ),
                     child: const Icon(Icons.videocam_rounded,
                         size: 20, color: Colors.white),
@@ -728,8 +739,8 @@ class _ReplayHeader extends StatelessWidget {
                       Text(
                         'Replay Vault',
                         style: TextStyle(
-                          color:      Colors.white,
-                          fontSize:   16,
+                          color: Colors.white,
+                          fontSize: 16,
                           fontWeight: FontWeight.w900,
                         ),
                       ),
@@ -743,15 +754,15 @@ class _ReplayHeader extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               TabBar(
-                controller:           tabController,
-                indicatorColor:       Colors.white,
-                indicatorWeight:      2,
-                labelColor:           Colors.white,
+                controller: tabController,
+                indicatorColor: Colors.white,
+                indicatorWeight: 2,
+                labelColor: Colors.white,
                 unselectedLabelColor: Colors.white54,
-                labelStyle: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w600),
-                unselectedLabelStyle: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w400),
+                labelStyle:
+                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                unselectedLabelStyle:
+                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w400),
                 tabs: const [
                   Tab(text: 'Todos'),
                   Tab(text: 'Curtidos'),

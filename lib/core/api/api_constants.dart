@@ -249,6 +249,10 @@ class ApiConstants {
       '/api/Polls/group/$groupId/$pollId/show-votes';
   static String pollDeadline(String groupId, String pollId) =>
       '/api/Polls/group/$groupId/$pollId/deadline';
+  static String pollGuests(String groupId, String pollId) =>
+      '/api/Polls/group/$groupId/$pollId/guests';
+  static String pollGuestById(String groupId, String pollId, String guestId) =>
+      '/api/Polls/group/$groupId/$pollId/guests/$guestId';
 
   // Absences
   static const String absences     = '/api/absences';

@@ -30,7 +30,7 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
     final groupIdNN = groupId; // non-null alias used in closures
     final canManage = account != null &&
         groupIdNN != null &&
-        (account.isAdmin || account.groupAdminIds.isNotEmpty);
+        account.groupAdminIds.isNotEmpty;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return RefreshIndicator(

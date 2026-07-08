@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../auth/presentation/providers/account_store.dart';
+import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../domain/entities/match_models.dart';
 import '../providers/match_provider.dart';
 import '../widgets/goal_entry_row.dart';
@@ -190,7 +192,10 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
 
   @override
   Widget build(BuildContext context) {
-    final s = ref.watch(matchNotifierProvider);
+    final s   = ref.watch(matchNotifierProvider);
+    final acc = ref.watch(accountStoreProvider).activeAccount;
+    final gid = acc?.activeGroupId ?? '';
+    final icons = GroupIcons.from(ref.watch(groupSettingsProvider(gid)).valueOrNull);
     if (!_scoreInited && !s.loading) _initScoreFields(s);
 
     return Column(
@@ -202,8 +207,8 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),
               child: _isAdmin
-                  ? _buildAdminView(context, s)
-                  : _buildUserView(context, s),
+                  ? _buildAdminView(context, s, icons)
+                  : _buildUserView(context, s, icons),
             ),
           ),
         ),
@@ -230,7 +235,7 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
 
   // ── View do não-admin ──────────────────────────────────────────────────────
 
-  Widget _buildUserView(BuildContext context, MatchState s) {
+  Widget _buildUserView(BuildContext context, MatchState s, GroupIcons icons) {
     final myPlayerId      = _myPlayerId;
     final myMatchPlayer   = s.participants.where((p) => p.playerId == myPlayerId).firstOrNull;
     final myMatchPlayerId = myMatchPlayer?.matchPlayerId ?? '';
@@ -292,7 +297,7 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
         if (s.computedMvps.isNotEmpty)
           _MvpResultCard(mvpNames: s.computedMvps.map((m) => m.playerName).toList())
         else
-          _buildMyVoteSection(s, isParticipant, canVote, hasVoted, myVote, myMatchPlayerId),
+          _buildMyVoteSection(s, isParticipant, canVote, hasVoted, myVote, myMatchPlayerId, icons),
 
         const SizedBox(height: 12),
 
@@ -327,6 +332,7 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
     bool hasVoted,
     VoteInfo? myVote,
     String myMatchPlayerId,
+    GroupIcons icons,
   ) {
     return _SectionCard(
       title: 'Seu voto MVP',
@@ -420,8 +426,8 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
                         : AppColors.slate50,
                   ),
                   child: Row(children: [
-                    Icon(
-                      p.isGoalkeeper ? Icons.sports_handball : Icons.sports_soccer,
+                    renderGroupIcon(
+                      p.isGoalkeeper ? icons.goalkeeper : icons.player,
                       size: 14,
                       color: AppColors.slate400,
                     ),
@@ -460,7 +466,7 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
 
   // ── View do admin ─────────────────────────────────────────────────────────
 
-  Widget _buildAdminView(BuildContext context, MatchState s) {
+  Widget _buildAdminView(BuildContext context, MatchState s, GroupIcons icons) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -645,6 +651,7 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
                   teamAColor: s.teamAColor?.color,
                   teamBColor: s.teamBColor?.color,
                   mutating:   s.mutating,
+                  icons:      icons,
                   onMinuteChanged: (v) => setState(() => _goalMinute = v),
                   onScorerChanged: (id) => setState(() { _scorerMpId = id; _assistMpId = null; }),
                   onAssistChanged: (id) => setState(() => _assistMpId = id),

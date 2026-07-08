@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/confirm_dialog.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/datasources/calendar_remote_datasource.dart';
@@ -43,7 +44,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     final acc = ref.read(accountStoreProvider).activeAccount;
     if (acc == null) return false;
     final gid = _groupId;
-    return acc.isAdmin || acc.groupAdminIds.contains(gid);
+    return acc.isGroupAdmin(gid);
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -161,21 +162,14 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
 
   Future<void> _deleteEvent(CalendarEvent ev) async {
     if (ev.id == null) return;
-    final ok = await showDialog<bool>(
+    final ok = await showConfirmDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title:   const Text('Excluir evento'),
-        content: Text('Excluir "${ev.title}"?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Excluir', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+      title: 'Excluir evento',
+      message: 'Excluir "${ev.title}"?',
+      confirmLabel: 'Excluir',
+      danger: true,
     );
-    if (ok != true || !mounted) return;
+    if (!ok || !mounted) return;
     try {
       await _ds.deleteEvent(_groupId, ev.id!);
       _fetchEvents();

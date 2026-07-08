@@ -34,6 +34,84 @@ class _MatchDetailsPageState extends ConsumerState<MatchDetailsPage> {
   bool _sharingCard = false;
   final Set<String> _togglingNoShow = {};
 
+  Future<void> _showGoalSheet(MatchDetails data, {MatchGoal? editing}) async {
+    final allPlayers = [...data.teamAPlayers, ...data.teamBPlayers]
+        .where((p) => p.playerId != null && p.playerId!.isNotEmpty)
+        .toList();
+
+    await showModalBottomSheet<void>(
+      context:          context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => _GoalFormSheet(
+        players: allPlayers,
+        editing: editing,
+        onSave:  (scorerId, assistId, time, isOwnGoal) async {
+          final ds = ref.read(matchDsProvider);
+          if (editing != null) {
+            await ds.updateGoal(
+              widget.groupId, widget.matchId, editing.goalId,
+              {
+                'scorerPlayerId': scorerId,
+                if (assistId != null && assistId.isNotEmpty) 'assistPlayerId': assistId,
+                'time':      time,
+                'isOwnGoal': isOwnGoal,
+              },
+            );
+          } else {
+            await ds.addGoal(
+              widget.groupId, widget.matchId,
+              scorerPlayerId: scorerId,
+              assistPlayerId: assistId?.isNotEmpty == true ? assistId : null,
+              time:           time,
+              isOwnGoal:      isOwnGoal,
+            );
+          }
+          ref.invalidate(matchDetailsProvider(
+              (groupId: widget.groupId, matchId: widget.matchId)));
+        },
+      ),
+    );
+  }
+
+  Future<void> _deleteGoal(MatchGoal goal) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title:   const Text('Remover gol'),
+        content: Text('Remover o gol de ${goal.scorerName ?? "?"}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.rose500),
+            child: const Text('Remover'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    try {
+      await ref.read(matchDsProvider)
+          .removeGoal(widget.groupId, widget.matchId, goal.goalId);
+      if (mounted) {
+        ref.invalidate(matchDetailsProvider(
+            (groupId: widget.groupId, matchId: widget.matchId)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content:         Text(extractDioError(e, 'Erro ao remover gol')),
+          backgroundColor: AppColors.rose500,
+        ));
+      }
+    }
+  }
+
   Future<void> _toggleNoShow(String matchPlayerId, bool currentDidNotPlay) async {
     if (_togglingNoShow.contains(matchPlayerId)) return;
     setState(() => _togglingNoShow.add(matchPlayerId));
@@ -107,7 +185,7 @@ class _MatchDetailsPageState extends ConsumerState<MatchDetailsPage> {
     final isDark       = Theme.of(context).brightness == Brightness.dark;
     final account      = ref.watch(accountStoreProvider).activeAccount;
     final isAdmin      = account != null &&
-        (account.isAdmin || account.groupAdminIds.isNotEmpty);
+        account.isGroupAdmin(widget.groupId);
     final accessToken  = account?.accessToken;
     final async        = ref.watch(matchDetailsProvider(
       (groupId: widget.groupId, matchId: widget.matchId),
@@ -159,6 +237,9 @@ class _MatchDetailsPageState extends ConsumerState<MatchDetailsPage> {
         onShare:        _shareMatchCard,
         togglingNoShow: _togglingNoShow,
         onToggleNoShow: _toggleNoShow,
+        onAddGoal:      () => _showGoalSheet(data),
+        onEditGoal:     (goal) => _showGoalSheet(data, editing: goal),
+        onDeleteGoal:   _deleteGoal,
       ),
     );
   }
@@ -182,6 +263,9 @@ class _DetailsBody extends StatelessWidget {
   final VoidCallback onShare;
   final Set<String>                 togglingNoShow;
   final void Function(String, bool) onToggleNoShow;
+  final VoidCallback                onAddGoal;
+  final void Function(MatchGoal)    onEditGoal;
+  final void Function(MatchGoal)    onDeleteGoal;
 
   const _DetailsBody({
     required this.data,
@@ -199,6 +283,9 @@ class _DetailsBody extends StatelessWidget {
     required this.onShare,
     this.togglingNoShow = const {},
     required this.onToggleNoShow,
+    required this.onAddGoal,
+    required this.onEditGoal,
+    required this.onDeleteGoal,
   });
 
   Color get aColor => _hexColor(data.teamAColor?.hexValue) ?? const Color(0xFF0f172a);
@@ -318,15 +405,19 @@ class _DetailsBody extends StatelessWidget {
                   isDark: isDark,
                 ),
                 _GoalsSection(
-                  goals:     goals,
-                  tab:       goalsTab,
-                  onTab:     onGoalsTab,
-                  aColor:    aColor,
-                  bColor:    bColor,
-                  aName:     aName,
-                  bName:     bName,
-                  isDark:    isDark,
-                  icons:     icons,
+                  goals:       goals,
+                  tab:         goalsTab,
+                  onTab:       onGoalsTab,
+                  aColor:      aColor,
+                  bColor:      bColor,
+                  aName:       aName,
+                  bName:       bName,
+                  isDark:      isDark,
+                  icons:       icons,
+                  isAdmin:     isAdmin,
+                  onAddGoal:   onAddGoal,
+                  onEditGoal:  onEditGoal,
+                  onDeleteGoal: onDeleteGoal,
                 ),
               ],
 
@@ -945,6 +1036,10 @@ class _GoalsSection extends StatelessWidget {
   final String     aName, bName;
   final bool       isDark;
   final GroupIcons icons;
+  final bool               isAdmin;
+  final VoidCallback       onAddGoal;
+  final void Function(MatchGoal) onEditGoal;
+  final void Function(MatchGoal) onDeleteGoal;
 
   const _GoalsSection({
     required this.goals,
@@ -956,6 +1051,10 @@ class _GoalsSection extends StatelessWidget {
     required this.bName,
     required this.isDark,
     required this.icons,
+    this.isAdmin       = false,
+    required this.onAddGoal,
+    required this.onEditGoal,
+    required this.onDeleteGoal,
   });
 
   List<_GoalWithTeam> get _filtered {
@@ -981,34 +1080,50 @@ class _GoalsSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Tabs
+            // Tabs + optional add button
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _TabBtn(
-                        label: 'Todos',
-                        active: tab == 0,
-                        isDark: isDark,
-                        onTap:  () => onTab(0)),
-                    const SizedBox(width: 6),
-                    _TabBtn(
-                        dotColor: aColor,
-                        label:    aName,
-                        active:   tab == 1,
-                        isDark:   isDark,
-                        onTap:    () => onTab(1)),
-                    const SizedBox(width: 6),
-                    _TabBtn(
-                        dotColor: bColor,
-                        label:    bName,
-                        active:   tab == 2,
-                        isDark:   isDark,
-                        onTap:    () => onTab(2)),
-                  ],
-                ),
+              padding: const EdgeInsets.fromLTRB(12, 12, 4, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _TabBtn(
+                              label: 'Todos',
+                              active: tab == 0,
+                              isDark: isDark,
+                              onTap:  () => onTab(0)),
+                          const SizedBox(width: 6),
+                          _TabBtn(
+                              dotColor: aColor,
+                              label:    aName,
+                              active:   tab == 1,
+                              isDark:   isDark,
+                              onTap:    () => onTab(1)),
+                          const SizedBox(width: 6),
+                          _TabBtn(
+                              dotColor: bColor,
+                              label:    bName,
+                              active:   tab == 2,
+                              isDark:   isDark,
+                              onTap:    () => onTab(2)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (isAdmin)
+                    IconButton(
+                      onPressed: onAddGoal,
+                      icon: const Icon(Icons.add_circle_outline_rounded),
+                      tooltip: 'Adicionar gol',
+                      iconSize: 22,
+                      color: isDark ? AppColors.slate300 : AppColors.slate600,
+                      padding: const EdgeInsets.all(4),
+                      constraints: const BoxConstraints(),
+                    ),
+                ],
               ),
             ),
 
@@ -1030,10 +1145,13 @@ class _GoalsSection extends StatelessWidget {
             else
               ...filtered.map((g) => _GoalRow(
                 goalWithTeam: g,
-                aColor:  aColor,
-                bColor:  bColor,
-                isDark:  isDark,
-                icons:   icons,
+                aColor:   aColor,
+                bColor:   bColor,
+                isDark:   isDark,
+                icons:    icons,
+                isAdmin:  isAdmin,
+                onEdit:   () => onEditGoal(g.goal),
+                onDelete: () => onDeleteGoal(g.goal),
               )),
           ],
         ),
@@ -1047,6 +1165,9 @@ class _GoalRow extends StatelessWidget {
   final Color      aColor, bColor;
   final bool       isDark;
   final GroupIcons icons;
+  final bool         isAdmin;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   const _GoalRow({
     required this.goalWithTeam,
@@ -1054,6 +1175,9 @@ class _GoalRow extends StatelessWidget {
     required this.bColor,
     required this.isDark,
     required this.icons,
+    this.isAdmin   = false,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   @override
@@ -1162,6 +1286,27 @@ class _GoalRow extends StatelessWidget {
                 color: isDark ? AppColors.slate500 : AppColors.slate400,
               ),
             ),
+          // Admin edit / delete
+          if (isAdmin) ...[
+            const SizedBox(width: 4),
+            GestureDetector(
+              onTap: onEdit,
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(Icons.edit_outlined,
+                    size: 15,
+                    color: isDark ? AppColors.slate400 : AppColors.slate500),
+              ),
+            ),
+            GestureDetector(
+              onTap: onDelete,
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(Icons.delete_outline_rounded,
+                    size: 15, color: AppColors.rose500),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -2250,3 +2395,269 @@ class _GoalBall extends StatelessWidget {
   }
 }
 
+// ── Goal form sheet ───────────────────────────────────────────────────────────
+
+class _GoalFormSheet extends StatefulWidget {
+  final List<MatchPlayer> players;
+  final MatchGoal?        editing;
+  final Future<void> Function(
+      String scorerPlayerId,
+      String? assistPlayerId,
+      String time,
+      bool isOwnGoal) onSave;
+
+  const _GoalFormSheet({
+    required this.players,
+    this.editing,
+    required this.onSave,
+  });
+
+  @override
+  State<_GoalFormSheet> createState() => _GoalFormSheetState();
+}
+
+class _GoalFormSheetState extends State<_GoalFormSheet> {
+  String? _scorerPlayerId;
+  String? _assistPlayerId;
+  late final TextEditingController _timeCtrl;
+  bool    _isOwnGoal = false;
+  bool    _saving    = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.editing;
+    _scorerPlayerId = e?.scorerPlayerId;
+    _assistPlayerId = e?.assistPlayerId;
+    _timeCtrl       = TextEditingController(text: e?.time ?? _defaultTime());
+    _isOwnGoal      = e?.isOwnGoal ?? false;
+  }
+
+  List<MatchPlayer> get _assistCandidates {
+    if (_scorerPlayerId == null) return [];
+    final scorer = widget.players.where((p) => p.playerId == _scorerPlayerId).firstOrNull;
+    if (scorer == null) return [];
+    return widget.players.where((p) {
+      if (p.playerId == _scorerPlayerId) return false;
+      return _isOwnGoal ? p.team != scorer.team : p.team == scorer.team;
+    }).toList();
+  }
+
+  void _setScorer(String? id) {
+    setState(() {
+      _scorerPlayerId = id;
+      _assistPlayerId = null;
+    });
+  }
+
+  void _setOwnGoal(bool value) {
+    setState(() {
+      _isOwnGoal  = value;
+      _assistPlayerId = null;
+    });
+  }
+
+  String _defaultTime() {
+    final now = DateTime.now();
+    return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  void dispose() {
+    _timeCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_scorerPlayerId == null) {
+      setState(() => _error = 'Selecione o marcador do gol.');
+      return;
+    }
+    final time = _timeCtrl.text.trim();
+    if (time.isEmpty) {
+      setState(() => _error = 'Informe o horário do gol.');
+      return;
+    }
+    setState(() { _saving = true; _error = null; });
+    try {
+      await widget.onSave(
+        _scorerPlayerId!,
+        (_assistPlayerId?.isNotEmpty == true) ? _assistPlayerId : null,
+        time,
+        _isOwnGoal,
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) setState(() { _saving = false; _error = extractDioError(e, 'Erro ao salvar gol'); });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final labelColor = isDark ? Colors.white : AppColors.slate900;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.slate900 : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Handle bar
+            Center(
+              child: Container(
+                width: 36, height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.slate700 : AppColors.slate200,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+
+            // Title row
+            Row(children: [
+              Text(
+                widget.editing != null ? 'Editar gol' : 'Adicionar gol',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: labelColor),
+              ),
+              const Spacer(),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                iconSize: 20,
+              ),
+            ]),
+            const SizedBox(height: 16),
+
+            // Scorer
+            _PlayerDropdown(
+              label:      'Marcador *',
+              players:    widget.players,
+              selectedId: _scorerPlayerId,
+              onChanged:  _setScorer,
+              isDark:     isDark,
+            ),
+            const SizedBox(height: 12),
+
+            // Time
+            TextField(
+              controller: _timeCtrl,
+              decoration: InputDecoration(
+                labelText:   'Horário (HH:mm)',
+                border:      const OutlineInputBorder(),
+                isDense:     true,
+                prefixIcon:  const Icon(Icons.access_time_rounded, size: 18),
+                labelStyle:  TextStyle(fontSize: 13, color: isDark ? AppColors.slate400 : AppColors.slate500),
+              ),
+              keyboardType: TextInputType.datetime,
+              style: TextStyle(fontSize: 14, color: labelColor),
+            ),
+            const SizedBox(height: 4),
+
+            // Own goal checkbox
+            CheckboxListTile(
+              value:              _isOwnGoal,
+              onChanged:          (v) => _setOwnGoal(v ?? false),
+              title:              const Text('Gol contra', style: TextStyle(fontSize: 14)),
+              contentPadding:     EdgeInsets.zero,
+              dense:              true,
+              controlAffinity:    ListTileControlAffinity.leading,
+            ),
+
+            // Assist — só aparece quando um marcador está selecionado e há candidatos
+            if (_scorerPlayerId != null && _assistCandidates.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _PlayerDropdown(
+                label:      _isOwnGoal ? 'Quem forçou o gol contra (opcional)' : 'Assistência (opcional)',
+                players:    _assistCandidates,
+                selectedId: _assistPlayerId,
+                onChanged:  (id) => setState(() => _assistPlayerId = id),
+                isDark:     isDark,
+                nullable:   true,
+              ),
+            ],
+
+            if (_error != null) ...[
+              const SizedBox(height: 6),
+              Text(_error!, style: const TextStyle(color: AppColors.rose500, fontSize: 12)),
+            ],
+            const SizedBox(height: 12),
+
+            FilledButton(
+              onPressed: _saving ? null : _save,
+              child: _saving
+                  ? const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : Text(widget.editing != null ? 'Salvar alterações' : 'Adicionar gol'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlayerDropdown extends StatelessWidget {
+  final String         label;
+  final List<MatchPlayer> players;
+  final String?        selectedId;
+  final void Function(String?) onChanged;
+  final bool           isDark;
+  final bool           nullable;
+
+  const _PlayerDropdown({
+    required this.label,
+    required this.players,
+    required this.selectedId,
+    required this.onChanged,
+    required this.isDark,
+    this.nullable = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<String?>(
+      value:      selectedId,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText:  label,
+        border:     const OutlineInputBorder(),
+        isDense:    true,
+        labelStyle: TextStyle(fontSize: 13,
+            color: isDark ? AppColors.slate400 : AppColors.slate500),
+      ),
+      items: [
+        if (nullable)
+          DropdownMenuItem<String?>(
+            value: null,
+            child: Text('— Nenhum —',
+                style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? AppColors.slate400 : AppColors.slate500)),
+          ),
+        ...players.map((p) => DropdownMenuItem<String?>(
+          value: p.playerId,
+          child: Text(p.playerName,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? Colors.white : AppColors.slate900)),
+        )),
+      ],
+      onChanged: onChanged,
+      style: TextStyle(fontSize: 14, color: isDark ? Colors.white : AppColors.slate900),
+      dropdownColor: isDark ? AppColors.slate800 : Colors.white,
+    );
+  }
+}

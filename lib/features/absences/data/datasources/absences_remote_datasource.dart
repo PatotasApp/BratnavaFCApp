@@ -7,8 +7,14 @@ class AbsencesRemoteDataSource {
   const AbsencesRemoteDataSource(this._dio);
 
   Future<List<AbsenceDto>> fetchMine() async {
-    final res = await _dio.get(ApiConstants.absencesMine);
-    final data = (res.data as Map<String, dynamic>?)?['data'];
+    final res = await _dio.get(
+      ApiConstants.absencesMine,
+      queryParameters: const {'page': 1, 'pageSize': 200},
+    );
+    final envelope = res.data as Map<String, dynamic>?;
+    final dataNode = envelope?['data'] ?? envelope?['Data'];
+    final data =
+        dataNode is Map ? (dataNode['items'] ?? dataNode['Items']) : dataNode;
     if (data is! List) return [];
     return data
         .whereType<Map<String, dynamic>>()
@@ -24,7 +30,8 @@ class AbsencesRemoteDataSource {
   }
 
   Future<AbsenceDto> update(String id, CreateAbsenceDto dto) async {
-    final res = await _dio.put(ApiConstants.absenceById(id), data: dto.toJson());
+    final res =
+        await _dio.put(ApiConstants.absenceById(id), data: dto.toJson());
     _throwIfError(res.data);
     return AbsenceDto.fromJson(
         (res.data as Map<String, dynamic>)['data'] as Map<String, dynamic>);

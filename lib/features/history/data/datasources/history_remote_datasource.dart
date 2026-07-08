@@ -11,6 +11,40 @@ class HistoryRemoteDataSource {
 
   const HistoryRemoteDataSource(this._dio);
 
+  Future<PagedHistoryMatches> fetchHistoryPage(
+    String groupId, {
+    required int page,
+    required int pageSize,
+    String? playerId,
+  }) async {
+    try {
+      final skip = (page - 1) * pageSize;
+      final res = await _dio.get(
+        ApiConstants.matchHistory(groupId),
+        queryParameters: {
+          'take': pageSize,
+          'skip': skip,
+          'page': page,
+          'pageSize': pageSize,
+          if (playerId != null) 'playerId': playerId,
+        },
+      );
+      final items = unwrapList(res.data)
+          .whereType<Map<String, dynamic>>()
+          .map((e) => HistoryMatch.fromJson(e, groupId: groupId))
+          .toList();
+
+      return PagedHistoryMatches(
+        items: items,
+        total: _extractTotal(res.data) ?? items.length,
+        page: _extractPage(res.data) ?? page,
+        pageSize: _extractPageSize(res.data) ?? pageSize,
+      );
+    } on DioException catch (e) {
+      throw ServerException(extractDioError(e));
+    }
+  }
+
   Future<List<HistoryMatch>> fetchHistory(
     String groupId, {
     int take = 400,
@@ -18,7 +52,7 @@ class HistoryRemoteDataSource {
     try {
       final historyRes = await _dio.get(
         ApiConstants.matchHistory(groupId),
-        queryParameters: {'take': take},
+        queryParameters: {'take': take, 'page': 1, 'pageSize': take},
       );
       final list = unwrapList(historyRes.data)
           .map((e) => HistoryMatch.fromJson(
@@ -32,7 +66,8 @@ class HistoryRemoteDataSource {
         final currentRes = await _dio.get(ApiConstants.currentMatch(groupId));
         final current = unwrapMap(currentRes.data);
         if (current != null) {
-          final activeId = (current['id'] ?? current['matchId'] ?? '').toString();
+          final activeId =
+              (current['id'] ?? current['matchId'] ?? '').toString();
           final alreadyPresent = list.any((m) => m.id == activeId);
           if (!alreadyPresent && activeId.isNotEmpty) {
             list.insert(0, HistoryMatch.fromJson(current, groupId: groupId));
@@ -53,7 +88,7 @@ class HistoryRemoteDataSource {
     String matchId,
   ) async {
     try {
-      final res  = await _dio.get(ApiConstants.matchDetails(groupId, matchId));
+      final res = await _dio.get(ApiConstants.matchDetails(groupId, matchId));
       final data = unwrapMap(res.data);
       if (data == null) throw const ServerException('Partida não encontrada');
       return MatchDetails.fromJson(data);
@@ -71,7 +106,7 @@ class HistoryRemoteDataSource {
   ) async {
     try {
       final res = await _dio.get(ApiConstants.matchReplays(groupId, matchId));
-      final d   = unwrapList(res.data);
+      final d = unwrapList(res.data);
       return d
           .whereType<Map<String, dynamic>>()
           .map(ReplayClip.fromJson)
@@ -87,7 +122,7 @@ class HistoryRemoteDataSource {
     String groupId,
     String playerId,
   ) async {
-    final ids   = <String>{};
+    final ids = <String>{};
     final years = [DateTime.now().year, DateTime.now().year - 1];
     for (final year in years) {
       try {
@@ -113,11 +148,52 @@ class HistoryRemoteDataSource {
   ) async {
     try {
       final res = await _dio.post(ApiConstants.matchCard(groupId), data: dto);
-      final d   = unwrapMap(res.data);
+      final d = unwrapMap(res.data);
       if (d == null) return null;
       return d['image'] as String? ?? d['base64'] as String?;
     } on DioException catch (e) {
       throw ServerException(extractDioError(e));
     }
   }
+
+  int? _extractTotal(dynamic data) {
+    if (data is! Map) return null;
+    final node = data['data'] ?? data['Data'] ?? data;
+    if (node is! Map) return null;
+    final total = node['total'] ??
+        node['Total'] ??
+        node['totalCount'] ??
+        node['TotalCount'];
+    return (total as num?)?.toInt();
+  }
+
+  int? _extractPage(dynamic data) {
+    if (data is! Map) return null;
+    final node = data['data'] ?? data['Data'] ?? data;
+    if (node is! Map) return null;
+    final value = node['page'] ?? node['Page'];
+    return (value as num?)?.toInt();
+  }
+
+  int? _extractPageSize(dynamic data) {
+    if (data is! Map) return null;
+    final node = data['data'] ?? data['Data'] ?? data;
+    if (node is! Map) return null;
+    final value = node['pageSize'] ?? node['PageSize'];
+    return (value as num?)?.toInt();
+  }
+}
+
+class PagedHistoryMatches {
+  final List<HistoryMatch> items;
+  final int total;
+  final int page;
+  final int pageSize;
+
+  const PagedHistoryMatches({
+    required this.items,
+    required this.total,
+    required this.page,
+    required this.pageSize,
+  });
 }

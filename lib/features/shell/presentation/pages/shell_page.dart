@@ -145,6 +145,7 @@ class _MoreSheet extends ConsumerWidget {
     (Icons.palette_outlined,         'Cores',                 '/app/team-colors',    false, false),
     (Icons.bar_chart_outlined,       'Visual Stats',          '/app/visual-stats',   false, true),
     (Icons.timeline_outlined,        'Histórico do Jogador',  '/app/player-history', false, true),
+    (Icons.people_alt_outlined,      'Monte seu Time 🎉',     '/app/team-builder',   false, false),
     (Icons.payments_outlined,        'Pagamentos',            '/app/payments',       false, false),
     (Icons.how_to_vote_outlined,     'Votações',              '/app/polls',          true,  false),
     (Icons.event_busy_outlined,      'Ausências',             '/app/absences',       false, false),
@@ -161,19 +162,13 @@ class _MoreSheet extends ConsumerWidget {
     final activePlayer = ref.watch(activePlayerProvider);
     final groupId      = account?.activeGroupId ?? activePlayer?.groupId;
 
-    final isAdmin = (account?.isAdmin ?? false) ||
-        (groupId != null &&
-            groupId.isNotEmpty &&
-            (account?.isGroupAdmin(groupId) ?? false));
+    final isAdmin = groupId != null &&
+        groupId.isNotEmpty &&
+        (account?.isGroupAdmin(groupId) ?? false);
 
     final pendingCount = groupId != null
         ? ref.watch(pendingPollsCountProvider(groupId)).valueOrNull ?? 0
         : 0;
-
-    final isGodMode = account?.roles.any(
-          (r) => r.toLowerCase() == 'godmode',
-        ) ??
-        false;
 
     // Filter out admin-only items for regular players
     final visibleItems = _items.where((item) => !item.$5 || isAdmin).toList();
@@ -224,15 +219,6 @@ class _MoreSheet extends ConsumerWidget {
                 },
               ),
             ),
-            if (isGodMode)
-              ListTile(
-                leading: const Icon(Icons.admin_panel_settings_outlined, size: 22, color: Colors.deepPurple),
-                title: const Text('God Mode', style: TextStyle(fontSize: 14, color: Colors.deepPurple, fontWeight: FontWeight.w600)),
-                onTap: () {
-                  Navigator.pop(context);
-                  context.go('/app/admin/godmode');
-                },
-              ),
             const SizedBox(height: 8),
           ],
         ),
