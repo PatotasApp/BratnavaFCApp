@@ -1014,8 +1014,7 @@ class _UpcomingRightPanel extends StatelessWidget {
         children: [
           _CountChip(
             icon: Icons.check_circle_rounded,
-            count: match.acceptedMemberCount,
-            extraCount: match.acceptedGuestCount,
+            count: match.acceptedCount,
             color: AppColors.emerald500,
           ),
           const SizedBox(height: 4),
@@ -1249,25 +1248,22 @@ class _CountChip extends StatelessWidget {
   final IconData? icon;
   final Color? color;
   final int count;
-  final int extraCount;
 
   const _CountChip({
     this.icon,
     this.color,
     required this.count,
-    this.extraCount = 0,
   });
 
   @override
   Widget build(BuildContext context) {
-    final text = extraCount > 0 ? '$count (+$extraCount)' : '$count';
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(width: 13, child: Icon(icon, size: 11, color: color)),
         SizedBox(
-          width: extraCount > 0 ? 44 : 22,
-          child: Text(text,
+          width: 22,
+          child: Text('$count',
               textAlign: TextAlign.right,
               style: TextStyle(
                   fontSize: 11, fontWeight: FontWeight.w600, color: color)),
