@@ -470,6 +470,8 @@ class _TeamGenOptionsSectionState
   bool _showExplanation = false;
   String? _sel1Id;
   bool? _sel1IsTeamA;
+  String? _sel2Id;
+  bool? _sel2IsTeamA;
 
   @override
   void didUpdateWidget(_TeamGenOptionsSection old) {
@@ -477,9 +479,12 @@ class _TeamGenOptionsSectionState
     if (old.selectedIdx != widget.selectedIdx) {
       _sel1Id = null;
       _sel1IsTeamA = null;
+      _sel2Id = null;
+      _sel2IsTeamA = null;
     }
   }
 
+  // ignore: unused_element
   void _onFieldTap(String id, bool isTeamA) {
     if (!widget.isAdmin) return;
     if (_sel1Id == null) {
@@ -531,15 +536,138 @@ class _TeamGenOptionsSectionState
         .editTeamGenOption(widget.selectedIdx, newA, newB);
   }
 
-  void _swapGeneratedTeams() {
-    final opt =
-        widget.options[widget.selectedIdx.clamp(0, widget.options.length - 1)];
+  TeamGenOption get _currentOption =>
+      widget.options[widget.selectedIdx.clamp(0, widget.options.length - 1)];
+
+  void _clearGeneratedSelection() {
+    setState(() {
+      _sel1Id = null;
+      _sel1IsTeamA = null;
+      _sel2Id = null;
+      _sel2IsTeamA = null;
+    });
+  }
+
+  void _setGeneratedOption(
+    List<TeamGenPlayer> teamA,
+    List<TeamGenPlayer> teamB, {
+    List<TeamGenPlayer>? unassigned,
+  }) {
     ref.read(matchNotifierProvider.notifier).editTeamGenOption(
           widget.selectedIdx,
-          opt.teamB,
-          opt.teamA,
-          unassigned: opt.unassigned,
+          teamA,
+          teamB,
+          unassigned: unassigned ?? _currentOption.unassigned,
         );
+  }
+
+  void _onGeneratedFieldTap(String id, bool isTeamA) {
+    if (!widget.isAdmin) return;
+    if (_sel1Id == null) {
+      setState(() {
+        _sel1Id = id;
+        _sel1IsTeamA = isTeamA;
+      });
+      return;
+    }
+    if (_sel1Id == id) {
+      setState(() {
+        _sel1Id = _sel2Id;
+        _sel1IsTeamA = _sel2IsTeamA;
+        _sel2Id = null;
+        _sel2IsTeamA = null;
+      });
+      return;
+    }
+    if (_sel2Id == id) {
+      setState(() {
+        _sel2Id = null;
+        _sel2IsTeamA = null;
+      });
+      return;
+    }
+    if (_sel2Id != null || _sel1IsTeamA == isTeamA) {
+      setState(() {
+        _sel1Id = id;
+        _sel1IsTeamA = isTeamA;
+        _sel2Id = null;
+        _sel2IsTeamA = null;
+      });
+      return;
+    }
+    setState(() {
+      _sel2Id = id;
+      _sel2IsTeamA = isTeamA;
+    });
+  }
+
+  TeamGenPlayer? _singleSelectedPlayer(TeamGenOption opt) {
+    if (_sel1Id == null || _sel1IsTeamA == null || _sel2Id != null) {
+      return null;
+    }
+    final players = _sel1IsTeamA! ? opt.teamA : opt.teamB;
+    for (final player in players) {
+      if (player.playerId == _sel1Id) return player;
+    }
+    return null;
+  }
+
+  void _moveSelectedTo(bool toTeamA) {
+    final opt = _currentOption;
+    if (_sel1Id == null || _sel1IsTeamA == null || _sel2Id != null) return;
+    if (_sel1IsTeamA == toTeamA) return;
+
+    final player = _singleSelectedPlayer(opt);
+    if (player == null) return;
+
+    final teamA = toTeamA
+        ? [...opt.teamA, player]
+        : opt.teamA.where((p) => p.playerId != player.playerId).toList();
+    final teamB = toTeamA
+        ? opt.teamB.where((p) => p.playerId != player.playerId).toList()
+        : [...opt.teamB, player];
+
+    _setGeneratedOption(teamA, teamB);
+    _clearGeneratedSelection();
+  }
+
+  void _swapSelectedGeneratedPlayers() {
+    if (_sel1Id == null ||
+        _sel1IsTeamA == null ||
+        _sel2Id == null ||
+        _sel2IsTeamA == null ||
+        _sel1IsTeamA == _sel2IsTeamA) {
+      return;
+    }
+
+    final opt = _currentOption;
+    final firstId = _sel1Id!;
+    final secondId = _sel2Id!;
+    final firstIsTeamA = _sel1IsTeamA!;
+    final firstPlayer = firstIsTeamA
+        ? opt.teamA.firstWhere((p) => p.playerId == firstId)
+        : opt.teamB.firstWhere((p) => p.playerId == firstId);
+    final secondPlayer = firstIsTeamA
+        ? opt.teamB.firstWhere((p) => p.playerId == secondId)
+        : opt.teamA.firstWhere((p) => p.playerId == secondId);
+
+    final teamA = firstIsTeamA
+        ? opt.teamA
+            .map((p) => p.playerId == firstId ? secondPlayer : p)
+            .toList()
+        : opt.teamA
+            .map((p) => p.playerId == secondId ? firstPlayer : p)
+            .toList();
+    final teamB = firstIsTeamA
+        ? opt.teamB
+            .map((p) => p.playerId == secondId ? firstPlayer : p)
+            .toList()
+        : opt.teamB
+            .map((p) => p.playerId == firstId ? secondPlayer : p)
+            .toList();
+
+    _setGeneratedOption(teamA, teamB);
+    _clearGeneratedSelection();
   }
 
   @override
@@ -558,6 +686,14 @@ class _TeamGenOptionsSectionState
         ref.watch(accountStoreProvider).activeAccount?.activeGroupId ?? '';
     final icons =
         GroupIcons.from(ref.watch(groupSettingsProvider(gid)).valueOrNull);
+    final hasSingleSelection = _sel1Id != null && _sel2Id == null;
+    final canMoveToA = hasSingleSelection && _sel1IsTeamA == false;
+    final canMoveToB = hasSingleSelection && _sel1IsTeamA == true;
+    final canSwapSelection = _sel1Id != null &&
+        _sel2Id != null &&
+        _sel1IsTeamA != null &&
+        _sel2IsTeamA != null &&
+        _sel1IsTeamA != _sel2IsTeamA;
 
     return _SectionCard(
       isDark: widget.isDark,
@@ -697,7 +833,12 @@ class _TeamGenOptionsSectionState
                 teamBName: bName,
                 teamAColor: aColor,
                 teamBColor: bColor,
-                onSwap: _swapGeneratedTeams,
+                canMoveToA: canMoveToA,
+                canMoveToB: canMoveToB,
+                canSwap: canSwapSelection,
+                onMoveToA: () => _moveSelectedTo(true),
+                onMoveToB: () => _moveSelectedTo(false),
+                onSwap: _swapSelectedGeneratedPlayers,
               ),
               const SizedBox(height: 12),
             ],
@@ -717,15 +858,17 @@ class _TeamGenOptionsSectionState
               teamAColor: aColor,
               teamBColor: bColor,
               canInteract: widget.isAdmin,
-              sel1Id: _sel1Id,
-              onPlayerClick: _onFieldTap,
+              sel1Id: _sel2Id ?? _sel1Id,
+              onPlayerClick: _onGeneratedFieldTap,
             ),
             if (widget.isAdmin) ...[
               const SizedBox(height: 6),
               Text(
-                _sel1Id != null
-                    ? 'Toque em um jogador do outro time para trocar'
-                    : 'Toque em um jogador para selecioná-lo',
+                _sel2Id != null
+                    ? 'Clique no botão central para trocar os jogadores.'
+                    : _sel1Id != null
+                        ? 'Use o botão do outro time para mover o jogador.'
+                        : 'Toque em um jogador para selecioná-lo',
                 style: TextStyle(
                   fontSize: 11,
                   color: _sel1Id != null
@@ -935,6 +1078,11 @@ class _GeneratedTeamSwapBar extends StatelessWidget {
   final String teamBName;
   final Color teamAColor;
   final Color teamBColor;
+  final bool canMoveToA;
+  final bool canMoveToB;
+  final bool canSwap;
+  final VoidCallback onMoveToA;
+  final VoidCallback onMoveToB;
   final VoidCallback onSwap;
 
   const _GeneratedTeamSwapBar({
@@ -942,6 +1090,11 @@ class _GeneratedTeamSwapBar extends StatelessWidget {
     required this.teamBName,
     required this.teamAColor,
     required this.teamBColor,
+    required this.canMoveToA,
+    required this.canMoveToB,
+    required this.canSwap,
+    required this.onMoveToA,
+    required this.onMoveToB,
     required this.onSwap,
   });
 
@@ -954,6 +1107,8 @@ class _GeneratedTeamSwapBar extends StatelessWidget {
             label: '<< $teamBName',
             color: teamBColor,
             alignEnd: true,
+            enabled: canMoveToB,
+            onTap: onMoveToB,
           ),
         ),
         const SizedBox(width: 8),
@@ -961,9 +1116,11 @@ class _GeneratedTeamSwapBar extends StatelessWidget {
           width: 42,
           height: 34,
           child: FilledButton(
-            onPressed: onSwap,
+            onPressed: canSwap ? onSwap : null,
             style: FilledButton.styleFrom(
               padding: EdgeInsets.zero,
+              disabledBackgroundColor: AppColors.slate200,
+              disabledForegroundColor: AppColors.slate400,
               backgroundColor: AppColors.emerald200,
               foregroundColor: AppColors.emerald700,
               shape: RoundedRectangleBorder(
@@ -978,6 +1135,8 @@ class _GeneratedTeamSwapBar extends StatelessWidget {
           child: _TeamSideButton(
             label: '$teamAName >>',
             color: teamAColor,
+            enabled: canMoveToA,
+            onTap: onMoveToA,
           ),
         ),
       ],
@@ -989,31 +1148,40 @@ class _TeamSideButton extends StatelessWidget {
   final String label;
   final Color color;
   final bool alignEnd;
+  final bool enabled;
+  final VoidCallback onTap;
 
   const _TeamSideButton({
     required this.label,
     required this.color,
+    required this.enabled,
+    required this.onTap,
     this.alignEnd = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 34,
-      alignment: alignEnd ? Alignment.centerRight : Alignment.centerLeft,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: .28),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: color,
+    final effectiveColor = enabled ? color : AppColors.slate400;
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        height: 34,
+        alignment: alignEnd ? Alignment.centerRight : Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: effectiveColor.withValues(alpha: enabled ? .28 : .14),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: effectiveColor,
+          ),
         ),
       ),
     );
