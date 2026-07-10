@@ -119,7 +119,9 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
     final colorsSet =
         s.colorsLocked || (s.teamAColor != null && s.teamBColor != null);
     final hasOptions = s.teamGenOptions.isNotEmpty;
-    final teamsSet = s.teamsAssigned;
+    final teamsSet = s.teamsAssigned ||
+        s.teamAPlayers.isNotEmpty ||
+        s.teamBPlayers.isNotEmpty;
 
     return RefreshIndicator(
       onRefresh: () => ref.read(matchNotifierProvider.notifier).refresh(),
@@ -320,7 +322,7 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
                 onRegenerate: _generateTeams,
               ),
               const SizedBox(height: 12),
-            ] else ...[
+            ] else if (!teamsSet) ...[
               if (_isAdmin)
                 _DashedHint(
                   text: _isAdmin
@@ -347,6 +349,8 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
                 s: s,
                 isDark: isDark,
                 isAdmin: _isAdmin,
+                onRefresh: () =>
+                    ref.read(matchNotifierProvider.notifier).refresh(),
               ),
               const SizedBox(height: 12),
               // ── Card da partida ───────────────────────────────────────
@@ -617,17 +621,18 @@ class _TeamGenOptionsSectionState
     if (_sel1Id == null || _sel1IsTeamA == null || _sel2Id != null) return;
     if (_sel1IsTeamA == toTeamA) return;
 
+    final playerId = _sel1Id!;
     final player = _singleSelectedPlayer(opt);
     if (player == null) return;
 
-    final teamA = toTeamA
-        ? [...opt.teamA, player]
-        : opt.teamA.where((p) => p.playerId != player.playerId).toList();
-    final teamB = toTeamA
-        ? opt.teamB.where((p) => p.playerId != player.playerId).toList()
-        : [...opt.teamB, player];
+    final baseA = opt.teamA.where((p) => p.playerId != playerId).toList();
+    final baseB = opt.teamB.where((p) => p.playerId != playerId).toList();
+    final unassigned =
+        opt.unassigned.where((p) => p.playerId != playerId).toList();
+    final teamA = toTeamA ? [...baseA, player] : baseA;
+    final teamB = toTeamA ? baseB : [...baseB, player];
 
-    _setGeneratedOption(teamA, teamB);
+    _setGeneratedOption(teamA, teamB, unassigned: unassigned);
     _clearGeneratedSelection();
   }
 
@@ -858,7 +863,8 @@ class _TeamGenOptionsSectionState
               teamAColor: aColor,
               teamBColor: bColor,
               canInteract: widget.isAdmin,
-              sel1Id: _sel2Id ?? _sel1Id,
+              sel1Id: _sel1Id,
+              sel2Id: _sel2Id,
               onPlayerClick: _onGeneratedFieldTap,
             ),
             if (widget.isAdmin) ...[
@@ -960,11 +966,13 @@ class _AssignedTeamsSection extends ConsumerStatefulWidget {
   final MatchState s;
   final bool isDark;
   final bool isAdmin;
+  final VoidCallback onRefresh;
 
   const _AssignedTeamsSection({
     required this.s,
     required this.isDark,
     required this.isAdmin,
+    required this.onRefresh,
   });
 
   @override
@@ -975,10 +983,12 @@ class _AssignedTeamsSection extends ConsumerStatefulWidget {
 class _AssignedTeamsSectionState extends ConsumerState<_AssignedTeamsSection> {
   String? _sel1Id;
   bool? _sel1IsTeamA;
+  String? _sel2Id;
+  bool? _sel2IsTeamA;
   bool _swapping = false;
 
   void _onFieldTap(String id, bool isTeamA) {
-    if (!widget.isAdmin) return;
+    if (!widget.isAdmin || _swapping) return;
     if (_sel1Id == null) {
       setState(() {
         _sel1Id = id;
@@ -988,31 +998,79 @@ class _AssignedTeamsSectionState extends ConsumerState<_AssignedTeamsSection> {
     }
     if (_sel1Id == id) {
       setState(() {
-        _sel1Id = null;
-        _sel1IsTeamA = null;
+        _sel1Id = _sel2Id;
+        _sel1IsTeamA = _sel2IsTeamA;
+        _sel2Id = null;
+        _sel2IsTeamA = null;
       });
       return;
     }
-    if (_sel1IsTeamA == isTeamA) {
+    if (_sel2Id == id) {
+      setState(() {
+        _sel2Id = null;
+        _sel2IsTeamA = null;
+      });
+      return;
+    }
+    if (_sel2Id != null || _sel1IsTeamA == isTeamA) {
       setState(() {
         _sel1Id = id;
         _sel1IsTeamA = isTeamA;
+        _sel2Id = null;
+        _sel2IsTeamA = null;
       });
       return;
     }
-    // Different teams — call API
-    final id1 = _sel1Id!;
+    setState(() {
+      _sel2Id = id;
+      _sel2IsTeamA = isTeamA;
+    });
+  }
+
+  void _clearSelection() {
     setState(() {
       _sel1Id = null;
       _sel1IsTeamA = null;
-      _swapping = true;
+      _sel2Id = null;
+      _sel2IsTeamA = null;
     });
-    ref
+  }
+
+  Future<void> _moveSelectedTo(bool toTeamA) async {
+    if (_swapping ||
+        _sel1Id == null ||
+        _sel1IsTeamA == null ||
+        _sel2Id != null ||
+        _sel1IsTeamA == toTeamA) {
+      return;
+    }
+    final id = _sel1Id!;
+    final fromTeamA = _sel1IsTeamA!;
+    setState(() => _swapping = true);
+    await ref
         .read(matchNotifierProvider.notifier)
-        .swapPlayers(id1, id)
-        .whenComplete(() {
-      if (mounted) setState(() => _swapping = false);
-    });
+        .movePlayerToOtherTeam(id, fromTeamA);
+    if (!mounted) return;
+    _clearSelection();
+    setState(() => _swapping = false);
+  }
+
+  Future<void> _swapSelectedPlayers() async {
+    if (_swapping ||
+        _sel1Id == null ||
+        _sel2Id == null ||
+        _sel1IsTeamA == null ||
+        _sel2IsTeamA == null ||
+        _sel1IsTeamA == _sel2IsTeamA) {
+      return;
+    }
+    final id1 = _sel1Id!;
+    final id2 = _sel2Id!;
+    setState(() => _swapping = true);
+    await ref.read(matchNotifierProvider.notifier).swapPlayers(id1, id2);
+    if (!mounted) return;
+    _clearSelection();
+    setState(() => _swapping = false);
   }
 
   @override
@@ -1029,21 +1087,146 @@ class _AssignedTeamsSectionState extends ConsumerState<_AssignedTeamsSection> {
         .map((p) => FieldPlayer(
             id: p.playerId, name: p.playerName, isGoalkeeper: p.isGoalkeeper))
         .toList();
+    final aName = s.teamAColor?.name ?? 'Time A';
+    final bName = s.teamBColor?.name ?? 'Time B';
+    final hasSingleSelection = _sel1Id != null && _sel2Id == null;
+    final canMoveToA = widget.isAdmin &&
+        !_swapping &&
+        hasSingleSelection &&
+        _sel1IsTeamA == false;
+    final canMoveToB = widget.isAdmin &&
+        !_swapping &&
+        hasSingleSelection &&
+        _sel1IsTeamA == true;
+    final canSwapSelection = widget.isAdmin &&
+        !_swapping &&
+        _sel1Id != null &&
+        _sel2Id != null &&
+        _sel1IsTeamA != null &&
+        _sel2IsTeamA != null &&
+        _sel1IsTeamA != _sel2IsTeamA;
+
+    final field = HorizontalTeamField(
+      teamA: fieldA,
+      teamB: fieldB,
+      teamAColor: aColor,
+      teamBColor: bColor,
+      canInteract: widget.isAdmin && !_swapping,
+      sel1Id: _sel1Id,
+      sel2Id: _sel2Id,
+      onPlayerClick: _onFieldTap,
+    );
+
+    if (!widget.isAdmin) {
+      return _SectionCard(
+        isDark: widget.isDark,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'Times',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color:
+                        widget.isDark ? AppColors.slate100 : AppColors.slate900,
+                  ),
+                ),
+                const Spacer(),
+                OutlinedButton.icon(
+                  onPressed: widget.onRefresh,
+                  icon: const Icon(Icons.refresh_rounded, size: 13),
+                  label:
+                      const Text('Recarregar', style: TextStyle(fontSize: 11)),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    minimumSize: const Size(0, 34),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _TeamColorsLine(
+              teamA: s.teamAColor,
+              teamB: s.teamBColor,
+              isDark: widget.isDark,
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: widget.isDark
+                    ? AppColors.slate900.withValues(alpha: .35)
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color:
+                      widget.isDark ? AppColors.slate700 : AppColors.slate200,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Times definidos',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: widget.isDark
+                          ? AppColors.slate100
+                          : AppColors.slate900,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  field,
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return _SectionCard(
       isDark: widget.isDark,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          HorizontalTeamField(
-            teamA: fieldA,
-            teamB: fieldB,
-            teamAColor: aColor,
-            teamBColor: bColor,
-            canInteract: widget.isAdmin && !_swapping,
-            sel1Id: _sel1Id,
-            onPlayerClick: _onFieldTap,
+          Row(
+            children: [
+              Text(
+                'Times definidos',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color:
+                      widget.isDark ? AppColors.slate100 : AppColors.slate900,
+                ),
+              ),
+              const Spacer(),
+              SizedBox(
+                width: 148,
+                child: _GeneratedTeamSwapBar(
+                  teamAName: aName,
+                  teamBName: bName,
+                  teamAColor: aColor,
+                  teamBColor: bColor,
+                  canMoveToA: canMoveToA,
+                  canMoveToB: canMoveToB,
+                  canSwap: canSwapSelection,
+                  onMoveToA: () => _moveSelectedTo(true),
+                  onMoveToB: () => _moveSelectedTo(false),
+                  onSwap: _swapSelectedPlayers,
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 10),
+          field,
           if (widget.isAdmin) ...[
             const SizedBox(height: 6),
             if (_swapping)
@@ -1055,9 +1238,11 @@ class _AssignedTeamsSectionState extends ConsumerState<_AssignedTeamsSection> {
               )
             else
               Text(
-                _sel1Id != null
-                    ? 'Toque em um jogador do outro time para trocar'
-                    : 'Toque em um jogador para selecioná-lo',
+                _sel2Id != null
+                    ? 'Use o botão central para trocar os jogadores.'
+                    : _sel1Id != null
+                        ? 'Use o botão do outro time para mover o jogador.'
+                        : 'Toque em um jogador para selecioná-lo',
                 style: TextStyle(
                   fontSize: 11,
                   color: _sel1Id != null
@@ -1104,11 +1289,11 @@ class _GeneratedTeamSwapBar extends StatelessWidget {
       children: [
         Expanded(
           child: _TeamSideButton(
-            label: '<< $teamBName',
-            color: teamBColor,
+            label: '<< $teamAName',
+            color: teamAColor,
             alignEnd: true,
-            enabled: canMoveToB,
-            onTap: onMoveToB,
+            enabled: canMoveToA,
+            onTap: onMoveToA,
           ),
         ),
         const SizedBox(width: 8),
@@ -1133,10 +1318,10 @@ class _GeneratedTeamSwapBar extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: _TeamSideButton(
-            label: '$teamAName >>',
-            color: teamAColor,
-            enabled: canMoveToA,
-            onTap: onMoveToA,
+            label: '$teamBName >>',
+            color: teamBColor,
+            enabled: canMoveToB,
+            onTap: onMoveToB,
           ),
         ),
       ],
@@ -1161,27 +1346,64 @@ class _TeamSideButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = enabled ? color : AppColors.slate400;
+    final effectiveColor = enabled ? color : AppColors.slate500;
+    final icon = alignEnd
+        ? Icons.keyboard_double_arrow_left
+        : Icons.keyboard_double_arrow_right;
     return InkWell(
       onTap: enabled ? onTap : null,
       borderRadius: BorderRadius.circular(8),
       child: Container(
         height: 34,
-        alignment: alignEnd ? Alignment.centerRight : Alignment.centerLeft,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
-          color: effectiveColor.withValues(alpha: enabled ? .28 : .14),
+          color: enabled
+              ? effectiveColor.withValues(alpha: .28)
+              : AppColors.slate100,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: effectiveColor,
-          ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 64;
+            final iconWidget = Icon(icon, size: compact ? 18 : 16);
+            final textWidget = Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: effectiveColor,
+              ),
+            );
+            return Align(
+              alignment: compact
+                  ? Alignment.center
+                  : (alignEnd ? Alignment.centerRight : Alignment.centerLeft),
+              child: IconTheme(
+                data: IconThemeData(
+                  color: effectiveColor,
+                  size: compact ? 18 : 16,
+                ),
+                child: compact
+                    ? iconWidget
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: alignEnd
+                            ? [
+                                iconWidget,
+                                const SizedBox(width: 2),
+                                Flexible(child: textWidget)
+                              ]
+                            : [
+                                Flexible(child: textWidget),
+                                const SizedBox(width: 2),
+                                iconWidget
+                              ],
+                      ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -1883,7 +2105,7 @@ class _MatchSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final playedAt = s.playedAt?.toLocal();
+    final playedAt = s.playedAt;
     final dateText = playedAt == null
         ? '--'
         : DateFormat('dd/MM/yyyy, HH:mm').format(playedAt);
@@ -2023,7 +2245,7 @@ class _WaitingTeamsCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _DashedHint(
-            text: 'Times ainda nÃ£o foram definidos.',
+            text: 'Times ainda não foram definidos.',
             isDark: isDark,
           ),
         ],

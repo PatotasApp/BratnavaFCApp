@@ -130,6 +130,7 @@ class MatchNotifier extends StateNotifier<MatchState> {
 
   Future<void> _loadStepPayload(String matchId, MatchStep step) async {
     final header = await _ds.fetchHeader(groupId, matchId).catchError((_) => null);
+    if (!mounted) return;
     _applyHeader(header);
 
     // O /current stub nem sempre tem `status`, então `step` pode estar errado.
@@ -140,18 +141,23 @@ class MatchNotifier extends StateNotifier<MatchState> {
     switch (effectiveStep) {
       case MatchStep.accept:
         final d = await _ds.fetchAcceptation(groupId, matchId).catchError((_) => null);
+        if (!mounted) return;
         _applyAcceptation(d);
       case MatchStep.teams:
         final d = await _ds.fetchMatchmaking(groupId, matchId).catchError((_) => null);
+        if (!mounted) return;
         _applyMatchmaking(d);
       case MatchStep.playing:
         final d = await _ds.fetchMatchmaking(groupId, matchId).catchError((_) => null);
+        if (!mounted) return;
         _applyMatchmaking(d);
         final goals = await _ds.fetchGoals(groupId, matchId).catchError((_) => <MatchGoal>[]);
+        if (!mounted) return;
         state = state.copyWith(goals: goals);
       case MatchStep.post:
       case MatchStep.done:
         final d = await _ds.fetchPostgame(groupId, matchId).catchError((_) => null);
+        if (!mounted) return;
         _applyPostgame(d);
       default:
         break;
@@ -175,6 +181,7 @@ class MatchNotifier extends StateNotifier<MatchState> {
         }),
         _ds.fetchUpcomingMatches(groupId).catchError((_) => <MatchHeaderDto>[]),
       ]);
+      if (!mounted) return;
 
       final colors   = results[0] as List<TeamColorInfo>;
       final settings = results[1] as MatchGroupSettings?;
@@ -220,6 +227,7 @@ class MatchNotifier extends StateNotifier<MatchState> {
       );
 
       await _loadStepPayload(matchId, step);
+      if (!mounted) return;
 
       // Auto-refresh para não-admin
       if (!isAdmin) {
@@ -230,12 +238,14 @@ class MatchNotifier extends StateNotifier<MatchState> {
         );
       }
     } on DioException catch (e) {
+      if (!mounted) return;
       if (e.response?.statusCode == 404) {
         state = state.copyWith(loading: false, matchId: null, step: MatchStep.create);
       } else {
         state = state.copyWith(loading: false, error: extractDioError(e, 'Falha ao carregar partida.'));
       }
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(loading: false, error: extractDioError(e, 'Falha ao carregar dados.'));
     }
   }

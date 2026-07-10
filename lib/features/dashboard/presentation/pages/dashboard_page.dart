@@ -592,7 +592,7 @@ class _MatchCard extends StatelessWidget {
     final h = match.header;
     final stepKey = h.stepKey.toLowerCase();
     final stepColor = _UpcomingMatchesCarouselState._stepColor(stepKey);
-    final d = h.playedAt.toLocal();
+    final d = h.playedAt;
     final me = match.findPlayer(myPlayerId);
 
     // Após aceitação fechada, quem não respondeu é exibido como recusado
@@ -805,20 +805,28 @@ class _MatchCard extends StatelessWidget {
                                         _ColorCircle(
                                             hex: myTeamColor.hexValue, size: 9),
                                         const SizedBox(width: 3),
-                                        Text(myTeamColor.name,
-                                            style: TextStyle(
-                                                fontSize: 10,
-                                                color: isDark
-                                                    ? AppColors.slate400
-                                                    : AppColors.slate500)),
+                                        Flexible(
+                                          child: Text(myTeamColor.name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: isDark
+                                                      ? AppColors.slate400
+                                                      : AppColors.slate500)),
+                                        ),
                                       ],
                                       if (statusLabel.isNotEmpty) ...[
                                         const SizedBox(width: 5),
-                                        Text(statusLabel,
-                                            style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w600,
-                                                color: statusColor)),
+                                        Flexible(
+                                          child: Text(statusLabel,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: statusColor)),
+                                        ),
                                       ],
                                     ]),
                                   ),

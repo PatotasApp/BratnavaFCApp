@@ -9,6 +9,7 @@ class GoalEntryRow extends StatelessWidget {
   final String teamBName;
   final Color? teamAColor;
   final Color? teamBColor;
+  final List<MatchPlayerInfo> participants;
   final bool isAdmin;
   final bool loading;
   final VoidCallback? onRemove;
@@ -21,16 +22,25 @@ class GoalEntryRow extends StatelessWidget {
     required this.teamBName,
     this.teamAColor,
     this.teamBColor,
-    this.isAdmin  = false,
-    this.loading  = false,
+    this.participants = const [],
+    this.isAdmin = false,
+    this.loading = false,
     this.onRemove,
     this.onEdit,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isTeamA = goal.team == 1;
-    final color   = isTeamA ? (teamAColor ?? AppColors.blue500) : (teamBColor ?? AppColors.rose500);
+    final scorer = _findScorer();
+    final scorerTeam =
+        scorer?.team == 1 || scorer?.team == 2 ? scorer!.team : null;
+    final playerTeam = goal.isOwnGoal && scorerTeam != null
+        ? (scorerTeam == 1 ? 2 : 1)
+        : (scorerTeam ?? goal.team);
+    final isTeamA = playerTeam == 1;
+    final color = isTeamA
+        ? (teamAColor ?? AppColors.blue500)
+        : (teamBColor ?? AppColors.rose500);
     final teamName = isTeamA ? teamAName : teamBName;
 
     return Card(
@@ -63,7 +73,8 @@ class GoalEntryRow extends StatelessWidget {
                 if (goal.time != null)
                   Text(
                     goal.time!,
-                    style: const TextStyle(fontSize: 10, color: AppColors.slate500),
+                    style: const TextStyle(
+                        fontSize: 10, color: AppColors.slate500),
                   ),
               ],
             ),
@@ -77,13 +88,15 @@ class GoalEntryRow extends StatelessWidget {
                     children: [
                       Text(
                         goal.scorerName ?? '—',
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 13),
                       ),
                       if (goal.isOwnGoal) ...[
                         const SizedBox(width: 4),
                         const Text(
                           '(gol contra)',
-                          style: TextStyle(fontSize: 11, color: AppColors.rose500),
+                          style:
+                              TextStyle(fontSize: 11, color: AppColors.rose500),
                         ),
                       ],
                     ],
@@ -92,13 +105,19 @@ class GoalEntryRow extends StatelessWidget {
                     children: [
                       Text(
                         teamName,
-                        style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w500),
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: color,
+                            fontWeight: FontWeight.w500),
                       ),
                       if (goal.assistName != null) ...[
-                        const Text(' · assist: ', style: TextStyle(fontSize: 11, color: AppColors.slate400)),
+                        const Text(' · assist: ',
+                            style: TextStyle(
+                                fontSize: 11, color: AppColors.slate400)),
                         Text(
                           goal.assistName!,
-                          style: const TextStyle(fontSize: 11, color: AppColors.slate500),
+                          style: const TextStyle(
+                              fontSize: 11, color: AppColors.slate500),
                         ),
                       ],
                     ],
@@ -113,23 +132,28 @@ class GoalEntryRow extends StatelessWidget {
                 children: [
                   loading
                       ? const SizedBox(
-                          width: 20, height: 20,
+                          width: 20,
+                          height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : IconButton(
-                          icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.slate400),
+                          icon: const Icon(Icons.edit_outlined,
+                              size: 18, color: AppColors.slate400),
                           onPressed: onEdit,
                           tooltip: 'Editar gol',
                           padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                          constraints:
+                              const BoxConstraints(minWidth: 36, minHeight: 36),
                         ),
                   if (!loading)
                     IconButton(
-                      icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.rose400),
+                      icon: const Icon(Icons.delete_outline,
+                          size: 18, color: AppColors.rose400),
                       onPressed: onRemove,
                       tooltip: 'Remover gol',
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                      constraints:
+                          const BoxConstraints(minWidth: 36, minHeight: 36),
                     ),
                 ],
               ),
@@ -137,5 +161,19 @@ class GoalEntryRow extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  MatchPlayerInfo? _findScorer() {
+    for (final player in participants) {
+      if (goal.scorerMatchPlayerId != null &&
+          player.matchPlayerId == goal.scorerMatchPlayerId) {
+        return player;
+      }
+      if (goal.scorerPlayerId != null &&
+          player.playerId == goal.scorerPlayerId) {
+        return player;
+      }
+    }
+    return null;
   }
 }

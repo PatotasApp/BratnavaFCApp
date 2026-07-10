@@ -367,7 +367,7 @@ class _MatchBanner extends StatelessWidget {
                 ),
                 if (s.hasMatch)
                   Text(
-                    '${s.placeName ?? "—"} · ${s.playedAt != null ? fmt.format(s.playedAt!.toLocal()) : "—"}',
+                    '${s.placeName ?? "—"} · ${s.playedAt != null ? fmt.format(s.playedAt!) : "—"}',
                     style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
@@ -823,7 +823,7 @@ class _MatchSelector extends StatelessWidget {
                 children: List.generate(headers.length, (i) {
                   final h = headers[i];
                   final active = i == safeSelected;
-                  final date = h.playedAt.toLocal();
+                  final date = h.playedAt;
                   return GestureDetector(
                     onTap: () => onSelect(i),
                     child: AnimatedContainer(

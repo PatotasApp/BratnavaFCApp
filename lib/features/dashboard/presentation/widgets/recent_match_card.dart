@@ -10,7 +10,7 @@ import '../../domain/entities/recent_match.dart';
 
 class RecentMatchCard extends ConsumerWidget {
   final RecentMatch match;
-  final String      groupId;
+  final String groupId;
 
   const RecentMatchCard({
     super.key,
@@ -21,47 +21,63 @@ class RecentMatchCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final d      = match.playedAt.toLocal();
+    final d = match.playedAt;
 
-    final month = DateFormat('MMM', 'pt_BR').format(d).toUpperCase().replaceAll('.', '');
-    final day   = DateFormat('dd').format(d);
-    final time  = DateFormat('HH:mm').format(d);
+    final month =
+        DateFormat('MMM', 'pt_BR').format(d).toUpperCase().replaceAll('.', '');
+    final day = DateFormat('dd').format(d);
+    final time = DateFormat('HH:mm').format(d);
 
-    final myHex  = match.myTeamColor?.hexValue;
+    final myHex = match.myTeamColor?.hexValue;
     final myName = match.myTeamColor?.name;
     const hasScore = true; // sempre mostra
 
-    final (outcomeLabel, outcomeFg, outcomeBg, outcomeBorder) = switch (match.outcome) {
-      MatchOutcome.win  => ('Vitória', AppColors.emerald700, AppColors.emerald50,  const Color(0xFFA7F3D0)),
-      MatchOutcome.draw => ('Empate',  AppColors.amber500,   AppColors.amber50,    AppColors.amber200),
-      MatchOutcome.loss => ('Derrota', AppColors.rose600,    AppColors.rose50,     const Color(0xFFFFCDD2)),
+    final (outcomeLabel, outcomeFg, outcomeBg, outcomeBorder) =
+        switch (match.outcome) {
+      MatchOutcome.win => (
+          'Vitória',
+          AppColors.emerald700,
+          AppColors.emerald50,
+          const Color(0xFFA7F3D0)
+        ),
+      MatchOutcome.draw => (
+          'Empate',
+          AppColors.amber500,
+          AppColors.amber50,
+          AppColors.amber200
+        ),
+      MatchOutcome.loss => (
+          'Derrota',
+          AppColors.rose600,
+          AppColors.rose50,
+          const Color(0xFFFFCDD2)
+        ),
     };
 
     final borderColor = isDark ? AppColors.slate700 : AppColors.slate200;
 
     // Ícones da patota (com fallback para defaults enquanto carrega)
     final settings = ref.watch(groupSettingsProvider(groupId)).valueOrNull;
-    final icons    = GroupIcons.from(settings);
+    final icons = GroupIcons.from(settings);
 
-    final account    = ref.watch(accountStoreProvider).activeAccount;
-    final isGroupAdm = account != null &&
-        (account.isAdmin || account.isGroupAdmin(groupId));
+    final account = ref.watch(accountStoreProvider).activeAccount;
+    final isGroupAdm =
+        account != null && (account.isAdmin || account.isGroupAdmin(groupId));
     final canSeeStats = isGroupAdm || (settings?.showPlayerStats ?? false);
 
     return GestureDetector(
       onTap: () => context.push('/app/history/$groupId/${match.matchId}'),
       child: Container(
         decoration: BoxDecoration(
-          color:        isDark ? AppColors.slate900 : Colors.white,
+          color: isDark ? AppColors.slate900 : Colors.white,
           borderRadius: BorderRadius.circular(14),
-          border:       Border.all(color: borderColor),
+          border: Border.all(color: borderColor),
         ),
         clipBehavior: Clip.antiAlias,
         child: IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-
               // ── Faixa lateral (slate neutro — igual ao site) ─────────────
               Container(
                 width: 4,
@@ -70,9 +86,12 @@ class RecentMatchCard extends ConsumerWidget {
 
               // ── Caixa de data ─────────────────────────────────────────────
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: isDark ? AppColors.slate800.withValues(alpha: .5) : AppColors.slate50,
+                  color: isDark
+                      ? AppColors.slate800.withValues(alpha: .5)
+                      : AppColors.slate50,
                   border: Border(
                     right: BorderSide(
                       color: isDark ? AppColors.slate800 : AppColors.slate100,
@@ -85,8 +104,8 @@ class RecentMatchCard extends ConsumerWidget {
                     Text(
                       month,
                       style: TextStyle(
-                        fontSize:      10,
-                        fontWeight:    FontWeight.w600,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
                         letterSpacing: 1.2,
                         color: isDark ? AppColors.slate500 : AppColors.slate400,
                       ),
@@ -94,9 +113,9 @@ class RecentMatchCard extends ConsumerWidget {
                     Text(
                       day,
                       style: TextStyle(
-                        fontSize:   21,
+                        fontSize: 21,
                         fontWeight: FontWeight.w800,
-                        height:     1.0,
+                        height: 1.0,
                         color: isDark ? AppColors.slate100 : AppColors.slate800,
                       ),
                     ),
@@ -114,19 +133,18 @@ class RecentMatchCard extends ConsumerWidget {
               // ── Info + placar ─────────────────────────────────────────────
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-
                       // Badges: cor do time + resultado + gols + assistências
                       Expanded(
                         child: Wrap(
-                          spacing:   6,
+                          spacing: 6,
                           runSpacing: 4,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-
                             // Cor do time do jogador
                             if (myHex != null || myName != null)
                               Row(
@@ -138,49 +156,57 @@ class RecentMatchCard extends ConsumerWidget {
                                     Text(
                                       myName,
                                       style: TextStyle(
-                                        fontSize:   10,
+                                        fontSize: 10,
                                         fontWeight: FontWeight.w500,
-                                        color: isDark ? AppColors.slate400 : AppColors.slate500,
+                                        color: isDark
+                                            ? AppColors.slate400
+                                            : AppColors.slate500,
                                       ),
                                     ),
                                 ],
                               )
                             // Sem time definido: mostra os dois times vs
-                            else if (match.myTeamColor != null || match.opponentColor != null)
+                            else if (match.myTeamColor != null ||
+                                match.opponentColor != null)
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   if (match.myTeamColor != null)
                                     _ColorDot(hex: match.myTeamColor!.hexValue),
                                   Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 3),
                                     child: Text(
                                       'vs',
                                       style: TextStyle(
-                                        fontSize:   10,
+                                        fontSize: 10,
                                         fontWeight: FontWeight.w700,
-                                        color: isDark ? AppColors.slate600 : AppColors.slate300,
+                                        color: isDark
+                                            ? AppColors.slate600
+                                            : AppColors.slate300,
                                       ),
                                     ),
                                   ),
                                   if (match.opponentColor != null)
-                                    _ColorDot(hex: match.opponentColor!.hexValue),
+                                    _ColorDot(
+                                        hex: match.opponentColor!.hexValue),
                                 ],
                               ),
 
                             // Badge resultado
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 2),
                               decoration: BoxDecoration(
-                                color:        outcomeBg,
+                                color: outcomeBg,
                                 borderRadius: BorderRadius.circular(20),
-                                border:       Border.all(color: outcomeBorder),
+                                border: Border.all(color: outcomeBorder),
                               ),
                               child: Text(
                                 outcomeLabel,
                                 style: TextStyle(
-                                  color:      outcomeFg,
-                                  fontSize:   10,
+                                  color: outcomeFg,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
@@ -189,24 +215,25 @@ class RecentMatchCard extends ConsumerWidget {
                             // Badge MVP (usa ícone configurado pelo grupo)
                             if (match.isMvp)
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 7, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color:        const Color(0xFFFFFBEB),
+                                  color: const Color(0xFFFFFBEB),
                                   borderRadius: BorderRadius.circular(20),
-                                  border:       Border.all(color: AppColors.amber200),
+                                  border: Border.all(color: AppColors.amber200),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    renderGroupIcon(icons.mvp, size: 10,
-                                        color: AppColors.amber500),
+                                    renderGroupIcon(icons.mvp,
+                                        size: 10, color: AppColors.amber500),
                                     const SizedBox(width: 3),
                                     const Text('MVP',
-                                      style: TextStyle(
-                                        fontSize:   10,
-                                        fontWeight: FontWeight.w600,
-                                        color:      AppColors.amber500,
-                                      )),
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.amber500,
+                                        )),
                                   ],
                                 ),
                               ),
@@ -218,16 +245,20 @@ class RecentMatchCard extends ConsumerWidget {
                                 children: [
                                   renderGroupIcon(
                                     icons.goal,
-                                    size:  10,
-                                    color: isDark ? AppColors.slate400 : AppColors.slate500,
+                                    size: 10,
+                                    color: isDark
+                                        ? AppColors.slate400
+                                        : AppColors.slate500,
                                   ),
                                   const SizedBox(width: 3),
                                   Text(
                                     '${match.goals}',
                                     style: TextStyle(
-                                      fontSize:   10,
+                                      fontSize: 10,
                                       fontWeight: FontWeight.w500,
-                                      color: isDark ? AppColors.slate400 : AppColors.slate500,
+                                      color: isDark
+                                          ? AppColors.slate400
+                                          : AppColors.slate500,
                                     ),
                                   ),
                                 ],
@@ -240,16 +271,20 @@ class RecentMatchCard extends ConsumerWidget {
                                 children: [
                                   renderGroupIcon(
                                     icons.assist,
-                                    size:  10,
-                                    color: isDark ? AppColors.slate400 : AppColors.slate500,
+                                    size: 10,
+                                    color: isDark
+                                        ? AppColors.slate400
+                                        : AppColors.slate500,
                                   ),
                                   const SizedBox(width: 3),
                                   Text(
                                     '${match.assists}',
                                     style: TextStyle(
-                                      fontSize:   10,
+                                      fontSize: 10,
                                       fontWeight: FontWeight.w500,
-                                      color: isDark ? AppColors.slate400 : AppColors.slate500,
+                                      color: isDark
+                                          ? AppColors.slate400
+                                          : AppColors.slate500,
                                     ),
                                   ),
                                 ],
@@ -263,9 +298,12 @@ class RecentMatchCard extends ConsumerWidget {
                       // ── Placar ────────────────────────────────────────────
                       if (hasScore)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color:        isDark ? AppColors.slate700 : AppColors.slate900,
+                            color: isDark
+                                ? AppColors.slate700
+                                : AppColors.slate900,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Row(
@@ -274,8 +312,8 @@ class RecentMatchCard extends ConsumerWidget {
                               Text(
                                 '${match.myTeamGoals}',
                                 style: const TextStyle(
-                                  color:      Colors.white,
-                                  fontSize:   13,
+                                  color: Colors.white,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -284,7 +322,7 @@ class RecentMatchCard extends ConsumerWidget {
                                 child: Text(
                                   '×',
                                   style: TextStyle(
-                                    color:    AppColors.slate500,
+                                    color: AppColors.slate500,
                                     fontSize: 11,
                                   ),
                                 ),
@@ -292,8 +330,8 @@ class RecentMatchCard extends ConsumerWidget {
                               Text(
                                 '${match.opponentGoals}',
                                 style: const TextStyle(
-                                  color:      Colors.white,
-                                  fontSize:   13,
+                                  color: Colors.white,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -321,13 +359,17 @@ class _ColorDot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Color? color;
-    try { color = Color(int.parse('0xFF${hex.replaceAll('#', '')}')); }
-    catch (_) { color = null; }
+    try {
+      color = Color(int.parse('0xFF${hex.replaceAll('#', '')}'));
+    } catch (_) {
+      color = null;
+    }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     if (color == null) {
       return Container(
-        width: 13, height: 13,
+        width: 13,
+        height: 13,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -336,12 +378,14 @@ class _ColorDot extends StatelessWidget {
     }
     final isWhite = hex.toLowerCase().replaceAll('#', '') == 'ffffff';
     return Container(
-      width: 13, height: 13,
+      width: 13,
+      height: 13,
       decoration: BoxDecoration(
-        shape:  BoxShape.circle,
-        color:  color,
+        shape: BoxShape.circle,
+        color: color,
         border: Border.all(
-          color: isWhite ? AppColors.slate300 : Colors.white.withValues(alpha: .3),
+          color:
+              isWhite ? AppColors.slate300 : Colors.white.withValues(alpha: .3),
           width: 1,
         ),
       ),

@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../domain/entities/match_models.dart';
 
@@ -8,8 +8,13 @@ class MatchRemoteDataSource {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  dynamic _unwrap(dynamic data) =>
-      (data is Map) ? (data.containsKey('data') ? data['data'] : data.containsKey('Data') ? data['Data'] : data) : data;
+  dynamic _unwrap(dynamic data) => (data is Map)
+      ? (data.containsKey('data')
+          ? data['data']
+          : data.containsKey('Data')
+              ? data['Data']
+              : data)
+      : data;
 
   List<dynamic> _unwrapList(dynamic data) {
     final d = _unwrap(data);
@@ -63,34 +68,41 @@ class MatchRemoteDataSource {
   }
 
   /// Retorna o detalhe completo de uma partida (jogadores, times, gols, MVP).
-  Future<Map<String, dynamic>?> fetchMatchDetails(String groupId, String matchId) async {
+  Future<Map<String, dynamic>?> fetchMatchDetails(
+      String groupId, String matchId) async {
     final res = await _dio.get(ApiConstants.matchDetails(groupId, matchId));
     return _unwrapMap(res.data);
   }
 
   // ── Loaders de step ───────────────────────────────────────────────────────
 
-  Future<Map<String, dynamic>?> fetchHeader(String groupId, String matchId) async {
+  Future<Map<String, dynamic>?> fetchHeader(
+      String groupId, String matchId) async {
     final res = await _dio.get(ApiConstants.matchHeader(groupId, matchId));
     return _unwrapMap(res.data);
   }
 
-  Future<Map<String, dynamic>?> fetchAcceptation(String groupId, String matchId) async {
+  Future<Map<String, dynamic>?> fetchAcceptation(
+      String groupId, String matchId) async {
     final res = await _dio.get(ApiConstants.matchAcceptation(groupId, matchId));
     return _unwrapMap(res.data);
   }
 
-  Future<Map<String, dynamic>?> fetchAcceptationSummary(String groupId, String matchId) async {
-    final res = await _dio.get(ApiConstants.matchAcceptationSummary(groupId, matchId));
+  Future<Map<String, dynamic>?> fetchAcceptationSummary(
+      String groupId, String matchId) async {
+    final res =
+        await _dio.get(ApiConstants.matchAcceptationSummary(groupId, matchId));
     return _unwrapMap(res.data);
   }
 
-  Future<Map<String, dynamic>?> fetchMatchmaking(String groupId, String matchId) async {
+  Future<Map<String, dynamic>?> fetchMatchmaking(
+      String groupId, String matchId) async {
     final res = await _dio.get(ApiConstants.matchMatchmaking(groupId, matchId));
     return _unwrapMap(res.data);
   }
 
-  Future<Map<String, dynamic>?> fetchPostgame(String groupId, String matchId) async {
+  Future<Map<String, dynamic>?> fetchPostgame(
+      String groupId, String matchId) async {
     final res = await _dio.get(ApiConstants.matchPostgame(groupId, matchId));
     return _unwrapMap(res.data);
   }
@@ -110,23 +122,26 @@ class MatchRemoteDataSource {
     await _dio.delete(ApiConstants.matchDelete(groupId, matchId));
   }
 
-  Future<void> createMatch(String groupId, String placeName, DateTime playedAt) async {
+  Future<void> createMatch(
+      String groupId, String placeName, DateTime playedAt) async {
     await _dio.post(ApiConstants.matchCreate(groupId), data: {
       'placeName': placeName,
-      'playedAt': playedAt.toUtc().toIso8601String(),
+      'playedAt': playedAt.toIso8601String(),
     });
   }
 
   // ── Aceitação ─────────────────────────────────────────────────────────────
 
-  Future<void> acceptInvite(String groupId, String matchId, String playerId) async {
+  Future<void> acceptInvite(
+      String groupId, String matchId, String playerId) async {
     await _dio.patch(
       ApiConstants.matchInviteAccept(groupId, matchId),
       data: {'playerId': playerId},
     );
   }
 
-  Future<void> rejectInvite(String groupId, String matchId, String playerId) async {
+  Future<void> rejectInvite(
+      String groupId, String matchId, String playerId) async {
     await _dio.patch(
       ApiConstants.matchInviteReject(groupId, matchId),
       data: {'playerId': playerId},
@@ -138,7 +153,11 @@ class MatchRemoteDataSource {
   }
 
   Future<void> addGuest(
-    String groupId, String matchId, String name, bool isGoalkeeper, int? starRating,
+    String groupId,
+    String matchId,
+    String name,
+    bool isGoalkeeper,
+    int? starRating,
   ) async {
     await _dio.post(ApiConstants.matchGuest(groupId, matchId), data: {
       'name': name,
@@ -156,7 +175,9 @@ class MatchRemoteDataSource {
     required bool includeGoalkeepers,
   }) async {
     final eligible = players
-        .where((p) => p.playerId.isNotEmpty && p.inviteResponse == InviteResponse.accepted)
+        .where((p) =>
+            p.playerId.isNotEmpty &&
+            p.inviteResponse == InviteResponse.accepted)
         .toList();
 
     // Mapa id → info para enriquecer a resposta (backend não devolve nomes)
@@ -167,12 +188,16 @@ class MatchRemoteDataSource {
 
     final dto = {
       'players': eligible
-          .map((p) => {'id': p.playerId, 'name': p.playerName, 'isGoalkeeper': p.isGoalkeeper})
+          .map((p) => {
+                'id': p.playerId,
+                'name': p.playerName,
+                'isGoalkeeper': p.isGoalkeeper
+              })
           .toList(),
-      'strategyType':       strategyType,
-      'playersPerTeam':     playersPerTeam,
+      'strategyType': strategyType,
+      'playersPerTeam': playersPerTeam,
       'includeGoalkeepers': includeGoalkeepers,
-      'optionsCount':       3,
+      'optionsCount': 3,
     };
 
     final res = await _dio.post(ApiConstants.teamGenGenerate, data: dto);
@@ -181,34 +206,38 @@ class MatchRemoteDataSource {
 
     // Enriquece cada jogador retornado com o nome do mapa local
     Map<String, dynamic> enrichPlayer(Map<String, dynamic> j) {
-      final id   = (j['playerId'] ?? j['id'] ?? '').toString();
+      final id = (j['playerId'] ?? j['id'] ?? '').toString();
       final info = nameMap[id];
       return {
         ...j,
-        if (info != null) 'name':         info.name,
-        if (info != null) 'isGoalkeeper':  info.isGoalkeeper,
+        if (info != null) 'name': info.name,
+        if (info != null) 'isGoalkeeper': info.isGoalkeeper,
       };
     }
 
     Map<String, dynamic> enrichOption(Map<String, dynamic> opt) {
-      List enrichList(dynamic v) =>
-          (v as List? ?? []).map((e) => enrichPlayer(e as Map<String, dynamic>)).toList();
+      List enrichList(dynamic v) => (v as List? ?? [])
+          .map((e) => enrichPlayer(e as Map<String, dynamic>))
+          .toList();
       return {
         ...opt,
-        'teamA':      enrichList(opt['teamA']      ?? opt['TeamA']),
-        'teamB':      enrichList(opt['teamB']      ?? opt['TeamB']),
+        'teamA': enrichList(opt['teamA'] ?? opt['TeamA']),
+        'teamB': enrichList(opt['teamB'] ?? opt['TeamB']),
         'unassigned': enrichList(opt['unassigned'] ?? opt['Unassigned']),
       };
     }
 
     return (list as List)
-        .map((e) => TeamGenOption.fromJson(enrichOption(e as Map<String, dynamic>)))
+        .map((e) =>
+            TeamGenOption.fromJson(enrichOption(e as Map<String, dynamic>)))
         .toList();
   }
 
   Future<void> assignTeams(
-    String groupId, String matchId,
-    List<String> teamAIds, List<String> teamBIds,
+    String groupId,
+    String matchId,
+    List<String> teamAIds,
+    List<String> teamBIds,
   ) async {
     await _dio.put(ApiConstants.matchTeams(groupId, matchId), data: {
       'TeamAMatchPlayerIds': teamAIds,
@@ -217,9 +246,13 @@ class MatchRemoteDataSource {
   }
 
   Future<void> setColors(
-    String groupId, String matchId, String teamAColorId, String teamBColorId,
+    String groupId,
+    String matchId,
+    String teamAColorId,
+    String teamBColorId,
   ) async {
-    final res = await _dio.patch(ApiConstants.matchColors(groupId, matchId), data: {
+    final res =
+        await _dio.patch(ApiConstants.matchColors(groupId, matchId), data: {
       'teamAColorId': teamAColorId,
       'teamBColorId': teamBColorId,
     });
@@ -227,16 +260,22 @@ class MatchRemoteDataSource {
   }
 
   Future<void> swapPlayers(
-    String groupId, String matchId, String playerAId, String playerBId,
+    String groupId,
+    String matchId,
+    String playerAId,
+    String playerBId,
   ) async {
-    await _dio.put(ApiConstants.matchSwap(groupId, matchId), data: {
+    await _dio.post(ApiConstants.matchSwap(groupId, matchId), data: {
       'playerAId': playerAId,
       'playerBId': playerBId,
     });
   }
 
   Future<void> setPlayerRole(
-    String groupId, String matchId, String matchPlayerId, bool isGoalkeeper,
+    String groupId,
+    String matchId,
+    String matchPlayerId,
+    bool isGoalkeeper,
   ) async {
     await _dio.put(
       ApiConstants.matchPlayerRole(groupId, matchId, matchPlayerId),
@@ -269,7 +308,8 @@ class MatchRemoteDataSource {
   // ── Pós-jogo ──────────────────────────────────────────────────────────────
 
   Future<void> addGoal(
-    String groupId, String matchId, {
+    String groupId,
+    String matchId, {
     required String scorerPlayerId,
     String? assistPlayerId,
     required String time,
@@ -278,8 +318,8 @@ class MatchRemoteDataSource {
     await _dio.post(ApiConstants.matchGoals(groupId, matchId), data: {
       'scorerPlayerId': scorerPlayerId,
       if (assistPlayerId?.isNotEmpty == true) 'assistPlayerId': assistPlayerId,
-      'time':       time,
-      'isOwnGoal':  isOwnGoal,
+      'time': time,
+      'isOwnGoal': isOwnGoal,
     });
   }
 
@@ -288,13 +328,20 @@ class MatchRemoteDataSource {
   }
 
   Future<void> updateGoal(
-    String groupId, String matchId, String goalId, Map<String, dynamic> data,
+    String groupId,
+    String matchId,
+    String goalId,
+    Map<String, dynamic> data,
   ) async {
-    await _dio.put(ApiConstants.matchGoalById(groupId, matchId, goalId), data: data);
+    await _dio.put(ApiConstants.matchGoalById(groupId, matchId, goalId),
+        data: data);
   }
 
   Future<void> setScore(
-    String groupId, String matchId, int teamAGoals, int teamBGoals,
+    String groupId,
+    String matchId,
+    int teamAGoals,
+    int teamBGoals,
   ) async {
     await _dio.patch(ApiConstants.matchScore(groupId, matchId), data: {
       'teamAGoals': teamAGoals,
@@ -303,7 +350,10 @@ class MatchRemoteDataSource {
   }
 
   Future<void> voteMvp(
-    String groupId, String matchId, String voterMpId, String votedMpId,
+    String groupId,
+    String matchId,
+    String voterMpId,
+    String votedMpId,
   ) async {
     await _dio.post(ApiConstants.matchVote(groupId, matchId), data: {
       'voterPlayerId': voterMpId,
@@ -314,8 +364,10 @@ class MatchRemoteDataSource {
   // ── Extras ────────────────────────────────────────────────────────────────
 
   /// Bulk goals — POST /api/Matches/group/{groupId}/{matchId}/goals/bulk
-  Future<void> addBulkGoals(String groupId, String matchId, List<Map<String, dynamic>> goals) async {
-    await _dio.post(ApiConstants.matchBulkGoals(groupId, matchId), data: {'goals': goals});
+  Future<void> addBulkGoals(
+      String groupId, String matchId, List<Map<String, dynamic>> goals) async {
+    await _dio.post(ApiConstants.matchBulkGoals(groupId, matchId),
+        data: {'goals': goals});
   }
 
   /// Reapply MVP — POST /api/Matches/group/{groupId}/{matchId}/reapply-mvp
@@ -324,12 +376,15 @@ class MatchRemoteDataSource {
   }
 
   /// Publish match event — POST /api/Matches/group/{groupId}/{matchId}/events
-  Future<void> publishMatchEvent(String groupId, String matchId, Map<String, dynamic> eventData) async {
-    await _dio.post(ApiConstants.matchPublishEvent(groupId, matchId), data: eventData);
+  Future<void> publishMatchEvent(
+      String groupId, String matchId, Map<String, dynamic> eventData) async {
+    await _dio.post(ApiConstants.matchPublishEvent(groupId, matchId),
+        data: eventData);
   }
 
   /// Match replays — GET /api/Matches/group/{groupId}/{matchId}/replays
-  Future<List<Map<String, dynamic>>> fetchMatchReplays(String groupId, String matchId) async {
+  Future<List<Map<String, dynamic>>> fetchMatchReplays(
+      String groupId, String matchId) async {
     final res = await _dio.get(ApiConstants.matchReplays(groupId, matchId));
     final d = _unwrap(res.data);
     return (d is List ? d : []).cast<Map<String, dynamic>>();
@@ -337,7 +392,8 @@ class MatchRemoteDataSource {
 
   /// Generate match card — POST /api/MatchCard/group/{groupId}/generate
   /// Returns base64-encoded image string
-  Future<String?> generateMatchCard(String groupId, Map<String, dynamic> dto) async {
+  Future<String?> generateMatchCard(
+      String groupId, Map<String, dynamic> dto) async {
     final res = await _dio.post(ApiConstants.matchCard(groupId), data: dto);
     final d = _unwrap(res.data);
     if (d is String) return d;
@@ -349,8 +405,8 @@ class MatchRemoteDataSource {
 
   /// Marca ou desmarca um jogador como "não foi jogar".
   /// [didNotPlay] = true → ausente; false → desfaz.
-  Future<void> setNoShow(
-      String groupId, String matchId, String matchPlayerId, bool didNotPlay) async {
+  Future<void> setNoShow(String groupId, String matchId, String matchPlayerId,
+      bool didNotPlay) async {
     await _dio.patch(
       ApiConstants.matchPlayerNoShow(groupId, matchId, matchPlayerId),
       data: {'didNotPlay': didNotPlay},

@@ -35,7 +35,7 @@ class _CurrentMatchCardState extends State<CurrentMatchCard> {
   Widget build(BuildContext context) {
     final match = widget.match;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final dates = _formatDate(match.playedAt.toLocal());
+    final dates = _formatDate(match.playedAt);
 
     final found =
         widget.playerId.isNotEmpty ? _findPlayer(match, widget.playerId) : null;

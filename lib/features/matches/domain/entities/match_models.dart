@@ -226,8 +226,11 @@ class MatchPlayerInfo {
         matchPlayerId:
             (j['matchPlayerId'] ?? j['MatchPlayerId'] ?? '').toString(),
         playerId: (j['playerId'] ?? j['PlayerId'] ?? '').toString(),
-        playerName:
-            j['playerName'] as String? ?? j['PlayerName'] as String? ?? '',
+        playerName: j['playerName'] as String? ??
+            j['PlayerName'] as String? ??
+            j['name'] as String? ??
+            j['Name'] as String? ??
+            '',
         isGoalkeeper:
             j['isGoalkeeper'] as bool? ?? j['IsGoalkeeper'] as bool? ?? false,
         isGuest: j['isGuest'] as bool? ?? j['IsGuest'] as bool? ?? false,

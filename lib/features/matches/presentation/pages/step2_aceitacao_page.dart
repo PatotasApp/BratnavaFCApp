@@ -188,7 +188,7 @@ class _AcceptanceSummaryCard extends StatelessWidget {
         : 0;
     final dateText = playedAt == null
         ? null
-        : DateFormat('dd/MM/yyyy, HH:mm', 'pt_BR').format(playedAt!.toLocal());
+        : DateFormat('dd/MM/yyyy, HH:mm', 'pt_BR').format(playedAt!);
     final place = placeName?.trim();
 
     return Container(

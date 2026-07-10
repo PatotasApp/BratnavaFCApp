@@ -63,7 +63,7 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
   DateTime _matchDate(List<ReplayClip> clips) {
     DateTime? latest;
     for (final clip in clips) {
-      final parsed = DateTime.tryParse(clip.matchDate);
+      final parsed = AppDateUtils.parse(clip.matchDate);
       if (parsed == null) continue;
       if (latest == null || parsed.isAfter(latest)) latest = parsed;
     }
