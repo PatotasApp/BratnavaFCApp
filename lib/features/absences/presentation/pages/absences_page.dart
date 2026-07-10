@@ -1,19 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
+import '../../../auth/presentation/providers/account_store.dart';
+import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/datasources/absences_remote_datasource.dart';
 import '../../domain/entities/absence.dart';
 import '../providers/absences_provider.dart';
 import '../widgets/absence_form_sheet.dart';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+const _pageSize = 20;
+const _monthLabels = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+];
 
 String _formatDate(String d) {
   final parts = d.split('-');
   if (parts.length != 3) return d;
   return '${parts[2]}/${parts[1]}/${parts[0]}';
+}
+
+String _monthLabel(String iso) {
+  final parts = iso.split('-');
+  if (parts.length < 2) return iso;
+  final month = int.tryParse(parts[1]) ?? 1;
+  final index = (month - 1).clamp(0, 11);
+  return '${_monthLabels[index]} ${parts[0]}';
+}
+
+String _todayIso() {
+  final d = DateTime.now();
+  return '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
 }
 
 IconData _absenceIcon(int type) {
@@ -29,8 +61,6 @@ IconData _absenceIcon(int type) {
   }
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
-
 class AbsencesPage extends ConsumerStatefulWidget {
   const AbsencesPage({super.key});
 
@@ -39,18 +69,117 @@ class AbsencesPage extends ConsumerStatefulWidget {
 }
 
 class _AbsencesPageState extends ConsumerState<AbsencesPage> {
-  static const _pageSizeOptions = [5, 10, 20, 50];
-  int _page = 1;
-  int _pageSize = 5;
+  PagedAbsences _upcoming = PagedAbsences.empty;
+  PagedAbsences _past = PagedAbsences.empty;
+  String? _loadedGroupId;
+  bool _loading = false;
+  bool _loadingMore = false;
+  bool _loadingPast = false;
+  bool _pastLoaded = false;
+  bool _showPast = true;
+  String? _error;
 
   AbsencesRemoteDataSource get _ds => ref.read(absencesDsProvider);
 
-  void _refresh() {
-    setState(() => _page = 1);
-    ref.invalidate(absencesProvider);
+  Future<void> _loadForGroup(String groupId) async {
+    setState(() {
+      _loadedGroupId = groupId;
+      _loading = true;
+      _error = null;
+      _upcoming = PagedAbsences.empty;
+      _past = PagedAbsences.empty;
+      _pastLoaded = false;
+    });
+
+    try {
+      final upcoming = await _ds.fetchByGroup(
+        groupId,
+        status: 'upcoming',
+        page: 1,
+        pageSize: _pageSize,
+      );
+      PagedAbsences past = PagedAbsences.empty;
+      if (_showPast) {
+        past = await _ds.fetchByGroup(
+          groupId,
+          status: 'past',
+          page: 1,
+          pageSize: _pageSize,
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        _upcoming = upcoming;
+        _past = past;
+        _pastLoaded = _showPast;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(
+          () => _error = extractDioError(e, 'Erro ao carregar ausências.'));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
-  Future<void> _openCreate() async {
+  Future<void> _refresh(String groupId) => _loadForGroup(groupId);
+
+  Future<void> _loadMoreUpcoming(String groupId) async {
+    if (_loadingMore || _upcoming.items.length >= _upcoming.total) return;
+    setState(() => _loadingMore = true);
+    try {
+      final next = await _ds.fetchByGroup(
+        groupId,
+        status: 'upcoming',
+        page: _upcoming.page + 1,
+        pageSize: _pageSize,
+      );
+      if (!mounted) return;
+      setState(() {
+        _upcoming = PagedAbsences(
+          items: [..._upcoming.items, ...next.items],
+          total: next.total,
+          page: next.page,
+        );
+      });
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  Future<void> _loadPast(String groupId, {bool append = false}) async {
+    if (_loadingPast) return;
+    setState(() => _loadingPast = true);
+    try {
+      final next = await _ds.fetchByGroup(
+        groupId,
+        status: 'past',
+        page: append ? _past.page + 1 : 1,
+        pageSize: _pageSize,
+      );
+      if (!mounted) return;
+      setState(() {
+        _past = append
+            ? PagedAbsences(
+                items: [..._past.items, ...next.items],
+                total: next.total,
+                page: next.page,
+              )
+            : next;
+        _pastLoaded = true;
+      });
+    } finally {
+      if (mounted) setState(() => _loadingPast = false);
+    }
+  }
+
+  Future<void> _togglePast(String groupId) async {
+    final next = !_showPast;
+    setState(() => _showPast = next);
+    if (next && !_pastLoaded) await _loadPast(groupId);
+  }
+
+  Future<void> _openCreate(String groupId) async {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -59,17 +188,18 @@ class _AbsencesPageState extends ConsumerState<AbsencesPage> {
         onSave: (dto) async {
           await _ds.create(dto);
           if (mounted) Navigator.of(context).pop();
-          _refresh();
+          await _refresh(groupId);
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Ausência cadastrada.')));
+              const SnackBar(content: Text('Ausência cadastrada.')),
+            );
           }
         },
       ),
     );
   }
 
-  Future<void> _openEdit(AbsenceDto absence) async {
+  Future<void> _openEdit(String groupId, AbsenceDto absence) async {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -79,111 +209,436 @@ class _AbsencesPageState extends ConsumerState<AbsencesPage> {
         onSave: (dto) async {
           await _ds.update(absence.id, dto);
           if (mounted) Navigator.of(context).pop();
-          _refresh();
+          await _refresh(groupId);
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Ausência atualizada.')));
+              const SnackBar(content: Text('Ausência atualizada.')),
+            );
           }
         },
       ),
     );
   }
 
-  Future<void> _delete(AbsenceDto absence) async {
+  Future<void> _delete(String groupId, AbsenceDto absence) async {
     final confirm = await showConfirmDialog(
       context: context,
-      title: 'Excluir ausencia',
-      message: 'Deseja excluir esta ausencia?',
+      title: 'Excluir ausência',
+      message:
+          'Deseja excluir esta ausência? Os convites recusados automaticamente por ela voltarão a ficar pendentes.',
       confirmLabel: 'Excluir',
       danger: true,
     );
     if (!confirm) return;
     try {
       await _ds.delete(absence.id);
-      _refresh();
+      await _refresh(groupId);
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Ausência removida.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ausência removida.')),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(extractDioError(e, 'Erro ao remover ausência.'))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(extractDioError(e, 'Erro ao remover ausência.'))),
+        );
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(absencesProvider);
+    final account = ref.watch(accountStoreProvider).activeAccount;
+    final activePlayer = ref.watch(activePlayerProvider);
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId ?? '';
+    final activePlayerId =
+        account?.activePlayerId ?? activePlayer?.playerId ?? '';
+
+    if (groupId.isNotEmpty && _loadedGroupId != groupId && !_loading) {
+      Future.microtask(() => _loadForGroup(groupId));
+    }
+
+    final today = _todayIso();
+    final ongoing = _upcoming.items
+        .where((a) => a.startDate.compareTo(today) <= 0)
+        .toList();
+    final upcoming =
+        _upcoming.items.where((a) => a.startDate.compareTo(today) > 0).toList();
+    final groupedUpcoming = _groupByMonth(upcoming);
 
     return Scaffold(
       body: RefreshIndicator(
-        onRefresh: () async => _refresh(),
+        onRefresh: groupId.isEmpty
+            ? () async {}
+            : () async {
+                await _refresh(groupId);
+              },
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            // ── Header ────────────────────────────────────────────────────
             SliverToBoxAdapter(
-              child: _Header(
-                loading: async.isLoading,
-                count: async.valueOrNull?.length,
-                onAddTap: _openCreate,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
+                child: _Header(
+                  loading: _loading,
+                  total: _upcoming.total,
+                  onAddTap: groupId.isEmpty ? null : () => _openCreate(groupId),
+                ),
               ),
             ),
-
-            // ── Content ───────────────────────────────────────────────────
-            async.when(
-              loading: () => const SliverToBoxAdapter(child: _SkeletonList()),
-              error: (e, _) => SliverToBoxAdapter(
-                  child: _ErrorState(message: extractDioError(e))),
-              data: (absences) {
-                if (absences.isEmpty) {
-                  return SliverToBoxAdapter(
-                      child: _EmptyState(onAddTap: _openCreate));
-                }
-                final totalPages =
-                    (absences.length / _pageSize).ceil().clamp(1, 999);
-                final safePage = _page.clamp(1, totalPages);
-                final start = (safePage - 1) * _pageSize;
-                final paged = absences.skip(start).take(_pageSize).toList();
-                return SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (_, i) {
-                      if (i == 0) {
-                        return _AbsencePagerHeader(
-                          pageSize: _pageSize,
-                          options: _pageSizeOptions,
-                          onChanged: (n) => setState(() {
-                            _pageSize = n;
-                            _page = 1;
-                          }),
-                        );
-                      }
-                      if (i == paged.length + 1) {
-                        return _AbsencePagerFooter(
-                          page: safePage,
-                          totalPages: totalPages,
-                          onPage: (p) => setState(() => _page = p),
-                        );
-                      }
-                      final absence = paged[i - 1];
-                      return Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                        child: _AbsenceCard(
-                          absence: absence,
-                          onEdit: () => _openEdit(absence),
-                          onDelete: () => _delete(absence),
+            if (groupId.isEmpty)
+              const SliverToBoxAdapter(
+                child: _InfoState(
+                    message: 'Selecione uma patota para ver ausências.'),
+              )
+            else if (_loading)
+              const SliverToBoxAdapter(child: _SkeletonList())
+            else if (_error != null)
+              SliverToBoxAdapter(child: _InfoState(message: _error!))
+            else
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_upcoming.items.isEmpty)
+                        const _EmptyState()
+                      else ...[
+                        if (ongoing.isNotEmpty) ...[
+                          _SectionTitle(
+                            label: 'Fora agora',
+                            count: ongoing.length,
+                            active: true,
+                          ),
+                          const SizedBox(height: 8),
+                          ...ongoing.map(
+                            (a) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: _AbsenceCard(
+                                absence: a,
+                                active: true,
+                                isSelf: a.playerId == activePlayerId,
+                                onEdit: () => _openEdit(groupId, a),
+                                onDelete: () => _delete(groupId, a),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        ...groupedUpcoming.map((group) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _SectionTitle(label: group.label),
+                                const SizedBox(height: 8),
+                                ...group.items.map(
+                                  (a) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: _AbsenceCard(
+                                      absence: a,
+                                      active: false,
+                                      isSelf: a.playerId == activePlayerId,
+                                      onEdit: () => _openEdit(groupId, a),
+                                      onDelete: () => _delete(groupId, a),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                        _LoadMoreButton(
+                          loaded: _upcoming.items.length,
+                          total: _upcoming.total,
+                          loading: _loadingMore,
+                          onTap: () => _loadMoreUpcoming(groupId),
                         ),
-                      );
-                    },
-                    childCount: paged.length + 2,
+                      ],
+                      const SizedBox(height: 4),
+                      _PastHeader(
+                        total: _pastLoaded ? _past.total : null,
+                        expanded: _showPast,
+                        loading: _loadingPast && !_pastLoaded,
+                        onTap: () => _togglePast(groupId),
+                      ),
+                      if (_showPast) ...[
+                        const SizedBox(height: 8),
+                        if (_loadingPast && !_pastLoaded)
+                          const _SkeletonList(compact: true)
+                        else if (_past.items.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 2),
+                            child: Text(
+                              'Nenhuma ausência encerrada.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.slate400,
+                              ),
+                            ),
+                          )
+                        else ...[
+                          Opacity(
+                            opacity: 0.62,
+                            child: Column(
+                              children: _past.items
+                                  .map(
+                                    (a) => Padding(
+                                      padding: const EdgeInsets.only(bottom: 8),
+                                      child: _AbsenceCard(
+                                        absence: a,
+                                        active: false,
+                                        isSelf: a.playerId == activePlayerId,
+                                        onEdit: () => _openEdit(groupId, a),
+                                        onDelete: () => _delete(groupId, a),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          ),
+                          _LoadMoreButton(
+                            loaded: _past.items.length,
+                            total: _past.total,
+                            loading: _loadingPast,
+                            onTap: () => _loadPast(groupId, append: true),
+                          ),
+                        ],
+                      ],
+                    ],
                   ),
-                );
-              },
-            ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
-            const SliverToBoxAdapter(child: SizedBox(height: 40)),
+  List<_AbsenceMonthGroup> _groupByMonth(List<AbsenceDto> absences) {
+    final groups = <_AbsenceMonthGroup>[];
+    for (final absence in absences) {
+      final label = _monthLabel(absence.startDate);
+      if (groups.isNotEmpty && groups.last.label == label) {
+        groups.last.items.add(absence);
+      } else {
+        groups.add(_AbsenceMonthGroup(label, [absence]));
+      }
+    }
+    return groups;
+  }
+}
+
+class _AbsenceMonthGroup {
+  final String label;
+  final List<AbsenceDto> items;
+  _AbsenceMonthGroup(this.label, this.items);
+}
+
+class _Header extends StatelessWidget {
+  final bool loading;
+  final int total;
+  final VoidCallback? onAddTap;
+
+  const _Header({
+    required this.loading,
+    required this.total,
+    required this.onAddTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final subtitle = loading
+        ? 'Carregando...'
+        : '$total ausência${total != 1 ? 's' : ''} ativa${total != 1 ? 's' : ''} ou futura${total != 1 ? 's' : ''}';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.slate900,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        children: [
+          Positioned.fill(child: CustomPaint(painter: _HeaderDotsPainter())),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withAlpha(20),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.white.withAlpha(36)),
+                      ),
+                      child: const Icon(
+                        Icons.event_busy_outlined,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Ausências',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle,
+                            style: const TextStyle(
+                              color: Colors.white60,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  onPressed: onAddTap,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Nova ausência'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppColors.slate900,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 11,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeaderDotsPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.white.withAlpha(12);
+    for (var x = 0.0; x < size.width; x += 22) {
+      for (var y = 0.0; y < size.height; y += 22) {
+        canvas.drawCircle(Offset(x, y), 1, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String label;
+  final int? count;
+  final bool active;
+
+  const _SectionTitle({
+    required this.label,
+    this.count,
+    this.active = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        if (active) ...[
+          Container(
+            width: 7,
+            height: 7,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.rose400,
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+        Text(
+          '${label.toUpperCase()}${count != null ? ' · $count' : ''}',
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.7,
+            color: AppColors.slate500,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PastHeader extends StatelessWidget {
+  final int? total;
+  final bool expanded;
+  final bool loading;
+  final VoidCallback onTap;
+
+  const _PastHeader({
+    required this.total,
+    required this.expanded,
+    required this.loading,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Text(
+              'ENCERRADAS${total != null ? ' · $total' : ''}',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.7,
+                color: AppColors.slate500,
+              ),
+            ),
+            const SizedBox(width: 4),
+            if (loading)
+              const SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 1.6),
+              )
+            else
+              Icon(
+                expanded
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.keyboard_arrow_down_rounded,
+                size: 16,
+                color: AppColors.slate400,
+              ),
           ],
         ),
       ),
@@ -191,306 +646,144 @@ class _AbsencesPageState extends ConsumerState<AbsencesPage> {
   }
 }
 
-class _AbsencePagerHeader extends StatelessWidget {
-  final int pageSize;
-  final List<int> options;
-  final ValueChanged<int> onChanged;
-
-  const _AbsencePagerHeader({
-    required this.pageSize,
-    required this.options,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Text('Por pagina',
-              style: TextStyle(
-                fontSize: 12,
-                color: isDark ? AppColors.slate400 : AppColors.slate500,
-              )),
-          const SizedBox(width: 8),
-          DropdownButton<int>(
-            value: pageSize,
-            isDense: true,
-            dropdownColor: isDark ? AppColors.slate800 : Colors.white,
-            items: options
-                .map((n) => DropdownMenuItem(value: n, child: Text('$n')))
-                .toList(),
-            onChanged: (n) {
-              if (n != null) onChanged(n);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AbsencePagerFooter extends StatelessWidget {
-  final int page;
-  final int totalPages;
-  final ValueChanged<int> onPage;
-
-  const _AbsencePagerFooter({
-    required this.page,
-    required this.totalPages,
-    required this.onPage,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    if (totalPages <= 1) return const SizedBox(height: 8);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-      child: Row(
-        children: [
-          TextButton.icon(
-            onPressed: page <= 1 ? null : () => onPage(page - 1),
-            icon: const Icon(Icons.chevron_left_rounded),
-            label: const Text('Anterior'),
-          ),
-          const Spacer(),
-          Text('Pagina $page de $totalPages',
-              style: TextStyle(
-                fontSize: 12,
-                color: isDark ? AppColors.slate400 : AppColors.slate500,
-              )),
-          const Spacer(),
-          TextButton.icon(
-            onPressed: page >= totalPages ? null : () => onPage(page + 1),
-            label: const Text('Proxima'),
-            icon: const Icon(Icons.chevron_right_rounded),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Header ────────────────────────────────────────────────────────────────────
-
-class _Header extends StatelessWidget {
-  final bool loading;
-  final int? count;
-  final VoidCallback onAddTap;
-
-  const _Header({
-    required this.loading,
-    required this.count,
-    required this.onAddTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final n = count ?? 0;
-    final subtitle = loading
-        ? 'Carregando...'
-        : '$n ausência${n != 1 ? 's' : ''} cadastrada${n != 1 ? 's' : ''}';
-
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-          child: Row(
-            children: [
-              // Icon box
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(25),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withAlpha(50)),
-                ),
-                child: const Icon(Icons.event_busy_outlined,
-                    size: 26, color: Colors.white),
-              ),
-              const SizedBox(width: 16),
-              // Title + subtitle
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Ausências',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    if (loading)
-                      const Row(children: [
-                        SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 1.8, color: Colors.white),
-                        ),
-                        SizedBox(width: 6),
-                        Text('Carregando...',
-                            style:
-                                TextStyle(color: Colors.white60, fontSize: 12)),
-                      ])
-                    else
-                      Text(subtitle,
-                          style: const TextStyle(
-                              color: Colors.white60, fontSize: 12)),
-                  ],
-                ),
-              ),
-              // Add button
-              TextButton.icon(
-                onPressed: onAddTap,
-                icon: const Icon(Icons.add, size: 15, color: Colors.white),
-                label: const Text('Nova ausência',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white)),
-                style: TextButton.styleFrom(
-                  backgroundColor: Colors.white.withAlpha(25),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: Colors.white.withAlpha(50))),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Absence card ──────────────────────────────────────────────────────────────
-
 class _AbsenceCard extends StatelessWidget {
   final AbsenceDto absence;
+  final bool active;
+  final bool isSelf;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _AbsenceCard({
     required this.absence,
+    required this.active,
+    required this.isSelf,
     required this.onEdit,
     required this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isMedical = absence.absenceType == 2;
-
     final dateLabel = absence.startDate == absence.endDate
         ? _formatDate(absence.startDate)
         : '${_formatDate(absence.startDate)} até ${_formatDate(absence.endDate)}';
+    final playerName = (absence.playerName?.trim().isNotEmpty ?? false)
+        ? absence.playerName!.trim()
+        : 'Você';
 
     return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate800 : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border:
-            Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: active ? AppColors.rose200 : AppColors.slate200,
+        ),
         boxShadow: [
           BoxShadow(
-            color: (isDark ? Colors.black : AppColors.slate200).withAlpha(80),
-            blurRadius: 4,
+            color: AppColors.slate200.withAlpha(80),
+            blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(children: [
-          // Icon
+      child: Row(
+        children: [
           Container(
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: isMedical
-                  ? AppColors.rose500.withAlpha(25)
-                  : (isDark ? AppColors.slate700 : AppColors.slate100),
+              color: isMedical ? AppColors.rose50 : AppColors.slate100,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
               _absenceIcon(absence.absenceType),
               size: 18,
-              color: isMedical
-                  ? AppColors.rose500
-                  : (isDark ? AppColors.slate400 : AppColors.slate500),
+              color: isMedical ? AppColors.rose500 : AppColors.slate500,
             ),
           ),
           const SizedBox(width: 12),
-
-          // Info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(absence.absenceTypeName,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white : AppColors.slate900,
-                    )),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        playerName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.slate900,
+                        ),
+                      ),
+                    ),
+                    if (isSelf) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.slate100,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          'você',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.slate500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
                 const SizedBox(height: 2),
-                Text(dateLabel,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? AppColors.slate400 : AppColors.slate500,
-                    )),
-                if (absence.description != null &&
-                    absence.description!.isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Text(absence.description!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isDark ? AppColors.slate400 : AppColors.slate500,
-                      )),
+                Text(
+                  '${absence.absenceTypeName} · $dateLabel',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.slate500,
+                  ),
+                ),
+                if ((absence.description ?? '').trim().isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    absence.description!.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.slate500,
+                    ),
+                  ),
                 ],
               ],
             ),
           ),
-
-          // Actions
-          Row(children: [
+          if (isSelf) ...[
+            const SizedBox(width: 8),
             _ActionButton(
               icon: Icons.edit_outlined,
               onTap: onEdit,
-              isDark: isDark,
-              isDelete: false,
+              danger: false,
             ),
             const SizedBox(width: 6),
             _ActionButton(
               icon: Icons.delete_outline,
               onTap: onDelete,
-              isDark: isDark,
-              isDelete: true,
+              danger: true,
             ),
-          ]),
-        ]),
+          ],
+        ],
       ),
     );
   }
@@ -499,188 +792,143 @@ class _AbsenceCard extends StatelessWidget {
 class _ActionButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
-  final bool isDark;
-  final bool isDelete;
+  final bool danger;
 
   const _ActionButton({
     required this.icon,
     required this.onTap,
-    required this.isDark,
-    required this.isDelete,
+    required this.danger,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
       child: Container(
         width: 32,
         height: 32,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isDelete
-                ? AppColors.rose500.withAlpha(100)
-                : (isDark ? AppColors.slate600 : AppColors.slate200),
+            color: danger ? AppColors.rose200 : AppColors.slate200,
           ),
         ),
         child: Icon(
           icon,
-          size: 14,
-          color: isDelete
-              ? AppColors.rose500
-              : (isDark ? AppColors.slate400 : AppColors.slate500),
+          size: 15,
+          color: danger ? AppColors.rose500 : AppColors.slate500,
         ),
       ),
     );
   }
 }
 
-// ── Empty state ───────────────────────────────────────────────────────────────
+class _LoadMoreButton extends StatelessWidget {
+  final int loaded;
+  final int total;
+  final bool loading;
+  final VoidCallback onTap;
 
-class _EmptyState extends StatelessWidget {
-  final VoidCallback onAddTap;
-  const _EmptyState({required this.onAddTap});
+  const _LoadMoreButton({
+    required this.loaded,
+    required this.total,
+    required this.loading,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (loaded >= total) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.slate800 : Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-              color: isDark ? AppColors.slate700 : AppColors.slate200),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.event_busy_outlined,
-                size: 40,
-                color: isDark ? AppColors.slate600 : AppColors.slate300),
-            const SizedBox(height: 12),
-            Text('Nenhuma ausência cadastrada.',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: isDark ? AppColors.slate400 : AppColors.slate500,
-                )),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: onAddTap,
-              icon: const Icon(Icons.add, size: 14),
-              label: const Text('Cadastrar ausência'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isDark ? Colors.white : AppColors.slate900,
-                foregroundColor: isDark ? AppColors.slate900 : Colors.white,
-              ),
-            ),
-          ],
-        ),
+      padding: const EdgeInsets.only(top: 4, bottom: 12),
+      child: OutlinedButton(
+        onPressed: loading ? null : onTap,
+        child: loading
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Text('Carregar mais ($loaded/$total)'),
       ),
     );
   }
 }
 
-// ── Error state ───────────────────────────────────────────────────────────────
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
 
-class _ErrorState extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 42, horizontal: 24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.slate200),
+      ),
+      child: const Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.event_busy_outlined,
+            size: 36,
+            color: AppColors.slate300,
+          ),
+          SizedBox(height: 12),
+          Text(
+            'Nenhuma ausência ativa ou futura.',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: AppColors.slate500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoState extends StatelessWidget {
   final String message;
-  const _ErrorState({required this.message});
+  const _InfoState({required this.message});
 
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.all(24),
         child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline_rounded,
-                  size: 40, color: AppColors.rose500),
-              const SizedBox(height: 10),
-              const Text('Erro ao carregar ausências',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w600, color: AppColors.slate400)),
-              const SizedBox(height: 6),
-              Text(message,
-                  style:
-                      const TextStyle(fontSize: 12, color: AppColors.slate500),
-                  textAlign: TextAlign.center,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis),
-            ],
+          child: Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 13, color: AppColors.slate500),
           ),
         ),
       );
 }
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
-
 class _SkeletonList extends StatelessWidget {
-  const _SkeletonList();
+  final bool compact;
+  const _SkeletonList({this.compact = false});
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(children: [
-        const SizedBox(height: 16),
-        for (var i = 0; i < 4; i++) ...[
-          _SkeletonCard(isDark: isDark),
-          const SizedBox(height: 8),
+      padding: EdgeInsets.fromLTRB(24, compact ? 0 : 16, 24, 0),
+      child: Column(
+        children: [
+          for (var i = 0; i < (compact ? 2 : 5); i++) ...[
+            Container(
+              height: 64,
+              decoration: BoxDecoration(
+                color: AppColors.slate100,
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
         ],
-      ]),
-    );
-  }
-}
-
-class _SkeletonCard extends StatefulWidget {
-  final bool isDark;
-  const _SkeletonCard({required this.isDark});
-  @override
-  State<_SkeletonCard> createState() => _SkeletonCardState();
-}
-
-class _SkeletonCardState extends State<_SkeletonCard>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-  late final Animation<double> _anim;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1100),
-    )..repeat(reverse: true);
-    _anim = Tween<double>(begin: 0.4, end: 0.9)
-        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final base = widget.isDark ? AppColors.slate800 : AppColors.slate100;
-    return AnimatedBuilder(
-      animation: _anim,
-      builder: (_, __) => Opacity(
-        opacity: _anim.value,
-        child: Container(
-          height: 68,
-          decoration: BoxDecoration(
-            color: base,
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
       ),
     );
   }

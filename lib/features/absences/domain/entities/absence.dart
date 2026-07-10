@@ -1,11 +1,13 @@
 class AbsenceDto {
-  final String  id;
-  final String  startDate;
-  final String  endDate;
-  final int     absenceType;
-  final String  absenceTypeName;
+  final String id;
+  final String startDate;
+  final String endDate;
+  final int absenceType;
+  final String absenceTypeName;
   final String? description;
-  final String  createdAt;
+  final String createdAt;
+  final String? playerId;
+  final String? playerName;
 
   const AbsenceDto({
     required this.id,
@@ -15,23 +17,31 @@ class AbsenceDto {
     required this.absenceTypeName,
     this.description,
     required this.createdAt,
+    this.playerId,
+    this.playerName,
   });
 
   factory AbsenceDto.fromJson(Map<String, dynamic> json) => AbsenceDto(
-    id:              json['id']              as String,
-    startDate:       json['startDate']       as String,
-    endDate:         json['endDate']         as String,
-    absenceType:     json['absenceType']     as int,
-    absenceTypeName: json['absenceTypeName'] as String,
-    description:     json['description']     as String?,
-    createdAt:       json['createdAt']       as String,
-  );
+        id: (json['id'] ?? json['Id']).toString(),
+        startDate: (json['startDate'] ?? json['StartDate']).toString(),
+        endDate: (json['endDate'] ?? json['EndDate']).toString(),
+        absenceType:
+            json['absenceType'] as int? ?? json['AbsenceType'] as int? ?? 0,
+        absenceTypeName:
+            (json['absenceTypeName'] ?? json['AbsenceTypeName'] ?? '')
+                .toString(),
+        description:
+            json['description'] as String? ?? json['Description'] as String?,
+        createdAt: (json['createdAt'] ?? json['CreatedAt'] ?? '').toString(),
+        playerId: (json['playerId'] ?? json['PlayerId'])?.toString(),
+        playerName: (json['playerName'] ?? json['PlayerName'])?.toString(),
+      );
 }
 
 class CreateAbsenceDto {
-  final String  startDate;
-  final String  endDate;
-  final int     absenceType;
+  final String startDate;
+  final String endDate;
+  final int absenceType;
   final String? description;
 
   const CreateAbsenceDto({
@@ -42,9 +52,40 @@ class CreateAbsenceDto {
   });
 
   Map<String, dynamic> toJson() => {
-    'startDate':   startDate,
-    'endDate':     endDate,
-    'absenceType': absenceType,
-    if (description != null && description!.isNotEmpty) 'description': description,
-  };
+        'startDate': startDate,
+        'endDate': endDate,
+        'absenceType': absenceType,
+        if (description != null && description!.isNotEmpty)
+          'description': description,
+      };
+}
+
+class PagedAbsences {
+  final List<AbsenceDto> items;
+  final int total;
+  final int page;
+
+  const PagedAbsences({
+    required this.items,
+    required this.total,
+    required this.page,
+  });
+
+  static const empty = PagedAbsences(items: [], total: 0, page: 1);
+
+  factory PagedAbsences.fromJson(dynamic node, {int fallbackPage = 1}) {
+    if (node is! Map) return PagedAbsences.empty;
+    final rawItems = node['items'] ?? node['Items'];
+    final items = rawItems is List
+        ? rawItems
+            .whereType<Map<String, dynamic>>()
+            .map(AbsenceDto.fromJson)
+            .toList()
+        : <AbsenceDto>[];
+    return PagedAbsences(
+      items: items,
+      total: node['total'] as int? ?? node['Total'] as int? ?? items.length,
+      page: node['page'] as int? ?? node['Page'] as int? ?? fallbackPage,
+    );
+  }
 }

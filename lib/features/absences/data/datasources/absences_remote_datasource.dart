@@ -22,6 +22,25 @@ class AbsencesRemoteDataSource {
         .toList();
   }
 
+  Future<PagedAbsences> fetchByGroup(
+    String groupId, {
+    required String status,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final res = await _dio.get(
+      ApiConstants.absencesByGroup(groupId),
+      queryParameters: {
+        'status': status,
+        'page': page,
+        'pageSize': pageSize,
+      },
+    );
+    final envelope = res.data as Map<String, dynamic>?;
+    final dataNode = envelope?['data'] ?? envelope?['Data'];
+    return PagedAbsences.fromJson(dataNode, fallbackPage: page);
+  }
+
   Future<AbsenceDto> create(CreateAbsenceDto dto) async {
     final res = await _dio.post(ApiConstants.absences, data: dto.toJson());
     _throwIfError(res.data);
