@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/realtime/realtime_provider.dart';
 import '../../../auth/domain/entities/account.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
@@ -93,6 +94,124 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
         .read(matchNotifierProvider.notifier)
         .createMatch(placeName, playedAt);
     if (mounted) setState(() => _creatingNew = false);
+  }
+
+  Future<void> _editCurrentMatch(MatchState s) async {
+    final matchId = s.matchId;
+    final currentDate = s.playedAt;
+    if (matchId == null || matchId.isEmpty || currentDate == null) return;
+
+    final placeCtrl = TextEditingController(text: s.placeName ?? '');
+    DateTime selected = currentDate;
+
+    final saved = await showDialog<DateTime>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocalState) {
+          Future<void> pickDate() async {
+            final picked = await showDatePicker(
+              context: ctx,
+              initialDate: selected,
+              firstDate: DateTime(DateTime.now().year - 1),
+              lastDate: DateTime(DateTime.now().year + 3),
+            );
+            if (picked == null) return;
+            setLocalState(() {
+              selected = DateTime(
+                picked.year,
+                picked.month,
+                picked.day,
+                selected.hour,
+                selected.minute,
+              );
+            });
+          }
+
+          Future<void> pickTime() async {
+            final picked = await showTimePicker(
+              context: ctx,
+              initialTime: TimeOfDay(
+                hour: selected.hour,
+                minute: selected.minute,
+              ),
+            );
+            if (picked == null) return;
+            setLocalState(() {
+              selected = DateTime(
+                selected.year,
+                selected.month,
+                selected.day,
+                picked.hour,
+                picked.minute,
+              );
+            });
+          }
+
+          return AlertDialog(
+            title: const Text('Alterar partida'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: placeCtrl,
+                  decoration: const InputDecoration(labelText: 'Local'),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: pickDate,
+                        icon:
+                            const Icon(Icons.calendar_today_outlined, size: 16),
+                        label: Text(
+                          '${selected.day.toString().padLeft(2, '0')}/${selected.month.toString().padLeft(2, '0')}/${selected.year}',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: pickTime,
+                        icon: const Icon(Icons.access_time_rounded, size: 16),
+                        label: Text(
+                          '${selected.hour.toString().padLeft(2, '0')}:${selected.minute.toString().padLeft(2, '0')}',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(selected),
+                child: const Text('Salvar'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    final place = placeCtrl.text.trim();
+    placeCtrl.dispose();
+    if (saved == null || place.isEmpty) return;
+
+    final ok = await ref
+        .read(matchNotifierProvider.notifier)
+        .updateMatch(place, saved);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content:
+            Text(ok ? 'Partida atualizada.' : 'Erro ao atualizar partida.'),
+      ),
+    );
   }
 
   // ── Pickers ───────────────────────────────────────────────────────────────
@@ -241,6 +360,19 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
     final groupId = account?.activeGroupId ?? activePlayer?.groupId ?? '';
     final isAdmin = _isAdmin(account, groupId);
 
+    if (groupId.isNotEmpty) {
+      ref.listen<AsyncValue<BratnavaRealtimeEvent>>(
+        realtimeEventsProvider(groupId),
+        (_, next) {
+          next.whenData((event) {
+            if (event.type == 'match.changed') {
+              ref.read(matchNotifierProvider.notifier).refresh();
+            }
+          });
+        },
+      );
+    }
+
     if (!s.loading && s.groupSettings != null) _initForm(s);
 
     if (s.loading) return const Center(child: CircularProgressIndicator());
@@ -265,6 +397,7 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
               onRefresh: () =>
                   ref.read(matchNotifierProvider.notifier).refresh(),
               onRewind: _rewindStep,
+              onEdit: isAdmin && s.hasMatch ? () => _editCurrentMatch(s) : null,
               onDelete: isAdmin && s.hasMatch ? _confirmDelete : null,
               onCreateNew: isAdmin
                   ? () {
@@ -333,6 +466,7 @@ class _MatchBanner extends StatelessWidget {
   final bool canRewind;
   final VoidCallback onRefresh;
   final VoidCallback onRewind;
+  final VoidCallback? onEdit;
   final VoidCallback? onDelete;
   final VoidCallback? onCreateNew;
 
@@ -342,6 +476,7 @@ class _MatchBanner extends StatelessWidget {
     required this.canRewind,
     required this.onRefresh,
     required this.onRewind,
+    this.onEdit,
     this.onDelete,
     this.onCreateNew,
   });
@@ -408,6 +543,15 @@ class _MatchBanner extends StatelessWidget {
               ),
             ),
           // ── Excluir (só admin, com confirmação) ──────────────────────────
+          if (onEdit != null)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined,
+                  color: AppColors.blue500, size: 20),
+              onPressed: onEdit,
+              tooltip: 'Alterar partida',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            ),
           if (onDelete != null)
             IconButton(
               icon: const Icon(Icons.delete_outline_rounded,

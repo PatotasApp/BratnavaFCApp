@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/realtime/realtime_provider.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/datasources/polls_remote_datasource.dart';
@@ -147,6 +148,20 @@ class _PollsPageState extends ConsumerState<PollsPage> {
     final activePlayer = ref.watch(activePlayerProvider);
     final groupId = account?.activeGroupId ?? activePlayer?.groupId;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (groupId != null && groupId.isNotEmpty) {
+      ref.listen<AsyncValue<BratnavaRealtimeEvent>>(
+        realtimeEventsProvider(groupId),
+        (_, next) {
+          next.whenData((event) {
+            if (event.type == 'poll.changed') {
+              ref.invalidate(pollsListProvider(groupId));
+              ref.invalidate(pendingPollsCountProvider(groupId));
+            }
+          });
+        },
+      );
+    }
 
     if (groupId == null) {
       // Spinner enquanto myPlayersProvider ainda carrega

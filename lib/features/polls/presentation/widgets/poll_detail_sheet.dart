@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
+import '../../../../core/realtime/realtime_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
@@ -65,6 +66,23 @@ class _PollDetailSheetState extends ConsumerState<PollDetailSheet>
   }
 
   PollsRemoteDataSource get _ds => ref.read(pollsDsProvider);
+
+  Future<void> _refreshFromRealtime() async {
+    if (_saving) return;
+    try {
+      final updated = await _ds.getPoll(widget.groupId, _poll.id);
+      if (!mounted) return;
+      setState(() {
+        _poll = updated;
+        _selected
+          ..clear()
+          ..addAll(updated.myVotedOptionIds);
+      });
+      widget.onUpdated(updated);
+    } catch (_) {
+      if (mounted) Navigator.of(context).maybePop();
+    }
+  }
 
   Future<void> _linkMatch(String matchId) async {
     setState(() => _saving = true);
@@ -400,6 +418,18 @@ class _PollDetailSheetState extends ConsumerState<PollDetailSheet>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<BratnavaRealtimeEvent>>(
+      realtimeEventsProvider(widget.groupId),
+      (_, next) {
+        next.whenData((event) {
+          if (event.type == 'poll.changed' &&
+              event.pollId?.toLowerCase() == _poll.id.toLowerCase()) {
+            _refreshFromRealtime();
+          }
+        });
+      },
+    );
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final total = _poll.totalVoters;
 

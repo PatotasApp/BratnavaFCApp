@@ -174,6 +174,8 @@ class ApiConstants {
 
   // Matches – workflow completo
   static String matchCreate(String groupId) => '/api/Matches/group/$groupId';
+  static String matchById(String groupId, String id) =>
+      '/api/Matches/group/$groupId/$id';
   static String matchDelete(String groupId, String id) =>
       '/api/Matches/group/$groupId/$id';
   static String matchHeader(String groupId, String id) =>

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/realtime/realtime_provider.dart';
 import '../../../../shared/presentation/widgets/horizontal_team_field.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../calendar/domain/entities/calendar_event.dart';
@@ -39,6 +40,28 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     // Fallback: usa o groupId do player ativo se activeGroupId ainda não foi
     // persistido (race condition logo após login com múltiplos grupos)
     final groupId = account?.activeGroupId ?? activePlayer?.groupId ?? '';
+
+    if (groupId.isNotEmpty) {
+      ref.listen<AsyncValue<BratnavaRealtimeEvent>>(
+        realtimeEventsProvider(groupId),
+        (_, next) {
+          next.whenData((event) {
+            if (event.type == 'match.changed') {
+              ref.invalidate(upcomingMatchesProvider(groupId));
+              ref.invalidate(upcomingMatchesFullProvider(groupId));
+              ref.invalidate(currentMatchProvider(groupId));
+              if (activePlayer != null) {
+                ref.invalidate(recentMatchesProvider(
+                    (groupId: groupId, playerId: activePlayer.playerId)));
+              }
+            }
+            if (event.type == 'poll.changed') {
+              ref.invalidate(upcomingEventsProvider(groupId));
+            }
+          });
+        },
+      );
+    }
 
     final recentAsync = (activePlayer != null && groupId.isNotEmpty)
         ? ref.watch(recentMatchesProvider(

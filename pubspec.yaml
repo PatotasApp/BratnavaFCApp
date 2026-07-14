@@ -19,6 +19,7 @@ dependencies:
 
   # HTTP / API
   dio: ^5.4.3
+  signalr_netcore: ^1.4.0
 
   # Models / Serialization
   freezed_annotation: ^2.4.1

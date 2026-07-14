@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/realtime/realtime_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
 import '../../../auth/presentation/providers/account_store.dart';
@@ -64,6 +65,25 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
   }
 
   PollsRemoteDataSource get _ds => ref.read(pollsDsProvider);
+
+  Future<void> _refreshFromRealtime() async {
+    if (_saving) return;
+    try {
+      final updated = await _ds.getPoll(widget.groupId, _poll.id);
+      if (!mounted) return;
+      setState(() {
+        _poll = updated;
+        _localGuests
+          ..clear()
+          ..addEntries((updated.votes ?? <PollVote>[])
+              .where((v) => v.guests.isNotEmpty)
+              .map((v) => MapEntry(v.playerId, List<PollGuest>.of(v.guests))));
+      });
+      widget.onUpdated(updated);
+    } catch (_) {
+      if (mounted) Navigator.of(context).maybePop();
+    }
+  }
 
   void _resetDetailsDraft() {
     _descriptionCtrl.text = _poll.description ?? '';
@@ -477,6 +497,18 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<BratnavaRealtimeEvent>>(
+      realtimeEventsProvider(widget.groupId),
+      (_, next) {
+        next.whenData((event) {
+          if (event.type == 'poll.changed' &&
+              event.pollId?.toLowerCase() == _poll.id.toLowerCase()) {
+            _refreshFromRealtime();
+          }
+        });
+      },
+    );
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final icon = _poll.eventIcon ?? '📅';
     final cost = _formatCost();

@@ -130,6 +130,14 @@ class MatchRemoteDataSource {
     });
   }
 
+  Future<void> updateMatch(String groupId, String matchId, String placeName,
+      DateTime playedAt) async {
+    await _dio.put(ApiConstants.matchById(groupId, matchId), data: {
+      'placeName': placeName,
+      'playedAt': playedAt.toIso8601String(),
+    });
+  }
+
   // ── Aceitação ─────────────────────────────────────────────────────────────
 
   Future<void> acceptInvite(

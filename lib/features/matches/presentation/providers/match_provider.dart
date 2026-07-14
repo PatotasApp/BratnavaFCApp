@@ -36,15 +36,13 @@ class MatchNotifier extends StateNotifier<MatchState> {
 
   String _id(dynamic v) => (v ?? '').toString();
 
-  List<MatchPlayerInfo> _parsePlayers(dynamic v) =>
-      (v as List? ?? [])
-          .map((e) => MatchPlayerInfo.fromJson(e as Map<String, dynamic>))
-          .toList();
+  List<MatchPlayerInfo> _parsePlayers(dynamic v) => (v as List? ?? [])
+      .map((e) => MatchPlayerInfo.fromJson(e as Map<String, dynamic>))
+      .toList();
 
-  List<MatchGoal> _parseGoals(dynamic v) =>
-      (v as List? ?? [])
-          .map((e) => MatchGoal.fromJson(e as Map<String, dynamic>))
-          .toList();
+  List<MatchGoal> _parseGoals(dynamic v) => (v as List? ?? [])
+      .map((e) => MatchGoal.fromJson(e as Map<String, dynamic>))
+      .toList();
 
   TeamColorInfo? _parseColor(dynamic v) =>
       v is Map<String, dynamic> ? TeamColorInfo.fromJson(v) : null;
@@ -58,18 +56,25 @@ class MatchNotifier extends StateNotifier<MatchState> {
         ? MatchStep.fromKey(rawStep.toString())
         : MatchStep.fromStatus((rawStatus as num?)?.toInt() ?? 0);
 
-    final playedAt       = parseApiDateOrNull((d['playedAt']        ?? d['PlayedAt'])?.toString());
-    final actualStartTime = parseApiDateOrNull((d['actualStartTime'] ?? d['ActualStartTime'])?.toString());
+    final playedAt =
+        parseApiDateOrNull((d['playedAt'] ?? d['PlayedAt'])?.toString());
+    final actualStartTime = parseApiDateOrNull(
+        (d['actualStartTime'] ?? d['ActualStartTime'])?.toString());
 
     state = state.copyWith(
-      matchId:   _id(d['matchId'] ?? d['MatchId'] ?? d['id'] ?? d['Id']).isEmpty
-                   ? state.matchId : _id(d['matchId'] ?? d['MatchId'] ?? d['id'] ?? d['Id']),
-      step:      step,
-      placeName: d['placeName'] as String? ?? d['PlaceName'] as String? ?? state.placeName,
-      playedAt:  playedAt ?? state.playedAt,
+      matchId: _id(d['matchId'] ?? d['MatchId'] ?? d['id'] ?? d['Id']).isEmpty
+          ? state.matchId
+          : _id(d['matchId'] ?? d['MatchId'] ?? d['id'] ?? d['Id']),
+      step: step,
+      placeName: d['placeName'] as String? ??
+          d['PlaceName'] as String? ??
+          state.placeName,
+      playedAt: playedAt ?? state.playedAt,
       canRewind: d['canRewind'] as bool? ?? d['CanRewind'] as bool? ?? false,
-      teamAGoals: (d['teamAGoals'] ?? d['TeamAGoals']) as int? ?? state.teamAGoals,
-      teamBGoals: (d['teamBGoals'] ?? d['TeamBGoals']) as int? ?? state.teamBGoals,
+      teamAGoals:
+          (d['teamAGoals'] ?? d['TeamAGoals']) as int? ?? state.teamAGoals,
+      teamBGoals:
+          (d['teamBGoals'] ?? d['TeamBGoals']) as int? ?? state.teamBGoals,
       linkedPollId: (d['linkedPollId'] ?? d['LinkedPollId'])?.toString(),
       actualStartTime: actualStartTime ?? state.actualStartTime,
     );
@@ -79,12 +84,19 @@ class MatchNotifier extends StateNotifier<MatchState> {
   void _applyAcceptation(Map<String, dynamic>? d) {
     if (d == null) return;
     state = state.copyWith(
-      acceptedPlayers:         _parsePlayers(d['acceptedPlayers'] ?? d['AcceptedPlayers']),
-      rejectedPlayers:         _parsePlayers(d['rejectedPlayers'] ?? d['RejectedPlayers']),
-      pendingPlayers:          _parsePlayers(d['pendingPlayers']  ?? d['PendingPlayers']),
-      maxPlayers:              (d['maxPlayers'] ?? d['MaxPlayers']) as int? ?? state.maxPlayers,
-      acceptedOverLimit:       d['acceptedOverLimit']       as bool? ?? d['AcceptedOverLimit']       as bool? ?? false,
-      canAdvanceToMatchmaking: d['canAdvanceToMatchmaking'] as bool? ?? d['CanAdvanceToMatchmaking'] as bool? ?? false,
+      acceptedPlayers:
+          _parsePlayers(d['acceptedPlayers'] ?? d['AcceptedPlayers']),
+      rejectedPlayers:
+          _parsePlayers(d['rejectedPlayers'] ?? d['RejectedPlayers']),
+      pendingPlayers: _parsePlayers(d['pendingPlayers'] ?? d['PendingPlayers']),
+      maxPlayers:
+          (d['maxPlayers'] ?? d['MaxPlayers']) as int? ?? state.maxPlayers,
+      acceptedOverLimit: d['acceptedOverLimit'] as bool? ??
+          d['AcceptedOverLimit'] as bool? ??
+          false,
+      canAdvanceToMatchmaking: d['canAdvanceToMatchmaking'] as bool? ??
+          d['CanAdvanceToMatchmaking'] as bool? ??
+          false,
     );
   }
 
@@ -92,14 +104,17 @@ class MatchNotifier extends StateNotifier<MatchState> {
   void _applyMatchmaking(Map<String, dynamic>? d) {
     if (d == null) return;
     state = state.copyWith(
-      teamAColor:        _parseColor(d['teamAColor'] ?? d['TeamAColor']),
-      teamBColor:        _parseColor(d['teamBColor'] ?? d['TeamBColor']),
-      teamAPlayers:      _parsePlayers(d['teamAPlayers']     ?? d['TeamAPlayers']),
-      teamBPlayers:      _parsePlayers(d['teamBPlayers']     ?? d['TeamBPlayers']),
-      unassignedPlayers: _parsePlayers(d['unassignedPlayers'] ?? d['UnassignedPlayers']),
-      participants:      _parsePlayers(d['participants']      ?? d['Participants']),
-      colorsLocked:      d['colorsLocked'] as bool? ?? d['ColorsLocked'] as bool? ?? false,
-      canStartMatch:     d['canStartMatch'] as bool? ?? d['CanStartMatch'] as bool? ?? false,
+      teamAColor: _parseColor(d['teamAColor'] ?? d['TeamAColor']),
+      teamBColor: _parseColor(d['teamBColor'] ?? d['TeamBColor']),
+      teamAPlayers: _parsePlayers(d['teamAPlayers'] ?? d['TeamAPlayers']),
+      teamBPlayers: _parsePlayers(d['teamBPlayers'] ?? d['TeamBPlayers']),
+      unassignedPlayers:
+          _parsePlayers(d['unassignedPlayers'] ?? d['UnassignedPlayers']),
+      participants: _parsePlayers(d['participants'] ?? d['Participants']),
+      colorsLocked:
+          d['colorsLocked'] as bool? ?? d['ColorsLocked'] as bool? ?? false,
+      canStartMatch:
+          d['canStartMatch'] as bool? ?? d['CanStartMatch'] as bool? ?? false,
     );
   }
 
@@ -107,29 +122,34 @@ class MatchNotifier extends StateNotifier<MatchState> {
   void _applyPostgame(Map<String, dynamic>? d) {
     if (d == null) return;
     state = state.copyWith(
-      teamAGoals:    (d['teamAGoals'] ?? d['TeamAGoals']) as int?,
-      teamBGoals:    (d['teamBGoals'] ?? d['TeamBGoals']) as int?,
-      goals:         _parseGoals(d['goals'] ?? d['Goals']),
-      computedMvps:  ((d['computedMvps'] ?? d['ComputedMvps']) as List? ?? [])
-                       .map((e) => MvpInfo.fromJson(e as Map<String, dynamic>)).toList(),
-      votes:         ((d['votes'] ?? d['Votes']) as List? ?? [])
-                       .map((e) => VoteInfo.fromJson(e as Map<String, dynamic>)).toList(),
-      voteCounts:    ((d['voteCounts'] ?? d['VoteCounts']) as List? ?? [])
-                       .map((e) => VoteCount.fromJson(e as Map<String, dynamic>)).toList(),
-      allVoted:      d['allVoted'] as bool? ?? d['AllVoted'] as bool? ?? false,
+      teamAGoals: (d['teamAGoals'] ?? d['TeamAGoals']) as int?,
+      teamBGoals: (d['teamBGoals'] ?? d['TeamBGoals']) as int?,
+      goals: _parseGoals(d['goals'] ?? d['Goals']),
+      computedMvps: ((d['computedMvps'] ?? d['ComputedMvps']) as List? ?? [])
+          .map((e) => MvpInfo.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      votes: ((d['votes'] ?? d['Votes']) as List? ?? [])
+          .map((e) => VoteInfo.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      voteCounts: ((d['voteCounts'] ?? d['VoteCounts']) as List? ?? [])
+          .map((e) => VoteCount.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      allVoted: d['allVoted'] as bool? ?? d['AllVoted'] as bool? ?? false,
       eligibleVoters: _parsePlayers(d['eligibleVoters'] ?? d['EligibleVoters']),
-      participants:  _parsePlayers(d['participants'] ?? d['Participants']),
-      canVote:       d['canVote']  as bool? ?? d['CanVote']  as bool?,
-      hasVoted:      d['hasVoted'] as bool? ?? d['HasVoted'] as bool?,
+      participants: _parsePlayers(d['participants'] ?? d['Participants']),
+      canVote: d['canVote'] as bool? ?? d['CanVote'] as bool?,
+      hasVoted: d['hasVoted'] as bool? ?? d['HasVoted'] as bool?,
       myVotedForMatchPlayerId:
-          (d['myVotedForMatchPlayerId'] ?? d['MyVotedForMatchPlayerId'])?.toString(),
+          (d['myVotedForMatchPlayerId'] ?? d['MyVotedForMatchPlayerId'])
+              ?.toString(),
     );
   }
 
   // ── Carregamento por step ─────────────────────────────────────────────────
 
   Future<void> _loadStepPayload(String matchId, MatchStep step) async {
-    final header = await _ds.fetchHeader(groupId, matchId).catchError((_) => null);
+    final header =
+        await _ds.fetchHeader(groupId, matchId).catchError((_) => null);
     if (!mounted) return;
     _applyHeader(header);
 
@@ -140,23 +160,32 @@ class MatchNotifier extends StateNotifier<MatchState> {
 
     switch (effectiveStep) {
       case MatchStep.accept:
-        final d = await _ds.fetchAcceptation(groupId, matchId).catchError((_) => null);
+        final d = await _ds
+            .fetchAcceptation(groupId, matchId)
+            .catchError((_) => null);
         if (!mounted) return;
         _applyAcceptation(d);
       case MatchStep.teams:
-        final d = await _ds.fetchMatchmaking(groupId, matchId).catchError((_) => null);
+        final d = await _ds
+            .fetchMatchmaking(groupId, matchId)
+            .catchError((_) => null);
         if (!mounted) return;
         _applyMatchmaking(d);
       case MatchStep.playing:
-        final d = await _ds.fetchMatchmaking(groupId, matchId).catchError((_) => null);
+        final d = await _ds
+            .fetchMatchmaking(groupId, matchId)
+            .catchError((_) => null);
         if (!mounted) return;
         _applyMatchmaking(d);
-        final goals = await _ds.fetchGoals(groupId, matchId).catchError((_) => <MatchGoal>[]);
+        final goals = await _ds
+            .fetchGoals(groupId, matchId)
+            .catchError((_) => <MatchGoal>[]);
         if (!mounted) return;
         state = state.copyWith(goals: goals);
       case MatchStep.post:
       case MatchStep.done:
-        final d = await _ds.fetchPostgame(groupId, matchId).catchError((_) => null);
+        final d =
+            await _ds.fetchPostgame(groupId, matchId).catchError((_) => null);
         if (!mounted) return;
         _applyPostgame(d);
       default:
@@ -183,16 +212,16 @@ class MatchNotifier extends StateNotifier<MatchState> {
       ]);
       if (!mounted) return;
 
-      final colors   = results[0] as List<TeamColorInfo>;
+      final colors = results[0] as List<TeamColorInfo>;
       final settings = results[1] as MatchGroupSettings?;
-      final stub     = results[2] as Map<String, dynamic>?;
+      final stub = results[2] as Map<String, dynamic>?;
       final upcoming = results[3] as List<MatchHeaderDto>;
 
       state = state.copyWith(
-        availableColors:  colors,
-        groupSettings:    settings,
-        upcomingHeaders:  upcoming,
-        loading:          false,
+        availableColors: colors,
+        groupSettings: settings,
+        upcomingHeaders: upcoming,
+        loading: false,
       );
 
       // Pré-preenche local a partir das configurações do grupo
@@ -208,21 +237,22 @@ class MatchNotifier extends StateNotifier<MatchState> {
         return;
       }
 
-      final matchId = _id(stub['id'] ?? stub['matchId'] ?? stub['Id'] ?? stub['MatchId']);
+      final matchId =
+          _id(stub['id'] ?? stub['matchId'] ?? stub['Id'] ?? stub['MatchId']);
       if (matchId.isEmpty) {
         state = state.copyWith(matchId: null, step: MatchStep.create);
         return;
       }
 
       final rawStatus = stub['status'] ?? stub['Status'] ?? 0;
-      final rawKey    = stub['stepKey'] ?? stub['StepKey'];
-      final step      = rawKey != null
+      final rawKey = stub['stepKey'] ?? stub['StepKey'];
+      final step = rawKey != null
           ? MatchStep.fromKey(rawKey.toString())
           : MatchStep.fromStatus((rawStatus as num).toInt());
 
       state = state.copyWith(
-        matchId:  matchId,
-        step:     step,
+        matchId: matchId,
+        step: step,
         placeName: stub['placeName'] as String? ?? stub['PlaceName'] as String?,
       );
 
@@ -240,19 +270,27 @@ class MatchNotifier extends StateNotifier<MatchState> {
     } on DioException catch (e) {
       if (!mounted) return;
       if (e.response?.statusCode == 404) {
-        state = state.copyWith(loading: false, matchId: null, step: MatchStep.create);
+        state = state.copyWith(
+            loading: false, matchId: null, step: MatchStep.create);
       } else {
-        state = state.copyWith(loading: false, error: extractDioError(e, 'Falha ao carregar partida.'));
+        state = state.copyWith(
+            loading: false,
+            error: extractDioError(e, 'Falha ao carregar partida.'));
       }
     } catch (e) {
       if (!mounted) return;
-      state = state.copyWith(loading: false, error: extractDioError(e, 'Falha ao carregar dados.'));
+      state = state.copyWith(
+          loading: false,
+          error: extractDioError(e, 'Falha ao carregar dados.'));
     }
   }
 
   /// Carrega uma partida específica por ID (usado ao navegar do dashboard).
   Future<void> loadMatchById(String matchId) async {
-    if (groupId.isEmpty || matchId.isEmpty) { await loadInitial(); return; }
+    if (groupId.isEmpty || matchId.isEmpty) {
+      await loadInitial();
+      return;
+    }
     state = state.copyWith(loading: true, error: null);
     try {
       final results = await Future.wait([
@@ -262,19 +300,20 @@ class MatchNotifier extends StateNotifier<MatchState> {
       ]);
 
       final upcoming = results[2] as List<MatchHeaderDto>;
-      final selIdx   = upcoming.indexWhere((h) => h.matchId == matchId);
+      final selIdx = upcoming.indexWhere((h) => h.matchId == matchId);
       state = state.copyWith(
-        availableColors:  results[0] as List<TeamColorInfo>,
-        groupSettings:    results[1] as MatchGroupSettings?,
-        upcomingHeaders:  upcoming,
-        matchId:          matchId,
+        availableColors: results[0] as List<TeamColorInfo>,
+        groupSettings: results[1] as MatchGroupSettings?,
+        upcomingHeaders: upcoming,
+        matchId: matchId,
         selectedMatchIdx: selIdx >= 0 ? selIdx : 0,
-        loading:          false,
+        loading: false,
       );
 
       if ((results[1] as MatchGroupSettings?) != null) {
         state = state.copyWith(
-            placeName: state.placeName ?? (results[1] as MatchGroupSettings).defaultPlaceName);
+            placeName: state.placeName ??
+                (results[1] as MatchGroupSettings).defaultPlaceName);
       }
 
       await _loadStepPayload(matchId, MatchStep.accept);
@@ -282,15 +321,18 @@ class MatchNotifier extends StateNotifier<MatchState> {
       if (!isAdmin) {
         _refreshTimer?.cancel();
         _refreshTimer = Timer.periodic(
-          const Duration(seconds: 15), (_) => refresh(),
+          const Duration(seconds: 15),
+          (_) => refresh(),
         );
       }
     } on DioException catch (e) {
       state = state.copyWith(
-          loading: false, error: extractDioError(e, 'Falha ao carregar partida.'));
+          loading: false,
+          error: extractDioError(e, 'Falha ao carregar partida.'));
     } catch (e) {
       state = state.copyWith(
-          loading: false, error: extractDioError(e, 'Falha ao carregar dados.'));
+          loading: false,
+          error: extractDioError(e, 'Falha ao carregar dados.'));
     }
   }
 
@@ -310,8 +352,29 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await loadInitial();
       return true;
     } catch (e) {
-      state = state.copyWith(mutating: false, error: extractDioError(e, 'Falha ao criar partida.'));
+      state = state.copyWith(
+          mutating: false,
+          error: extractDioError(e, 'Falha ao criar partida.'));
       return false;
+    }
+  }
+
+  Future<bool> updateMatch(String placeName, DateTime playedAt) async {
+    final matchId = state.matchId;
+    if (matchId == null || matchId.isEmpty) return false;
+    state = state.copyWith(mutating: true, error: null);
+    try {
+      await _ds.updateMatch(groupId, matchId, placeName, playedAt);
+      state = state.copyWith(placeName: placeName, playedAt: playedAt);
+      await _loadStepPayload(matchId, state.step);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        error: extractDioError(e, 'Falha ao atualizar partida.'),
+      );
+      return false;
+    } finally {
+      state = state.copyWith(mutating: false);
     }
   }
 
@@ -325,7 +388,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await _ds.acceptInvite(groupId, matchId, playerId);
       await refresh();
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao aceitar convite.'));
+      state = state.copyWith(
+          error: extractDioError(e, 'Falha ao aceitar convite.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -339,7 +403,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await _ds.rejectInvite(groupId, matchId, playerId);
       await refresh();
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao recusar convite.'));
+      state = state.copyWith(
+          error: extractDioError(e, 'Falha ao recusar convite.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -353,7 +418,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await _ds.goToMatchmaking(groupId, matchId);
       await _loadStepPayload(matchId, MatchStep.teams);
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao avançar para matchmaking.'));
+      state = state.copyWith(
+          error: extractDioError(e, 'Falha ao avançar para matchmaking.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -368,7 +434,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       final d = await _ds.fetchAcceptation(groupId, matchId);
       _applyAcceptation(d);
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao adicionar convidado.'));
+      state = state.copyWith(
+          error: extractDioError(e, 'Falha ao adicionar convidado.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -391,17 +458,19 @@ class MatchNotifier extends StateNotifier<MatchState> {
       ...state.teamAPlayers,
       ...state.teamBPlayers,
     ].where((p) => seen.add(p.matchPlayerId)).toList();
-    state = state.copyWith(mutating: true, teamGenOptions: [], selectedTeamGenIdx: 0);
+    state = state.copyWith(
+        mutating: true, teamGenOptions: [], selectedTeamGenIdx: 0);
     try {
       final options = await _ds.generateTeams(
-        players:           allPlayers,
-        strategyType:      strategyType,
-        playersPerTeam:    playersPerTeam,
+        players: allPlayers,
+        strategyType: strategyType,
+        playersPerTeam: playersPerTeam,
         includeGoalkeepers: includeGoalkeepers,
       );
       state = state.copyWith(teamGenOptions: options, mutating: false);
     } catch (e) {
-      state = state.copyWith(mutating: false, error: extractDioError(e, 'Falha ao gerar times.'));
+      state = state.copyWith(
+          mutating: false, error: extractDioError(e, 'Falha ao gerar times.'));
     }
   }
 
@@ -410,23 +479,20 @@ class MatchNotifier extends StateNotifier<MatchState> {
   }
 
   void editTeamGenOption(
-    int idx,
-    List<TeamGenPlayer> teamA,
-    List<TeamGenPlayer> teamB,
-    {List<TeamGenPlayer>? unassigned}
-  ) {
+      int idx, List<TeamGenPlayer> teamA, List<TeamGenPlayer> teamB,
+      {List<TeamGenPlayer>? unassigned}) {
     final opts = List<TeamGenOption>.from(state.teamGenOptions);
     if (idx < 0 || idx >= opts.length) return;
     final wA = teamA.fold(0.0, (s, p) => s + p.weight);
     final wB = teamB.fold(0.0, (s, p) => s + p.weight);
     opts[idx] = TeamGenOption(
-      teamA:       teamA,
-      teamB:       teamB,
-      unassigned:  unassigned ?? opts[idx].unassigned,
+      teamA: teamA,
+      teamB: teamB,
+      unassigned: unassigned ?? opts[idx].unassigned,
       teamAWeight: wA,
       teamBWeight: wB,
       balanceDiff: (wA - wB).abs(),
-      attackDiff:  opts[idx].attackDiff,
+      attackDiff: opts[idx].attackDiff,
       defenseDiff: opts[idx].defenseDiff,
       physicalDiff: opts[idx].physicalDiff,
       explanation: opts[idx].explanation,
@@ -437,7 +503,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
   Future<void> assignTeamsFromGenerated() async {
     final matchId = state.matchId;
     if (matchId == null || state.teamGenOptions.isEmpty) return;
-    final idx = state.selectedTeamGenIdx.clamp(0, state.teamGenOptions.length - 1);
+    final idx =
+        state.selectedTeamGenIdx.clamp(0, state.teamGenOptions.length - 1);
     final opt = state.teamGenOptions[idx];
     final teamAIds = opt.teamA.map((p) => p.playerId).toList();
     final teamBIds = opt.teamB.map((p) => p.playerId).toList();
@@ -447,7 +514,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       state = state.copyWith(teamGenOptions: [], selectedTeamGenIdx: 0);
       await refresh();
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao atribuir times.'));
+      state =
+          state.copyWith(error: extractDioError(e, 'Falha ao atribuir times.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -461,7 +529,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await _ds.setColors(groupId, matchId, teamAColorId, teamBColorId);
       await refresh();
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao definir cores.'));
+      state =
+          state.copyWith(error: extractDioError(e, 'Falha ao definir cores.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -472,7 +541,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
     if (colors.length < 2) return;
     final shuffled = [...colors]..shuffle();
     final a = shuffled[0];
-    final b = shuffled.firstWhere((c) => c.id != a.id, orElse: () => shuffled[1]);
+    final b =
+        shuffled.firstWhere((c) => c.id != a.id, orElse: () => shuffled[1]);
     await setColors(a.id, b.id);
   }
 
@@ -482,13 +552,14 @@ class MatchNotifier extends StateNotifier<MatchState> {
     final aIds = state.teamAPlayers.map((p) => p.playerId).toList();
     final bIds = state.teamBPlayers.map((p) => p.playerId).toList();
     final newA = fromTeamA ? (aIds..remove(playerId)) : [...aIds, playerId];
-    final newB = fromTeamA ? [...bIds, playerId]      : (bIds..remove(playerId));
+    final newB = fromTeamA ? [...bIds, playerId] : (bIds..remove(playerId));
     state = state.copyWith(mutating: true);
     try {
       await _ds.assignTeams(groupId, matchId, newA, newB);
       await refresh();
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao mover jogador.'));
+      state =
+          state.copyWith(error: extractDioError(e, 'Falha ao mover jogador.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -506,7 +577,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await _ds.assignTeams(groupId, matchId, newA, newB);
       await refresh();
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao atribuir jogador.'));
+      state = state.copyWith(
+          error: extractDioError(e, 'Falha ao atribuir jogador.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -520,7 +592,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await _ds.swapPlayers(groupId, matchId, playerAId, playerBId);
       await refresh();
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao trocar jogadores.'));
+      state = state.copyWith(
+          error: extractDioError(e, 'Falha ao trocar jogadores.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -534,7 +607,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await _ds.setPlayerRole(groupId, matchId, matchPlayerId, isGoalkeeper);
       await refresh();
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao alterar função do jogador.'));
+      state = state.copyWith(
+          error: extractDioError(e, 'Falha ao alterar função do jogador.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -550,7 +624,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await _ds.startMatch(groupId, matchId);
       await _loadStepPayload(matchId, MatchStep.playing);
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao iniciar partida.'));
+      state = state.copyWith(
+          error: extractDioError(e, 'Falha ao iniciar partida.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -572,15 +647,18 @@ class MatchNotifier extends StateNotifier<MatchState> {
     if (matchId == null) return;
     state = state.copyWith(mutating: true);
     try {
-      await _ds.addGoal(groupId, matchId,
+      await _ds.addGoal(
+        groupId,
+        matchId,
         scorerPlayerId: scorerPlayerId,
         assistPlayerId: assistPlayerId,
-        time:           time,
-        isOwnGoal:      isOwnGoal,
+        time: time,
+        isOwnGoal: isOwnGoal,
       );
       await refresh();
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao adicionar gol.'));
+      state =
+          state.copyWith(error: extractDioError(e, 'Falha ao adicionar gol.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -594,7 +672,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await _ds.removeGoal(groupId, matchId, goalId);
       await refresh();
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao remover gol.'));
+      state =
+          state.copyWith(error: extractDioError(e, 'Falha ao remover gol.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -619,7 +698,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       });
       await refresh();
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao atualizar gol.'));
+      state =
+          state.copyWith(error: extractDioError(e, 'Falha ao atualizar gol.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -634,7 +714,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await _loadStepPayload(matchId, MatchStep.ended);
       return true;
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao encerrar partida.'));
+      state = state.copyWith(
+          error: extractDioError(e, 'Falha ao encerrar partida.'));
       return false;
     } finally {
       state = state.copyWith(mutating: false);
@@ -652,7 +733,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await _loadStepPayload(matchId, MatchStep.post);
       return true;
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao ir para pós-jogo.'));
+      state = state.copyWith(
+          error: extractDioError(e, 'Falha ao ir para pós-jogo.'));
       return false;
     } finally {
       state = state.copyWith(mutating: false);
@@ -669,7 +751,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await _ds.setScore(groupId, matchId, teamAGoals, teamBGoals);
       await refresh();
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao registrar placar.'));
+      state = state.copyWith(
+          error: extractDioError(e, 'Falha ao registrar placar.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -684,7 +767,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await refresh();
       return true;
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao registrar voto.'));
+      state =
+          state.copyWith(error: extractDioError(e, 'Falha ao registrar voto.'));
       return false;
     } finally {
       state = state.copyWith(mutating: false);
@@ -700,7 +784,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await _loadStepPayload(matchId, MatchStep.done);
       return true;
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao finalizar partida.'));
+      state = state.copyWith(
+          error: extractDioError(e, 'Falha ao finalizar partida.'));
       return false;
     } finally {
       state = state.copyWith(mutating: false);
@@ -717,7 +802,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await _ds.rewindStep(groupId, matchId);
       await refresh();
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao voltar etapa.'));
+      state =
+          state.copyWith(error: extractDioError(e, 'Falha ao voltar etapa.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -737,7 +823,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await loadInitial();
     } catch (e) {
       state = state.copyWith(
-          mutating: false, error: extractDioError(e, 'Falha ao excluir partida.'));
+          mutating: false,
+          error: extractDioError(e, 'Falha ao excluir partida.'));
     }
   }
 
@@ -761,11 +848,11 @@ class MatchNotifier extends StateNotifier<MatchState> {
   /// Limpa a seleção atual para permitir criar uma nova partida.
   void clearSelection() {
     state = state.copyWith(
-      matchId:          null,
-      step:             MatchStep.create,
+      matchId: null,
+      step: MatchStep.create,
       selectedMatchIdx: -1,
-      linkedPollId:     null,
-      placeName:        state.groupSettings?.defaultPlaceName,
+      linkedPollId: null,
+      placeName: state.groupSettings?.defaultPlaceName,
     );
   }
 
@@ -776,8 +863,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
     final header = headers[idx];
     state = state.copyWith(
       selectedMatchIdx: idx,
-      matchId:   header.matchId,
-      step:      header.step,
+      matchId: header.matchId,
+      step: header.step,
       placeName: header.placeName,
       canRewind: header.canRewind,
       teamAGoals: header.teamAGoals,
@@ -799,7 +886,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await _ds.setNoShow(groupId, matchId, matchPlayerId, didNotPlay);
       await refresh();
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao marcar ausência.'));
+      state = state.copyWith(
+          error: extractDioError(e, 'Falha ao marcar ausência.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -816,7 +904,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await _ds.setLinkedPoll(groupId, matchId, pollId);
       state = state.copyWith(linkedPollId: pollId);
     } catch (e) {
-      state = state.copyWith(error: extractDioError(e, 'Falha ao vincular votação.'));
+      state = state.copyWith(
+          error: extractDioError(e, 'Falha ao vincular votação.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -827,7 +916,7 @@ class MatchNotifier extends StateNotifier<MatchState> {
 
 final matchNotifierProvider =
     StateNotifierProvider.autoDispose<MatchNotifier, MatchState>((ref) {
-  final acc    = ref.watch(accountStoreProvider.select((s) => s.activeAccount));
+  final acc = ref.watch(accountStoreProvider.select((s) => s.activeAccount));
   // Fallback: usa groupId do player ativo se activeGroupId ainda não está persistido.
   final player = ref.watch(activePlayerProvider);
   final groupId = acc?.activeGroupId ?? player?.groupId ?? '';
