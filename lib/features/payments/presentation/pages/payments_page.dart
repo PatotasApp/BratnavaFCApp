@@ -132,6 +132,7 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
       BuildContext ctx, PlayerRow row, int month) async {
     final gid = _groupId;
     if (gid == null) return;
+    final isPaymentAdmin = _isPaymentAdmin;
     await showModalBottomSheet(
       context: ctx,
       isScrollControlled: true,
@@ -139,8 +140,21 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
       builder: (_) => MonthlyPaymentSheet(
         row:          row,
         month:        month,
-        isAdmin:      _isPaymentAdmin,
-        onSubmit:     (dto) => _ds.upsertMonthly(gid, dto),
+        isAdmin:      isPaymentAdmin,
+        onSubmit:     (dto) {
+          if (isPaymentAdmin) return _ds.upsertMonthly(gid, dto);
+          return _ds.paySelected(gid, {
+            'items': [
+              {
+                'type': 0,
+                'year': dto['year'],
+                'month': dto['month'],
+                'chargeId': null,
+                'isPaid': dto['status'] == 1,
+              },
+            ],
+          });
+        },
         onSaveRating: (stars) => _ds.updatePlayerRating(row.playerId, stars),
         onSaved:      _refreshMonthly,
       ),
@@ -153,6 +167,7 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
       BuildContext ctx, ExtraCharge charge, ExtraChargePayment payment) async {
     final gid = _groupId;
     if (gid == null) return;
+    final isPaymentAdmin = _isPaymentAdmin;
     await showModalBottomSheet(
       context: ctx,
       isScrollControlled: true,
@@ -160,9 +175,24 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
       builder: (_) => ExtraPaymentSheet(
         charge:   charge,
         payment:  payment,
-        isAdmin:  _isPaymentAdmin,
-        onSubmit: (dto) => _ds.upsertExtraChargePayment(
-            gid, charge.id, payment.playerId, dto),
+        isAdmin:  isPaymentAdmin,
+        onSubmit: (dto) {
+          if (isPaymentAdmin) {
+            return _ds.upsertExtraChargePayment(
+                gid, charge.id, payment.playerId, dto);
+          }
+          return _ds.paySelected(gid, {
+            'items': [
+              {
+                'type': 1,
+                'year': null,
+                'month': null,
+                'chargeId': charge.id,
+                'isPaid': dto['status'] == 1,
+              },
+            ],
+          });
+        },
         onSaved:  _refreshExtra,
       ),
     );
