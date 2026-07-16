@@ -13,8 +13,7 @@ class ReplaysRemoteDataSource {
 
   // ── Endpoint helpers ──────────────────────────────────────────────────────
 
-  static String _all(String gid) =>
-      '/api/matches/group/$gid/replays/all';
+  static String _all(String gid) => '/api/matches/group/$gid/replays/all';
   static String _myLikes(String gid) =>
       '/api/matches/group/$gid/replays/my-likes';
   static String _myFavorites(String gid) =>
@@ -23,6 +22,8 @@ class ReplaysRemoteDataSource {
       '/api/matches/group/$gid/replays/$cid/like';
   static String _favorite(String gid, String cid) =>
       '/api/matches/group/$gid/replays/$cid/favorite';
+  static String _likers(String gid, String cid) =>
+      '/api/matches/group/$gid/replays/$cid/likers';
   static String _stream(String gid, String cid) =>
       '/api/matches/group/$gid/replays/$cid/stream';
   static String _delete(String gid, String cid) =>
@@ -63,8 +64,8 @@ class ReplaysRemoteDataSource {
     final res = await _dio.post(_like(groupId, clipId));
     final data = _unwrapMap(res.data);
     return (
-      isLiked:   data['isLiked']   as bool? ?? false,
-      likeCount: data['likeCount'] as int?  ?? 0,
+      isLiked: data['isLiked'] as bool? ?? false,
+      likeCount: data['likeCount'] as int? ?? 0,
     );
   }
 
@@ -75,14 +76,20 @@ class ReplaysRemoteDataSource {
     return data['isFavorited'] as bool? ?? false;
   }
 
+  Future<List<ReplayLiker>> fetchLikers(String groupId, String clipId) async {
+    final res = await _dio.get(_likers(groupId, clipId));
+    return unwrapList(res.data)
+        .map((e) => ReplayLiker.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<void> deleteClip(String groupId, String clipId) async {
     final res = await _dio.delete(_delete(groupId, clipId));
     _throwIfError(res.data);
   }
 
   /// Returns the relative stream path (caller appends base URL + token).
-  String streamPath(String groupId, String clipId) =>
-      _stream(groupId, clipId);
+  String streamPath(String groupId, String clipId) => _stream(groupId, clipId);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -100,8 +107,10 @@ class ReplaysRemoteDataSource {
   @visibleForTesting
   static List<dynamic> unwrapList(dynamic data) {
     dynamic node = data;
-    if (node is Map) node = node['data'] ?? node['Data'] ?? node;   // ApiResponse
-    if (node is Map) node = node['items'] ?? node['Items'] ?? node; // PagedResultDto
+    if (node is Map) node = node['data'] ?? node['Data'] ?? node; // ApiResponse
+    if (node is Map) {
+      node = node['items'] ?? node['Items'] ?? node; // PagedResultDto
+    }
     return node is List ? node : const [];
   }
 

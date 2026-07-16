@@ -273,6 +273,8 @@ class ApiConstants {
       '/api/Matches/group/$groupId/replays/$clipId/like';
   static String replayFavorite(String groupId, String clipId) =>
       '/api/Matches/group/$groupId/replays/$clipId/favorite';
+  static String replayLikers(String groupId, String clipId) =>
+      '/api/Matches/group/$groupId/replays/$clipId/likers';
   static String replayStream(String groupId, String clipId) =>
       '/api/Matches/group/$groupId/replays/$clipId/stream';
   static String replayDelete(String groupId, String clipId) =>

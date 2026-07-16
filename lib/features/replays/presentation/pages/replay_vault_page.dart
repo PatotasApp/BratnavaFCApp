@@ -206,7 +206,7 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
                   crossAxisCount: 2,
                   crossAxisSpacing: 8,
                   mainAxisSpacing: 8,
-                  mainAxisExtent: 168,
+                  mainAxisExtent: 188,
                 ),
                 delegate: SliverChildBuilderDelegate(
                   (ctx, i) {
@@ -223,6 +223,7 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
                             initialIndex: i,
                             groupId: groupId,
                             accessToken: accessToken,
+                            onClipChanged: notifier.mergeClip,
                           ),
                         ));
                       },
@@ -464,7 +465,32 @@ class _GridClipCard extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Container(color: const Color(0xFF0F172A)),
+                    DecoratedBox(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Color(0xFF0F172A),
+                            Color(0xFF14532D),
+                            Color(0xFF0F172A),
+                          ],
+                        ),
+                      ),
+                      child: CustomPaint(painter: _ReplayFieldPainter()),
+                    ),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: .52),
+                          ],
+                        ),
+                      ),
+                    ),
                     Center(
                       child: Container(
                         width: 36,
@@ -476,6 +502,55 @@ class _GridClipCard extends StatelessWidget {
                         ),
                         child: const Icon(Icons.play_arrow_rounded,
                             size: 20, color: Colors.white),
+                      ),
+                    ),
+                    Positioned(
+                      top: 6,
+                      left: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: (clip.eventType ?? '').toLowerCase() == 'gol'
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFF3B82F6),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          (clip.eventType ?? 'Replay').toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 8,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Column(
+                        children: [
+                          _FloatingSocialAction(
+                            icon: clip.isLiked
+                                ? Icons.favorite_rounded
+                                : Icons.favorite_border_rounded,
+                            active: clip.isLiked,
+                            color: const Color(0xFFFF4D6D),
+                            label:
+                                clip.likeCount > 0 ? '${clip.likeCount}' : null,
+                            onTap: onLike,
+                          ),
+                          const SizedBox(height: 6),
+                          _FloatingSocialAction(
+                            icon: clip.isFavorited
+                                ? Icons.bookmark_rounded
+                                : Icons.bookmark_border_rounded,
+                            active: clip.isFavorited,
+                            color: const Color(0xFFF59E0B),
+                            onTap: onFavorite,
+                          ),
+                        ],
                       ),
                     ),
                     if (clip.minute != null)
@@ -570,6 +645,91 @@ class _GridClipCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FloatingSocialAction extends StatelessWidget {
+  final IconData icon;
+  final bool active;
+  final Color color;
+  final String? label;
+  final VoidCallback onTap;
+
+  const _FloatingSocialAction({
+    required this.icon,
+    required this.active,
+    required this.color,
+    this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: active ? color : Colors.black.withValues(alpha: .42),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: Colors.white, size: 16),
+              if (label != null) ...[
+                const SizedBox(width: 3),
+                Text(
+                  label!,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReplayFieldPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final line = Paint()
+      ..color = Colors.white.withValues(alpha: .18)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    canvas.drawLine(
+      Offset(size.width / 2, 0),
+      Offset(size.width / 2, size.height),
+      line,
+    );
+    canvas.drawCircle(
+      Offset(size.width / 2, size.height / 2),
+      size.shortestSide * .16,
+      line,
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(0, size.height * .25, size.width * .22, size.height * .5),
+      line,
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(
+        size.width * .78,
+        size.height * .25,
+        size.width * .22,
+        size.height * .5,
+      ),
+      line,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _MiniAction extends StatelessWidget {

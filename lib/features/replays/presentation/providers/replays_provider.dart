@@ -82,24 +82,24 @@ class ReplayListNotifier extends StateNotifier<AsyncValue<List<ReplayClip>>> {
     final idx = current.indexWhere((c) => c.clipId == clipId);
     if (idx < 0) return;
 
-    final clip       = current[idx];
-    final wasLiked   = clip.isLiked;
+    final clip = current[idx];
+    final wasLiked = clip.isLiked;
     final optimistic = List<ReplayClip>.from(current)
       ..[idx] = clip.copyWith(
-        isLiked:   !wasLiked,
+        isLiked: !wasLiked,
         likeCount: wasLiked ? clip.likeCount - 1 : clip.likeCount + 1,
       );
 
     state = AsyncData(optimistic);
 
     try {
-      final result  = await _ds.toggleLike(_groupId, clipId);
+      final result = await _ds.toggleLike(_groupId, clipId);
       final current2 = state.valueOrNull ?? optimistic;
-      final idx2     = current2.indexWhere((c) => c.clipId == clipId);
+      final idx2 = current2.indexWhere((c) => c.clipId == clipId);
       if (idx2 >= 0) {
         final updated = List<ReplayClip>.from(current2)
           ..[idx2] = current2[idx2].copyWith(
-            isLiked:   result.isLiked,
+            isLiked: result.isLiked,
             likeCount: result.likeCount,
           );
         state = AsyncData(updated);
@@ -107,7 +107,7 @@ class ReplayListNotifier extends StateNotifier<AsyncValue<List<ReplayClip>>> {
     } catch (_) {
       // Revert to pre-optimistic state
       final current2 = state.valueOrNull ?? optimistic;
-      final idx2     = current2.indexWhere((c) => c.clipId == clipId);
+      final idx2 = current2.indexWhere((c) => c.clipId == clipId);
       if (idx2 >= 0) {
         final reverted = List<ReplayClip>.from(current2)..[idx2] = clip;
         state = AsyncData(reverted);
@@ -125,17 +125,17 @@ class ReplayListNotifier extends StateNotifier<AsyncValue<List<ReplayClip>>> {
     final idx = current.indexWhere((c) => c.clipId == clipId);
     if (idx < 0) return;
 
-    final clip          = current[idx];
-    final wasFavorited  = clip.isFavorited;
-    final optimistic    = List<ReplayClip>.from(current)
+    final clip = current[idx];
+    final wasFavorited = clip.isFavorited;
+    final optimistic = List<ReplayClip>.from(current)
       ..[idx] = clip.copyWith(isFavorited: !wasFavorited);
 
     state = AsyncData(optimistic);
 
     try {
       final isFavorited = await _ds.toggleFavorite(_groupId, clipId);
-      final current2    = state.valueOrNull ?? optimistic;
-      final idx2        = current2.indexWhere((c) => c.clipId == clipId);
+      final current2 = state.valueOrNull ?? optimistic;
+      final idx2 = current2.indexWhere((c) => c.clipId == clipId);
       if (idx2 >= 0) {
         final updated = List<ReplayClip>.from(current2)
           ..[idx2] = current2[idx2].copyWith(isFavorited: isFavorited);
@@ -143,13 +143,22 @@ class ReplayListNotifier extends StateNotifier<AsyncValue<List<ReplayClip>>> {
       }
     } catch (_) {
       final current2 = state.valueOrNull ?? optimistic;
-      final idx2     = current2.indexWhere((c) => c.clipId == clipId);
+      final idx2 = current2.indexWhere((c) => c.clipId == clipId);
       if (idx2 >= 0) {
         final reverted = List<ReplayClip>.from(current2)..[idx2] = clip;
         state = AsyncData(reverted);
       }
       rethrow;
     }
+  }
+
+  void mergeClip(ReplayClip clip) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    final idx = current.indexWhere((c) => c.clipId == clip.clipId);
+    if (idx < 0) return;
+    final updated = List<ReplayClip>.from(current)..[idx] = clip;
+    state = AsyncData(updated);
   }
 
   // ── Delete ────────────────────────────────────────────────────────────────
@@ -165,35 +174,35 @@ class ReplayListNotifier extends StateNotifier<AsyncValue<List<ReplayClip>>> {
 
 // ── Providers ─────────────────────────────────────────────────────────────────
 
-final replaysAllProvider =
-    StateNotifierProvider.autoDispose.family<ReplayListNotifier,
-        AsyncValue<List<ReplayClip>>, String>(
+final replaysAllProvider = StateNotifierProvider.autoDispose
+    .family<ReplayListNotifier, AsyncValue<List<ReplayClip>>, String>(
   (ref, groupId) => ReplayListNotifier(
-    ds:      ref.watch(replaysDsProvider),
+    ds: ref.watch(replaysDsProvider),
     groupId: groupId,
-    fetcher: (page, size) =>
-        ref.read(replaysDsProvider).fetchAll(groupId, page: page, pageSize: size),
+    fetcher: (page, size) => ref
+        .read(replaysDsProvider)
+        .fetchAll(groupId, page: page, pageSize: size),
   ),
 );
 
-final replaysLikedProvider =
-    StateNotifierProvider.autoDispose.family<ReplayListNotifier,
-        AsyncValue<List<ReplayClip>>, String>(
+final replaysLikedProvider = StateNotifierProvider.autoDispose
+    .family<ReplayListNotifier, AsyncValue<List<ReplayClip>>, String>(
   (ref, groupId) => ReplayListNotifier(
-    ds:      ref.watch(replaysDsProvider),
+    ds: ref.watch(replaysDsProvider),
     groupId: groupId,
-    fetcher: (page, size) =>
-        ref.read(replaysDsProvider).fetchMyLikes(groupId, page: page, pageSize: size),
+    fetcher: (page, size) => ref
+        .read(replaysDsProvider)
+        .fetchMyLikes(groupId, page: page, pageSize: size),
   ),
 );
 
-final replaysFavoritesProvider =
-    StateNotifierProvider.autoDispose.family<ReplayListNotifier,
-        AsyncValue<List<ReplayClip>>, String>(
+final replaysFavoritesProvider = StateNotifierProvider.autoDispose
+    .family<ReplayListNotifier, AsyncValue<List<ReplayClip>>, String>(
   (ref, groupId) => ReplayListNotifier(
-    ds:      ref.watch(replaysDsProvider),
+    ds: ref.watch(replaysDsProvider),
     groupId: groupId,
-    fetcher: (page, size) =>
-        ref.read(replaysDsProvider).fetchMyFavorites(groupId, page: page, pageSize: size),
+    fetcher: (page, size) => ref
+        .read(replaysDsProvider)
+        .fetchMyFavorites(groupId, page: page, pageSize: size),
   ),
 );

@@ -40,6 +40,7 @@ class ReplayVideoPlayerPage extends ConsumerStatefulWidget {
   final int initialIndex;
   final String groupId;
   final String? accessToken;
+  final ValueChanged<ReplayClip>? onClipChanged;
 
   const ReplayVideoPlayerPage({
     super.key,
@@ -47,6 +48,7 @@ class ReplayVideoPlayerPage extends ConsumerStatefulWidget {
     required this.initialIndex,
     required this.groupId,
     this.accessToken,
+    this.onClipChanged,
   });
 
   @override
@@ -236,6 +238,7 @@ class _ReplayVideoPlayerPageState extends ConsumerState<ReplayVideoPlayerPage> {
         isLiked: !_clip.isLiked,
         likeCount: _clip.isLiked ? _clip.likeCount - 1 : _clip.likeCount + 1,
       );
+      widget.onClipChanged?.call(_clips[_index]);
     });
     try {
       final result = await ds.toggleLike(widget.groupId, _clip.clipId);
@@ -245,10 +248,16 @@ class _ReplayVideoPlayerPageState extends ConsumerState<ReplayVideoPlayerPage> {
             isLiked: result.isLiked,
             likeCount: result.likeCount,
           );
+          widget.onClipChanged?.call(_clips[_index]);
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _clips[_index] = prev);
+      if (mounted) {
+        setState(() {
+          _clips[_index] = prev;
+          widget.onClipChanged?.call(_clips[_index]);
+        });
+      }
     } finally {
       if (mounted) setState(() => _actionBusy = false);
     }
@@ -261,19 +270,41 @@ class _ReplayVideoPlayerPageState extends ConsumerState<ReplayVideoPlayerPage> {
     setState(() {
       _actionBusy = true;
       _clips[_index] = _clip.copyWith(isFavorited: !_clip.isFavorited);
+      widget.onClipChanged?.call(_clips[_index]);
     });
     try {
       final isFav = await ds.toggleFavorite(widget.groupId, _clip.clipId);
       if (mounted) {
         setState(() {
           _clips[_index] = _clips[_index].copyWith(isFavorited: isFav);
+          widget.onClipChanged?.call(_clips[_index]);
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _clips[_index] = prev);
+      if (mounted) {
+        setState(() {
+          _clips[_index] = prev;
+          widget.onClipChanged?.call(_clips[_index]);
+        });
+      }
     } finally {
       if (mounted) setState(() => _actionBusy = false);
     }
+  }
+
+  void _openLikersSheet() {
+    if (_clip.clipId.isEmpty) return;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _LikersSheet(
+        future: ref
+            .read(replaysDsProvider)
+            .fetchLikers(widget.groupId, _clip.clipId),
+        likeCount: _clip.likeCount,
+      ),
+    );
   }
 
   void _copyUrl() {
@@ -408,6 +439,7 @@ class _ReplayVideoPlayerPageState extends ConsumerState<ReplayVideoPlayerPage> {
                 onLike: _clip.clipId.isNotEmpty ? _toggleLike : null,
                 onFavorite: _clip.clipId.isNotEmpty ? _toggleFavorite : null,
                 onCopy: _copyUrl,
+                onShowLikers: _clip.likeCount > 0 ? _openLikersSheet : null,
                 busy: _actionBusy,
               ),
             ),
@@ -549,6 +581,7 @@ class _SocialDock extends StatelessWidget {
   final VoidCallback? onLike;
   final VoidCallback? onFavorite;
   final VoidCallback onCopy;
+  final VoidCallback? onShowLikers;
   final bool busy;
 
   const _SocialDock({
@@ -556,6 +589,7 @@ class _SocialDock extends StatelessWidget {
     this.onLike,
     this.onFavorite,
     required this.onCopy,
+    this.onShowLikers,
     required this.busy,
   });
 
@@ -564,47 +598,85 @@ class _SocialDock extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
       child: Container(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: Colors.white.withAlpha(24),
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(28),
           border: Border.all(color: Colors.white.withAlpha(28)),
         ),
-        child: Row(children: [
-          Expanded(
-            child: _SocialPill(
-              icon: clip.isLiked
-                  ? Icons.favorite_rounded
-                  : Icons.favorite_border_rounded,
-              label: 'Curtir',
-              value: clip.likeCount > 0 ? '${clip.likeCount}' : null,
-              active: clip.isLiked,
-              activeColor: const Color(0xFFFF4D6D),
-              onTap: busy ? null : onLike,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            Expanded(
+              child: _SocialPill(
+                icon: clip.isLiked
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
+                label: clip.isLiked ? 'Curtido' : 'Curtir',
+                value: clip.likeCount > 0 ? '${clip.likeCount}' : null,
+                active: clip.isLiked,
+                activeColor: const Color(0xFFFF4D6D),
+                onTap: busy ? null : onLike,
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _SocialPill(
-              icon: clip.isFavorited
-                  ? Icons.bookmark_rounded
-                  : Icons.bookmark_border_rounded,
-              label: 'Salvar',
-              active: clip.isFavorited,
-              activeColor: const Color(0xFFF59E0B),
-              onTap: busy ? null : onFavorite,
+            const SizedBox(width: 8),
+            Expanded(
+              child: _SocialPill(
+                icon: clip.isFavorited
+                    ? Icons.bookmark_rounded
+                    : Icons.bookmark_border_rounded,
+                label: clip.isFavorited ? 'Salvo' : 'Salvar',
+                active: clip.isFavorited,
+                activeColor: const Color(0xFFF59E0B),
+                onTap: busy ? null : onFavorite,
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _SocialPill(
-              icon: Icons.ios_share_rounded,
-              label: 'Link',
-              active: false,
-              activeColor: const Color(0xFF38BDF8),
-              onTap: onCopy,
+            const SizedBox(width: 8),
+            Expanded(
+              child: _SocialPill(
+                icon: Icons.ios_share_rounded,
+                label: 'Link',
+                active: false,
+                activeColor: const Color(0xFF38BDF8),
+                onTap: onCopy,
+              ),
             ),
-          ),
+          ]),
+          if (clip.likeCount > 0) ...[
+            const SizedBox(height: 8),
+            Material(
+              color: Colors.white.withAlpha(16),
+              borderRadius: BorderRadius.circular(18),
+              child: InkWell(
+                onTap: onShowLikers,
+                borderRadius: BorderRadius.circular(18),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Row(
+                    children: [
+                      _LikerStack(count: clip.likeCount),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          clip.likeCount == 1
+                              ? '1 pessoa curtiu este replay'
+                              : '${clip.likeCount} pessoas curtiram este replay',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Icon(Icons.keyboard_arrow_up_rounded,
+                          color: Colors.white70, size: 18),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ]),
       ),
     );
@@ -678,6 +750,210 @@ class _SocialPill extends StatelessWidget {
           ]),
         ),
       ),
+    );
+  }
+}
+
+class _LikerStack extends StatelessWidget {
+  final int count;
+
+  const _LikerStack({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = count.clamp(1, 3).toInt();
+    return SizedBox(
+      width: 22.0 + ((visible - 1) * 16),
+      height: 28,
+      child: Stack(
+        children: [
+          for (var i = 0; i < visible; i++)
+            Positioned(
+              left: i * 16,
+              child: Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: [
+                    const Color(0xFFFF4D6D),
+                    const Color(0xFF8B5CF6),
+                    const Color(0xFF38BDF8),
+                  ][i],
+                  border: Border.all(color: const Color(0xFF06101F), width: 2),
+                ),
+                child: const Icon(Icons.favorite_rounded,
+                    size: 13, color: Colors.white),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LikersSheet extends StatelessWidget {
+  final Future<List<ReplayLiker>> future;
+  final int likeCount;
+
+  const _LikersSheet({
+    required this.future,
+    required this.likeCount,
+  });
+
+  String _initials(String name) {
+    final parts =
+        name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    String firstLetter(String value) => value.substring(0, 1).toUpperCase();
+    if (parts.length == 1) return firstLetter(parts.first);
+    return '${firstLetter(parts.first)}${firstLetter(parts.last)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: .48,
+      minChildSize: .28,
+      maxChildSize: .82,
+      builder: (context, controller) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF0F172A),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFF4D6D),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.favorite_rounded,
+                          color: Colors.white),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Curtido por',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          Text(
+                            likeCount == 1
+                                ? '1 curtida neste replay'
+                                : '$likeCount curtidas neste replay',
+                            style: const TextStyle(
+                              color: Colors.white60,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: FutureBuilder<List<ReplayLiker>>(
+                  future: future,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      );
+                    }
+                    if (snapshot.hasError) {
+                      return const Center(
+                        child: Text(
+                          'Nao foi possivel carregar as curtidas.',
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                      );
+                    }
+
+                    final likers = snapshot.data ?? const <ReplayLiker>[];
+                    if (likers.isEmpty) {
+                      return const Center(
+                        child: Text(
+                          'Ainda nao ha curtidas neste replay.',
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                      );
+                    }
+
+                    return ListView.separated(
+                      controller: controller,
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                      itemCount: likers.length,
+                      separatorBuilder: (_, __) => Divider(
+                        color: Colors.white.withAlpha(18),
+                        height: 1,
+                      ),
+                      itemBuilder: (context, index) {
+                        final liker = likers[index];
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            radius: 22,
+                            backgroundColor: const Color(0xFF1D4ED8),
+                            child: Text(
+                              _initials(liker.userName),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            liker.userName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          trailing: Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF4D6D).withAlpha(28),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.favorite_rounded,
+                                color: Color(0xFFFF4D6D), size: 18),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
