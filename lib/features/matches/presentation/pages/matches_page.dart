@@ -6,6 +6,7 @@ import '../../../../core/realtime/realtime_provider.dart';
 import '../../../auth/domain/entities/account.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
+import '../../../polls/domain/entities/poll_detail.dart';
 import '../../../polls/domain/entities/poll_summary.dart';
 import '../../../polls/presentation/providers/polls_provider.dart';
 import '../../../polls/presentation/widgets/event_detail_sheet.dart';
@@ -19,6 +20,11 @@ import 'step4_jogo_page.dart';
 import 'step5_encerrar_page.dart';
 import 'step6_pos_jogo_page.dart';
 import 'step7_final_page.dart';
+
+final _linkedPollDetailProvider = FutureProvider.autoDispose
+    .family<PollDetail, ({String groupId, String pollId})>(
+  (ref, args) => ref.watch(pollsDsProvider).getPoll(args.groupId, args.pollId),
+);
 
 class MatchesPage extends ConsumerStatefulWidget {
   final String? initialMatchId;
@@ -367,6 +373,13 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
           next.whenData((event) {
             if (event.type == 'match.changed') {
               ref.read(matchNotifierProvider.notifier).refresh();
+            } else if (event.type == 'poll.changed') {
+              ref.invalidate(pollsListProvider(groupId));
+              final pollId = event.pollId;
+              if (pollId != null && pollId.isNotEmpty) {
+                ref.invalidate(_linkedPollDetailProvider(
+                    (groupId: groupId, pollId: pollId)));
+              }
             }
           });
         },
@@ -616,6 +629,10 @@ class _LinkedPollStrip extends ConsumerWidget {
       child: linked != null
           ? _LinkedRow(
               poll: linked,
+              detail: ref
+                  .watch(_linkedPollDetailProvider(
+                      (groupId: groupId, pollId: linked.id)))
+                  .valueOrNull,
               groupId: groupId,
               isAdmin: isAdmin,
               isDark: isDark,
@@ -673,6 +690,7 @@ class _LinkedPollStrip extends ConsumerWidget {
 
 class _LinkedRow extends StatelessWidget {
   final PollSummary poll;
+  final PollDetail? detail;
   final String groupId;
   final bool isAdmin;
   final bool isDark;
@@ -680,6 +698,7 @@ class _LinkedRow extends StatelessWidget {
   final void Function(BuildContext) onOpen;
   const _LinkedRow({
     required this.poll,
+    required this.detail,
     required this.groupId,
     required this.isAdmin,
     required this.isDark,
@@ -691,6 +710,10 @@ class _LinkedRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = poll.isEvent ? AppColors.violet600 : AppColors.blue600;
     final responses = poll.totalVoters;
+    final presence = detail != null ? _EventPresenceStats.from(detail!) : null;
+    final summaryText = poll.isEvent && presence != null
+        ? '$responses ${responses == 1 ? 'voto' : 'votos'} - ${presence.label}'
+        : '$responses ${responses == 1 ? 'resposta' : 'respostas'}';
     final label = poll.isEvent ? 'Evento' : 'Votação';
     final statusText = poll.isOpen ? 'Aberta' : 'Encerrada';
     final statusColor = poll.isOpen ? AppColors.emerald500 : AppColors.slate400;
@@ -762,7 +785,7 @@ class _LinkedRow extends StatelessWidget {
             Row(children: [
               const SizedBox(width: 23), // alinha com o título
               Text(
-                '$responses ${responses == 1 ? 'resposta' : 'respostas'} · $label · abrir →',
+                '$summaryText · $label · abrir →',
                 style: TextStyle(
                   fontSize: 11,
                   color: isDark ? AppColors.slate500 : AppColors.slate400,
@@ -772,6 +795,43 @@ class _LinkedRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _EventPresenceStats {
+  final int going;
+  final int guests;
+
+  const _EventPresenceStats({required this.going, required this.guests});
+
+  int get total => going + guests;
+
+  String get label {
+    return '$total ${total == 1 ? 'presença' : 'presenças'}';
+  }
+
+  factory _EventPresenceStats.from(PollDetail poll) {
+    String? goingOptionId;
+    try {
+      goingOptionId =
+          poll.options.firstWhere((o) => o.text.toLowerCase() == 'sim').id;
+    } catch (_) {
+      goingOptionId = null;
+    }
+
+    final goingVotes = goingOptionId == null
+        ? <PollVote>[]
+        : (poll.votes ?? <PollVote>[])
+            .where((vote) => vote.optionId == goingOptionId)
+            .toList();
+    final guestCount = poll.allowGuests
+        ? goingVotes.fold<int>(0, (sum, vote) => sum + vote.guests.length)
+        : 0;
+
+    return _EventPresenceStats(
+      going: goingVotes.length,
+      guests: guestCount,
     );
   }
 }

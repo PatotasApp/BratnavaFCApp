@@ -125,6 +125,31 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
     return vote?.guests ?? const [];
   }
 
+  List<PollVote> _votesForOption(PollOption option) {
+    return _poll.votes?.where((v) => v.optionId == option.id).toList() ??
+        <PollVote>[];
+  }
+
+  int _optionPresenceCount(PollOption option) {
+    final votes = _votesForOption(option);
+    if (option.text.toLowerCase() != 'sim') {
+      return option.voteCount;
+    }
+    return option.voteCount +
+        votes.fold<int>(
+            0, (sum, vote) => sum + _guestsForPlayer(vote.playerId).length);
+  }
+
+  int get _eventPresenceTotal {
+    try {
+      final option =
+          _poll.options.firstWhere((o) => o.text.toLowerCase() == 'sim');
+      return _optionPresenceCount(option);
+    } catch (_) {
+      return 0;
+    }
+  }
+
   List<PollGuest> get _myGuests {
     final myId = _myPlayerId;
     if (myId == null) return const [];
@@ -512,7 +537,10 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final icon = _poll.eventIcon ?? '📅';
     final cost = _formatCost();
-    final total = _poll.totalVoters;
+    final total = _poll.options.fold<int>(
+      0,
+      (sum, opt) => sum + opt.voteCount,
+    );
 
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
@@ -590,6 +618,10 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
                           icon: Icons.attach_money,
                           label: cost,
                           color: Colors.amber.shade700),
+                    _InfoChip(
+                        icon: Icons.groups_2_outlined,
+                        label:
+                            '${_poll.totalVoters} ${_poll.totalVoters == 1 ? 'voto' : 'votos'} · $_eventPresenceTotal ${_eventPresenceTotal == 1 ? 'presença' : 'presenças'}'),
                     if (_poll.deadlineDate != null)
                       _InfoChip(
                         icon: Icons.schedule,
@@ -691,17 +723,22 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
                   if (_tab == 0)
                     ..._poll.options.map((opt) {
                       final pct = total > 0 ? opt.voteCount / total : 0.0;
-                      final voters = _poll.votes
-                              ?.where((v) => v.optionId == opt.id)
-                              .toList() ??
-                          [];
+                      final voters = _votesForOption(opt)
+                          .map((vote) => vote.playerName)
+                          .toList();
+                      const guestCount = 0;
+                      final presenceCount = opt.voteCount;
+                      final countLabel = opt.text.toLowerCase() == 'sim' &&
+                              guestCount > 0
+                          ? '${opt.voteCount} ${opt.voteCount == 1 ? 'voto' : 'votos'} + $guestCount ${guestCount == 1 ? 'convidado' : 'convidados'} = $presenceCount ${presenceCount == 1 ? 'presença' : 'presenças'}'
+                          : '$presenceCount ${_poll.isEvent ? (presenceCount == 1 ? 'presença' : 'presenças') : (presenceCount == 1 ? 'voto' : 'votos')}';
                       return _ResultBar(
                         label: opt.text,
-                        count: opt.voteCount,
                         pct: pct,
                         showVoters: _poll.showVotes,
-                        voters: voters.map((v) => v.playerName).toList(),
+                        voters: voters,
                         isDark: isDark,
+                        countLabel: countLabel,
                       );
                     }),
 
@@ -1242,19 +1279,19 @@ class _RsvpButton extends StatelessWidget {
 
 class _ResultBar extends StatelessWidget {
   final String label;
-  final int count;
   final double pct;
   final bool showVoters;
   final List<String> voters;
   final bool isDark;
+  final String countLabel;
 
   const _ResultBar({
     required this.label,
-    required this.count,
     required this.pct,
     required this.showVoters,
     required this.voters,
     required this.isDark,
+    this.countLabel = 'votos',
   });
 
   @override
@@ -1279,7 +1316,7 @@ class _ResultBar extends StatelessWidget {
                               color: isDark
                                   ? AppColors.slate200
                                   : AppColors.slate700))),
-                  Text('$count  ${(pct * 100).round()}%',
+                  Text('$countLabel  ${(pct * 100).round()}%',
                       style: TextStyle(
                           fontSize: 12,
                           color: isDark
