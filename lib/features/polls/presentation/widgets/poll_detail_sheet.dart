@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/realtime/realtime_provider.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../matches/domain/entities/match_models.dart';
@@ -1278,14 +1280,60 @@ class _ResultTab extends StatelessWidget {
       separatorBuilder: (_, __) => const Divider(height: 12),
       itemBuilder: (_, i) {
         final m = members[i];
+        final name = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(m.playerName,
+                style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? AppColors.slate200 : AppColors.slate700)),
+            Text(formatVoteDateTime(m.votedAt),
+                style: TextStyle(
+                    fontSize: 10,
+                    color: isDark ? AppColors.slate500 : AppColors.slate400)),
+          ],
+        );
+
+        if (poll.allowMultipleVotes) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              name,
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: poll.options.map((opt) {
+                  final selected = m.votedOptionIds.contains(opt.id);
+                  final next = selected
+                      ? m.votedOptionIds.where((id) => id != opt.id).toList()
+                      : [...m.votedOptionIds, opt.id];
+
+                  return FilterChip(
+                    label: Text(opt.text),
+                    selected: selected,
+                    onSelected:
+                        saving ? null : (_) => onAdminVote(m.playerId, next),
+                    visualDensity: VisualDensity.compact,
+                    selectedColor:
+                        isDark ? AppColors.slate200 : AppColors.slate900,
+                    checkmarkColor: isDark ? AppColors.slate900 : Colors.white,
+                    labelStyle: TextStyle(
+                      fontSize: 12,
+                      color: selected
+                          ? (isDark ? AppColors.slate900 : Colors.white)
+                          : (isDark ? AppColors.slate300 : AppColors.slate600),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          );
+        }
+
         return Row(
           children: [
-            Expanded(
-                child: Text(m.playerName,
-                    style: TextStyle(
-                        fontSize: 13,
-                        color:
-                            isDark ? AppColors.slate200 : AppColors.slate700))),
+            Expanded(child: name),
             DropdownButton<String>(
               value:
                   m.votedOptionIds.isNotEmpty ? m.votedOptionIds.first : null,
@@ -1312,6 +1360,13 @@ class _ResultTab extends StatelessWidget {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
+String formatVoteDateTime(String? votedAt) {
+  if (votedAt == null || votedAt.isEmpty) return 'Ainda não respondeu';
+  final parsed = parseApiInstantOrNull(votedAt);
+  if (parsed == null) return 'Ainda não respondeu';
+  return DateFormat('dd/MM/yy HH:mm', 'pt_BR').format(parsed);
+}
 
 class _StatusChip extends StatelessWidget {
   final bool isOpen;

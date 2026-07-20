@@ -165,6 +165,27 @@ class PaymentsRemoteDataSource {
     _throwIfError(res.data);
   }
 
+  Future<Map<String, dynamic>?> getExitPending(String groupId) async {
+    final res = await _dio.get(ApiConstants.exitPending(groupId));
+    return _unwrapMap(res.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getExitDebtAlerts(String groupId) async {
+    final res = await _dio.get(ApiConstants.exitDebtAlerts(groupId));
+    final d = _unwrap(res.data);
+    return (d is List ? d : []).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> keepExitDebtAlert(String groupId, String notificationId) async {
+    final res = await _dio.post(ApiConstants.keepExitDebtAlert(groupId, notificationId));
+    _throwIfError(res.data);
+  }
+
+  Future<void> markExitDebtAlertAsPaid(String groupId, String notificationId) async {
+    final res = await _dio.post(ApiConstants.markExitDebtAlertAsPaid(groupId, notificationId));
+    _throwIfError(res.data);
+  }
+
   // Get payment summary for a specific player (admin/financeiro)
   // GET /api/groups/{groupId}/payments/summary/{playerId}
   Future<PaymentSummary?> getPlayerSummary(String groupId, String playerId) async {
