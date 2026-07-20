@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
@@ -10,6 +11,7 @@ import '../../../groups/presentation/providers/group_invites_provider.dart';
 import '../../../groups/domain/entities/group_invite.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
+import '../../../payments/presentation/widgets/exit_pending_payments_sheet.dart';
 import '../../../../core/errors/app_exception.dart';
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -127,21 +129,18 @@ class _AdminUsersPageState extends ConsumerState<_AdminUsersPage> {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(
-                      color:
-                          isDark ? AppColors.slate700 : AppColors.slate200,
+                      color: isDark ? AppColors.slate700 : AppColors.slate200,
                     ),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(
-                      color:
-                          isDark ? AppColors.slate700 : AppColors.slate200,
+                      color: isDark ? AppColors.slate700 : AppColors.slate200,
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide:
-                        const BorderSide(color: AppColors.blue500),
+                    borderSide: const BorderSide(color: AppColors.blue500),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 14,
@@ -159,7 +158,8 @@ class _AdminUsersPageState extends ConsumerState<_AdminUsersPage> {
             ),
             error: (e, _) => SliverFillRemaining(
               child: _ErrorState(
-                message: extractDioError(e, 'Não foi possível carregar usuários.'),
+                message:
+                    extractDioError(e, 'Não foi possível carregar usuários.'),
                 onRetry: () => ref.invalidate(usersProvider),
               ),
             ),
@@ -172,13 +172,12 @@ class _AdminUsersPageState extends ConsumerState<_AdminUsersPage> {
               return SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
                 sliver: SliverGrid(
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                  mainAxisExtent: 145,
-                ),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    mainAxisExtent: 145,
+                  ),
                   delegate: SliverChildBuilderDelegate(
                     (ctx, i) => _UserCard(
                       user: filtered[i],
@@ -375,8 +374,7 @@ class _UserCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color:
-                          isDark ? AppColors.slate100 : AppColors.slate800,
+                      color: isDark ? AppColors.slate100 : AppColors.slate800,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -386,8 +384,7 @@ class _UserCard extends StatelessWidget {
                     subtitle,
                     style: TextStyle(
                       fontSize: 10,
-                      color:
-                          isDark ? AppColors.slate500 : AppColors.slate400,
+                      color: isDark ? AppColors.slate500 : AppColors.slate400,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -619,6 +616,15 @@ class _ProfileCard extends StatelessWidget {
     );
   }
 
+  void _showDeleteAccountSheet(BuildContext ctx, bool dark) {
+    showModalBottomSheet(
+      context: ctx,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _DeleteAccountSheet(isDark: dark),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bg = isDark ? AppColors.slate800 : Colors.white;
@@ -641,15 +647,13 @@ class _ProfileCard extends StatelessWidget {
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color:
-                        isDark ? AppColors.slate700 : AppColors.slate100,
+                    color: isDark ? AppColors.slate700 : AppColors.slate100,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
                     Icons.person_outline_rounded,
                     size: 16,
-                    color:
-                        isDark ? AppColors.slate300 : AppColors.slate600,
+                    color: isDark ? AppColors.slate300 : AppColors.slate600,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -662,9 +666,8 @@ class _ProfileCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: isDark
-                              ? AppColors.slate100
-                              : AppColors.slate800,
+                          color:
+                              isDark ? AppColors.slate100 : AppColors.slate800,
                         ),
                       ),
                       Text(
@@ -722,11 +725,31 @@ class _ProfileCard extends StatelessWidget {
                 const SizedBox(height: 16),
                 _FieldRow(
                   fields: [
-                    _FieldData('EMAIL', user.email.isNotEmpty ? user.email : '—'),
+                    _FieldData(
+                        'EMAIL', user.email.isNotEmpty ? user.email : '—'),
                     _FieldData('TELEFONE', user.phone ?? '—'),
                     _FieldData('NASCIMENTO', user.birthDate ?? '—'),
                   ],
                   isDark: isDark,
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showDeleteAccountSheet(context, isDark),
+                    icon: const Icon(Icons.delete_outline_rounded, size: 17),
+                    label: const Text('Excluir minha conta'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.rose600,
+                      side: BorderSide(
+                        color: isDark ? AppColors.rose600 : AppColors.rose200,
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -740,8 +763,7 @@ class _ProfileCard extends StatelessWidget {
 class _FieldData {
   final String label;
   final String value;
-  final Color? valueColor;
-  const _FieldData(this.label, this.value, {this.valueColor});
+  const _FieldData(this.label, this.value);
 }
 
 class _FieldRow extends StatelessWidget {
@@ -778,10 +800,9 @@ class _FieldRow extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: f.valueColor ??
-                                (isDark
-                                    ? AppColors.slate100
-                                    : AppColors.slate800),
+                            color: isDark
+                                ? AppColors.slate100
+                                : AppColors.slate800,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -891,7 +912,9 @@ class _InvitesCardState extends ConsumerState<_InvitesCard> {
               ],
             ),
           ),
-          Divider(height: 1, color: isDark ? AppColors.slate700 : AppColors.slate100),
+          Divider(
+              height: 1,
+              color: isDark ? AppColors.slate700 : AppColors.slate100),
           invitesAsync.when(
             loading: () => const Padding(
               padding: EdgeInsets.all(16),
@@ -921,14 +944,17 @@ class _InvitesCardState extends ConsumerState<_InvitesCard> {
                 );
               }
               return Column(
-                children: invites.map((invite) => _InviteRow(
-                  invite: invite,
-                  isDark: isDark,
-                  acceptLoading: _loading.contains(invite.id),
-                  rejectLoading: _loading.contains('reject_${invite.id}'),
-                  onAccept: () => _accept(invite),
-                  onReject: () => _reject(invite),
-                )).toList(),
+                children: invites
+                    .map((invite) => _InviteRow(
+                          invite: invite,
+                          isDark: isDark,
+                          acceptLoading: _loading.contains(invite.id),
+                          rejectLoading:
+                              _loading.contains('reject_${invite.id}'),
+                          onAccept: () => _accept(invite),
+                          onReject: () => _reject(invite),
+                        ))
+                    .toList(),
               );
             },
           ),
@@ -971,7 +997,8 @@ class _InviteRow extends StatelessWidget {
                   color: AppColors.emerald500.withAlpha(30),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.group, color: AppColors.emerald500, size: 20),
+                child: const Icon(Icons.group,
+                    color: AppColors.emerald500, size: 20),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -991,7 +1018,8 @@ class _InviteRow extends StatelessWidget {
                         'Convidado por ${invite.invitedByName}',
                         style: TextStyle(
                           fontSize: 12,
-                          color: isDark ? AppColors.slate400 : AppColors.slate500,
+                          color:
+                              isDark ? AppColors.slate400 : AppColors.slate500,
                         ),
                       ),
                   ],
@@ -1010,7 +1038,10 @@ class _InviteRow extends StatelessWidget {
                     side: const BorderSide(color: AppColors.rose500),
                   ),
                   child: rejectLoading
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
                       : const Text('Recusar'),
                 ),
               ),
@@ -1022,7 +1053,11 @@ class _InviteRow extends StatelessWidget {
                     backgroundColor: AppColors.emerald500,
                   ),
                   child: acceptLoading
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
                       : const Text('Aceitar'),
                 ),
               ),
@@ -1090,8 +1125,7 @@ class _UserDetailSheetState extends ConsumerState<_UserDetailSheet> {
         lastName: _lastCtrl.text.trim(),
         userName: _userCtrl.text.trim(),
         email: _emailCtrl.text.trim(),
-        phone:
-            _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+        phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
         birthDate: birthIso,
         isActive: _isActive,
       );
@@ -1195,11 +1229,11 @@ class _UserDetailSheetState extends ConsumerState<_UserDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final dark   = widget.isDark;
-    final bg     = dark ? AppColors.slate900 : Colors.white;
-    final fgSub  = dark ? AppColors.slate400 : AppColors.slate500;
+    final dark = widget.isDark;
+    final bg = dark ? AppColors.slate900 : Colors.white;
+    final fgSub = dark ? AppColors.slate400 : AppColors.slate500;
     final fgMain = dark ? AppColors.slate100 : AppColors.slate800;
-    final fill   = dark ? AppColors.slate800 : AppColors.slate50;
+    final fill = dark ? AppColors.slate800 : AppColors.slate50;
     final border = dark ? AppColors.slate700 : AppColors.slate200;
 
     final myUserId = ref.read(accountStoreProvider).activeAccount?.userId;
@@ -1263,8 +1297,7 @@ class _UserDetailSheetState extends ConsumerState<_UserDetailSheet> {
       builder: (_, scrollCtrl) => Container(
         decoration: BoxDecoration(
           color: bg,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Form(
           key: _formKey,
@@ -1463,11 +1496,13 @@ class _UserDetailSheetState extends ConsumerState<_UserDetailSheet> {
                         width: double.infinity,
                         child: OutlinedButton.icon(
                           onPressed: _showChangePassword,
-                          icon: const Icon(Icons.lock_outline_rounded, size: 16),
+                          icon:
+                              const Icon(Icons.lock_outline_rounded, size: 16),
                           label: const Text('Alterar senha'),
                           style: OutlinedButton.styleFrom(
                             side: BorderSide(color: border),
-                            foregroundColor: dark ? AppColors.slate300 : AppColors.slate600,
+                            foregroundColor:
+                                dark ? AppColors.slate300 : AppColors.slate600,
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
@@ -1506,9 +1541,8 @@ class _UserDetailSheetState extends ConsumerState<_UserDetailSheet> {
                           onPressed: () => Navigator.pop(context),
                           style: OutlinedButton.styleFrom(
                             side: BorderSide(color: border),
-                            foregroundColor: dark
-                                ? AppColors.slate300
-                                : AppColors.slate600,
+                            foregroundColor:
+                                dark ? AppColors.slate300 : AppColors.slate600,
                             padding: const EdgeInsets.symmetric(
                               horizontal: 14,
                               vertical: 12,
@@ -1613,8 +1647,7 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
         lastName: _lastCtrl.text.trim(),
         userName: _userCtrl.text.trim(),
         email: _emailCtrl.text.trim(),
-        phone:
-            _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+        phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
         birthDate: birthIso,
       );
       ref.invalidate(myProfileProvider);
@@ -1704,10 +1737,10 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
     return Container(
       decoration: BoxDecoration(
         color: bg,
-        borderRadius:
-            const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: SafeArea(
         top: false,
         child: SingleChildScrollView(
@@ -1734,8 +1767,7 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                     Icon(
                       Icons.edit_outlined,
                       size: 18,
-                      color:
-                          dark ? AppColors.slate300 : AppColors.slate600,
+                      color: dark ? AppColors.slate300 : AppColors.slate600,
                     ),
                     const SizedBox(width: 8),
                     Text(
@@ -1743,8 +1775,7 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color:
-                            dark ? AppColors.slate100 : AppColors.slate800,
+                        color: dark ? AppColors.slate100 : AppColors.slate800,
                       ),
                     ),
                   ],
@@ -1757,10 +1788,9 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                         'PRIMEIRO NOME',
                         _firstCtrl,
                         'João',
-                        validator: (v) =>
-                            v == null || v.trim().isEmpty
-                                ? 'Obrigatório'
-                                : null,
+                        validator: (v) => v == null || v.trim().isEmpty
+                            ? 'Obrigatório'
+                            : null,
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -1777,10 +1807,9 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                         'USUÁRIO',
                         _userCtrl,
                         'joaosilva',
-                        validator: (v) =>
-                            v == null || v.trim().isEmpty
-                                ? 'Obrigatório'
-                                : null,
+                        validator: (v) => v == null || v.trim().isEmpty
+                            ? 'Obrigatório'
+                            : null,
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -1790,10 +1819,9 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                         _emailCtrl,
                         'joao@email.com',
                         keyboard: TextInputType.emailAddress,
-                        validator: (v) =>
-                            v == null || v.trim().isEmpty
-                                ? 'Obrigatório'
-                                : null,
+                        validator: (v) => v == null || v.trim().isEmpty
+                            ? 'Obrigatório'
+                            : null,
                       ),
                     ),
                   ],
@@ -1828,11 +1856,9 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                         onPressed: () => Navigator.pop(context),
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(color: border),
-                          foregroundColor: dark
-                              ? AppColors.slate300
-                              : AppColors.slate600,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 12),
+                          foregroundColor:
+                              dark ? AppColors.slate300 : AppColors.slate600,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -1847,8 +1873,7 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.slate900,
                           foregroundColor: Colors.white,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -1891,8 +1916,7 @@ class _ChangePasswordSheet extends ConsumerStatefulWidget {
       _ChangePasswordSheetState();
 }
 
-class _ChangePasswordSheetState
-    extends ConsumerState<_ChangePasswordSheet> {
+class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
   final _formKey = GlobalKey<FormState>();
   final _currentCtrl = TextEditingController();
   final _newCtrl = TextEditingController();
@@ -2002,10 +2026,10 @@ class _ChangePasswordSheetState
     return Container(
       decoration: BoxDecoration(
         color: bg,
-        borderRadius:
-            const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: SafeArea(
         top: false,
         child: SingleChildScrollView(
@@ -2032,8 +2056,7 @@ class _ChangePasswordSheetState
                     Icon(
                       Icons.lock_outline_rounded,
                       size: 18,
-                      color:
-                          dark ? AppColors.slate300 : AppColors.slate600,
+                      color: dark ? AppColors.slate300 : AppColors.slate600,
                     ),
                     const SizedBox(width: 8),
                     Text(
@@ -2041,8 +2064,7 @@ class _ChangePasswordSheetState
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color:
-                            dark ? AppColors.slate100 : AppColors.slate800,
+                        color: dark ? AppColors.slate100 : AppColors.slate800,
                       ),
                     ),
                   ],
@@ -2059,9 +2081,7 @@ class _ChangePasswordSheetState
                   'NOVA SENHA',
                   _newCtrl,
                   validator: (v) =>
-                      v == null || v.length < 6
-                          ? 'Mínimo 6 caracteres'
-                          : null,
+                      v == null || v.length < 6 ? 'Mínimo 6 caracteres' : null,
                 ),
                 const SizedBox(height: 12),
                 passField(
@@ -2078,11 +2098,9 @@ class _ChangePasswordSheetState
                         onPressed: () => Navigator.pop(context),
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(color: border),
-                          foregroundColor: dark
-                              ? AppColors.slate300
-                              : AppColors.slate600,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 12),
+                          foregroundColor:
+                              dark ? AppColors.slate300 : AppColors.slate600,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -2097,8 +2115,7 @@ class _ChangePasswordSheetState
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.slate900,
                           foregroundColor: Colors.white,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -2127,6 +2144,285 @@ class _ChangePasswordSheetState
 }
 
 // ── Role Badge ────────────────────────────────────────────────────────────────
+
+class _DeleteAccountSheet extends ConsumerStatefulWidget {
+  final bool isDark;
+  const _DeleteAccountSheet({required this.isDark});
+
+  @override
+  ConsumerState<_DeleteAccountSheet> createState() =>
+      _DeleteAccountSheetState();
+}
+
+class _DeleteAccountSheetState extends ConsumerState<_DeleteAccountSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _passwordCtrl = TextEditingController();
+  final _confirmCtrl = TextEditingController();
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _passwordCtrl.dispose();
+    _confirmCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _loading = true);
+    try {
+      await ref.read(membersDsProvider).deleteAccount(
+            password: _passwordCtrl.text,
+            confirmation: _confirmCtrl.text,
+          );
+      await ref.read(accountStoreProvider.notifier).logout();
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Conta excluida com sucesso.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final pending = data is Map ? data['data'] ?? data['Data'] : null;
+      if (pending is Map && ((pending['count'] ?? pending['Count'] ?? 0) as num) > 0) {
+        if (mounted) {
+          showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            builder: (_) => ExitPendingPaymentsSheet(
+              pending: Map<String, dynamic>.from(pending),
+              title: 'Antes de excluir, existem pendências',
+              forceLabel: 'Excluir mesmo assim',
+              onContinueAfterPayment: () => _finishDelete(forceWithoutPayment: true),
+              onForceContinue: () => _finishDelete(forceWithoutPayment: true),
+            ),
+          );
+        }
+      } else if (mounted) {
+        final msg = extractDioError(e, 'Nao foi possivel excluir a conta.');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: AppColors.rose600,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final msg = extractDioError(e, 'Nao foi possivel excluir a conta.');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: AppColors.rose600,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _finishDelete({required bool forceWithoutPayment}) async {
+    await ref.read(membersDsProvider).deleteAccount(
+          password: _passwordCtrl.text,
+          confirmation: _confirmCtrl.text,
+          forceWithoutPayment: forceWithoutPayment,
+        );
+    await ref.read(accountStoreProvider.notifier).logout();
+    if (!mounted) return;
+    Navigator.pop(context);
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Conta excluida com sucesso.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = widget.isDark;
+    final bg = dark ? AppColors.slate900 : Colors.white;
+    final label = dark ? AppColors.slate400 : AppColors.slate500;
+    final input = dark ? AppColors.slate100 : AppColors.slate800;
+    final fill = dark ? AppColors.slate800 : AppColors.slate50;
+    final border = dark ? AppColors.slate700 : AppColors.slate200;
+
+    InputDecoration dec(String hint) => InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(color: label, fontSize: 13),
+          filled: true,
+          fillColor: fill,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: AppColors.rose600),
+          ),
+        );
+
+    Widget field(
+      String lbl,
+      TextEditingController ctrl, {
+      bool obscure = false,
+      String? Function(String?)? validator,
+    }) =>
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              lbl,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: label,
+              ),
+            ),
+            const SizedBox(height: 4),
+            TextFormField(
+              controller: ctrl,
+              obscureText: obscure,
+              style: TextStyle(fontSize: 14, color: input),
+              decoration: dec(obscure ? 'Senha atual' : 'Digite EXCLUIR'),
+              validator: validator,
+            ),
+          ],
+        );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: AppColors.slate400,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.delete_outline_rounded,
+                      size: 18,
+                      color: AppColors.rose600,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Excluir conta',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: dark ? AppColors.slate100 : AppColors.slate800,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                field(
+                  'SENHA ATUAL',
+                  _passwordCtrl,
+                  obscure: true,
+                  validator: (v) =>
+                      v == null || v.isEmpty ? 'Obrigatorio' : null,
+                ),
+                const SizedBox(height: 12),
+                field(
+                  'CONFIRMACAO',
+                  _confirmCtrl,
+                  validator: (v) => (v ?? '').trim().toUpperCase() != 'EXCLUIR'
+                      ? 'Digite EXCLUIR'
+                      : null,
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed:
+                            _loading ? null : () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: border),
+                          foregroundColor:
+                              dark ? AppColors.slate300 : AppColors.slate600,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Cancelar'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _loading ? null : _submit,
+                        icon: _loading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.delete_outline_rounded,
+                                size: 17),
+                        label: const Text('Excluir'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.rose600,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _RoleBadge extends StatelessWidget {
   final String role;

@@ -94,10 +94,10 @@ void main() {
   group('PlayerRow.fromJson', () {
     test('isGoalkeeper is true when set', () {
       final json = {
-        'playerId':    'abc',
-        'playerName':  'Felipe GK',
+        'playerId': 'abc',
+        'playerName': 'Felipe GK',
         'isGoalkeeper': true,
-        'months':      <dynamic>[],
+        'months': <dynamic>[],
       };
 
       final row = PlayerRow.fromJson(json);
@@ -107,9 +107,9 @@ void main() {
 
     test('isGoalkeeper defaults to false when absent', () {
       final json = {
-        'playerId':   'def',
+        'playerId': 'def',
         'playerName': 'Caio',
-        'months':     <dynamic>[],
+        'months': <dynamic>[],
       };
 
       final row = PlayerRow.fromJson(json);
@@ -119,10 +119,10 @@ void main() {
 
     test('isGoalkeeper is false when explicitly false', () {
       final json = {
-        'playerId':    'ghi',
-        'playerName':  'Lucas',
+        'playerId': 'ghi',
+        'playerName': 'Lucas',
         'isGoalkeeper': false,
-        'months':      <dynamic>[],
+        'months': <dynamic>[],
       };
 
       final row = PlayerRow.fromJson(json);
@@ -132,13 +132,13 @@ void main() {
 
     test('parses months list', () {
       final json = {
-        'playerId':   'abc',
+        'playerId': 'abc',
         'playerName': 'P',
         'months': [
           {
-            'month':   5,
-            'status':  0,
-            'amount':  60.0,
+            'month': 5,
+            'status': 0,
+            'amount': 60.0,
             'discount': 0,
             'hasProof': false,
           },
@@ -150,6 +150,64 @@ void main() {
       expect(row.months.length, 1);
       expect(row.months[0].month, 5);
       expect(row.months[0].amount, 60.0);
+    });
+  });
+
+  group('MonthlyCell.fromJson', () {
+    test('parses payment audit fields', () {
+      final json = {
+        'month': 7,
+        'status': 1,
+        'amount': 75,
+        'discount': 10,
+        'discountReason': 'Cortesia',
+        'paidAt': '2026-07-18T12:34:56Z',
+        'markedByUserId': 'user-1',
+        'markedByUserName': 'Luis',
+        'markedByUserKind': 'self',
+        'hasProof': true,
+        'proofFileName': 'recibo.pdf',
+      };
+
+      final cell = MonthlyCell.fromJson(json);
+
+      expect(cell.isPaid, isTrue);
+      expect(cell.paidAt, '2026-07-18T12:34:56Z');
+      expect(cell.markedByUserId, 'user-1');
+      expect(cell.markedByUserName, 'Luis');
+      expect(cell.markedByUserKind, 'self');
+      expect(cell.discount, 10);
+      expect(cell.discountReason, 'Cortesia');
+    });
+  });
+
+  group('ExtraChargePayment.fromJson', () {
+    test('parses payment audit fields', () {
+      final json = {
+        'playerId': 'player-1',
+        'playerName': 'Luis',
+        'amount': 90,
+        'discount': 15,
+        'finalAmount': 75,
+        'discountReason': 'Ajuste',
+        'status': 1,
+        'paidAt': '2026-07-18T12:34:56Z',
+        'markedByUserId': 'finance-1',
+        'markedByUserName': 'Andrei',
+        'markedByUserKind': 'financeiro',
+        'hasProof': false,
+      };
+
+      final payment = ExtraChargePayment.fromJson(json);
+
+      expect(payment.isPaid, isTrue);
+      expect(payment.paidAt, '2026-07-18T12:34:56Z');
+      expect(payment.markedByUserId, 'finance-1');
+      expect(payment.markedByUserName, 'Andrei');
+      expect(payment.markedByUserKind, 'financeiro');
+      expect(payment.finalAmount, 75);
+      expect(payment.discount, 15);
+      expect(payment.discountReason, 'Ajuste');
     });
   });
 }

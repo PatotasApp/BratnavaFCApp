@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
@@ -130,7 +131,6 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
             ),
           ),
         ),
-
         // ── Botão Ir para MatchMaking (admin do grupo) ───────────────────
         if (isGroupAdmin)
           SafeArea(
@@ -389,6 +389,13 @@ class _SummaryMeta extends StatelessWidget {
 }
 
 enum _InviteVariant { accepted, rejected, pending }
+
+String? _formatInviteRespondedAt(String? value) {
+  if (value == null || value.isEmpty) return null;
+  final parsed = parseApiInstantOrNull(value);
+  if (parsed == null) return null;
+  return DateFormat('dd/MM/yy HH:mm', 'pt_BR').format(parsed);
+}
 
 extension _InviteVariantX on _InviteVariant {
   Color get topBorder {
@@ -698,6 +705,11 @@ class _PlayerRow extends StatelessWidget {
 
     final showAccept = _canAct && variant.showAcceptBtn;
     final showReject = _canAct && variant.showRejectBtn;
+    final respondedAt = variant == _InviteVariant.pending
+        ? null
+        : _formatInviteRespondedAt(player.inviteRespondedAt);
+    final respondedLabel =
+        variant == _InviteVariant.accepted ? 'Aceitou' : 'Recusou';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
@@ -733,78 +745,96 @@ class _PlayerRow extends StatelessWidget {
 
           // Nome + badges
           Expanded(
-            child: Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 5,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  player.playerName,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: isMe ? FontWeight.w600 : FontWeight.w500,
-                    color: isDark ? AppColors.slate100 : AppColors.slate900,
-                  ),
-                ),
-                // Goleiro toggle (admin) ou ícone (não-admin)
-                if (isAdmin)
-                  GestureDetector(
-                    onTap: mutating
-                        ? null
-                        : () => onSetRole(
-                            player.matchPlayerId, !player.isGoalkeeper),
-                    child: Opacity(
-                      opacity: mutating ? 0.5 : 1,
-                      child: Tooltip(
-                        message: player.isGoalkeeper
-                            ? 'Goleiro – toque para mudar para linha'
-                            : 'Linha – toque para mudar para goleiro',
-                        child: renderGroupIcon(
-                          player.isGoalkeeper ? icons.goalkeeper : icons.player,
-                          size: 14,
-                          color: AppColors.slate400,
-                        ),
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 5,
+                  children: [
+                    Text(
+                      player.playerName,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: isMe ? FontWeight.w600 : FontWeight.w500,
+                        color: isDark ? AppColors.slate100 : AppColors.slate900,
                       ),
                     ),
-                  )
-                else if (player.isGoalkeeper)
-                  renderGroupIcon(icons.goalkeeper,
-                      size: 14, color: AppColors.slate400),
+                    // Goleiro toggle (admin) ou ícone (não-admin)
+                    if (isAdmin)
+                      GestureDetector(
+                        onTap: mutating
+                            ? null
+                            : () => onSetRole(
+                                player.matchPlayerId, !player.isGoalkeeper),
+                        child: Opacity(
+                          opacity: mutating ? 0.5 : 1,
+                          child: Tooltip(
+                            message: player.isGoalkeeper
+                                ? 'Goleiro – toque para mudar para linha'
+                                : 'Linha – toque para mudar para goleiro',
+                            child: renderGroupIcon(
+                              player.isGoalkeeper
+                                  ? icons.goalkeeper
+                                  : icons.player,
+                              size: 14,
+                              color: AppColors.slate400,
+                            ),
+                          ),
+                        ),
+                      )
+                    else if (player.isGoalkeeper)
+                      renderGroupIcon(icons.goalkeeper,
+                          size: 14, color: AppColors.slate400),
 
-                if (isMe)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? AppColors.blue500.withValues(alpha: 0.3)
-                          : AppColors.blue200,
-                      borderRadius: BorderRadius.circular(8),
+                    if (isMe)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? AppColors.blue500.withValues(alpha: 0.3)
+                              : AppColors.blue200,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text('Você',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? AppColors.blue200
+                                    : AppColors.blue600)),
+                      ),
+                    if (isGuest)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? AppColors.amber500.withValues(alpha: 0.25)
+                              : AppColors.amber200,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: AppColors.amber400.withValues(alpha: 0.5)),
+                        ),
+                        child: const Text('Convidado',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.orange700)),
+                      ),
+                  ],
+                ),
+                if (respondedAt != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      '$respondedLabel em $respondedAt',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: isDark ? AppColors.slate500 : AppColors.slate400,
+                      ),
                     ),
-                    child: Text('Você',
-                        style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: isDark
-                                ? AppColors.blue200
-                                : AppColors.blue600)),
-                  ),
-                if (isGuest)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? AppColors.amber500.withValues(alpha: 0.25)
-                          : AppColors.amber200,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: AppColors.amber400.withValues(alpha: 0.5)),
-                    ),
-                    child: const Text('Convidado',
-                        style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.orange700)),
                   ),
               ],
             ),

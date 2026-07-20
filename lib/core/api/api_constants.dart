@@ -8,6 +8,8 @@ class ApiConstants {
   // Users
   static const String users = '/api/Users';
   static String userById(String id) => '/api/Users/$id';
+  static const String deleteAccount = '/api/Users/me';
+  static const String userExitPending = '/api/Users/me/exit-pending';
 
   // Groups
   static const String groups = '/api/Groups';
@@ -100,6 +102,14 @@ class ApiConstants {
       '/api/groups/$groupId/payments/my-pending-items';
   static String paySelected(String groupId) =>
       '/api/groups/$groupId/payments/pay-selected';
+  static String exitPending(String groupId) =>
+      '/api/groups/$groupId/payments/exit-pending';
+  static String exitDebtAlerts(String groupId) =>
+      '/api/groups/$groupId/payments/exit-debt-alerts';
+  static String keepExitDebtAlert(String groupId, String notificationId) =>
+      '/api/groups/$groupId/payments/exit-debt-alerts/$notificationId/keep';
+  static String markExitDebtAlertAsPaid(String groupId, String notificationId) =>
+      '/api/groups/$groupId/payments/exit-debt-alerts/$notificationId/mark-paid';
 
   /// Totais de pendências por jogador (admin).
   static String paymentPendingTotals(String groupId) =>

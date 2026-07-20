@@ -60,12 +60,14 @@ class PollVote extends Equatable {
   final String optionId;
   final String playerId;
   final String playerName;
+  final String? votedAt;
   final List<PollGuest> guests;
 
   const PollVote({
     required this.optionId,
     required this.playerId,
     required this.playerName,
+    this.votedAt,
     this.guests = const [],
   });
 
@@ -73,6 +75,7 @@ class PollVote extends Equatable {
         optionId: j['optionId'] as String? ?? '',
         playerId: j['playerId'] as String? ?? '',
         playerName: j['playerName'] as String? ?? '',
+        votedAt: j['votedAt'] as String?,
         guests: (j['guests'] as List?)
                 ?.map((e) => PollGuest.fromJson(e as Map<String, dynamic>))
                 .toList() ??
@@ -80,7 +83,7 @@ class PollVote extends Equatable {
       );
 
   @override
-  List<Object?> get props => [optionId, playerId];
+  List<Object?> get props => [optionId, playerId, votedAt];
 }
 
 // ── PollMemberVote ─────────────────────────────────────────────────────────────
@@ -89,21 +92,24 @@ class PollMemberVote extends Equatable {
   final String playerId;
   final String playerName;
   final List<String> votedOptionIds;
+  final String? votedAt;
 
   const PollMemberVote({
     required this.playerId,
     required this.playerName,
     required this.votedOptionIds,
+    this.votedAt,
   });
 
   factory PollMemberVote.fromJson(Map<String, dynamic> j) => PollMemberVote(
         playerId: j['playerId'] as String? ?? '',
         playerName: j['playerName'] as String? ?? '',
         votedOptionIds: List<String>.from(j['votedOptionIds'] as List? ?? []),
+        votedAt: j['votedAt'] as String?,
       );
 
   @override
-  List<Object?> get props => [playerId, votedOptionIds];
+  List<Object?> get props => [playerId, votedOptionIds, votedAt];
 }
 
 // ── PollDetail ─────────────────────────────────────────────────────────────────

@@ -190,6 +190,7 @@ class MatchPlayerInfo {
   final bool isGuest;
   final int team; // 0=não atribuído, 1=timeA, 2=timeB
   final InviteResponse inviteResponse;
+  final String? inviteRespondedAt;
 
   /// Ausência ativa no momento da partida (null = sem ausência).
   final int? absenceType;
@@ -209,6 +210,7 @@ class MatchPlayerInfo {
     required this.isGuest,
     required this.team,
     required this.inviteResponse,
+    this.inviteRespondedAt,
     this.absenceType,
     this.absenceDescription,
     this.didNotPlay = false,
@@ -237,6 +239,8 @@ class MatchPlayerInfo {
         team: j['team'] as int? ?? j['Team'] as int? ?? 0,
         inviteResponse:
             _parseInvite(j['inviteResponse'] ?? j['InviteResponse']),
+        inviteRespondedAt: (j['inviteRespondedAt'] ?? j['InviteRespondedAt'])
+            as String?,
         absenceType: j['absenceType'] as int? ?? j['AbsenceType'] as int?,
         absenceDescription: j['absenceDescription'] as String? ??
             j['AbsenceDescription'] as String?,

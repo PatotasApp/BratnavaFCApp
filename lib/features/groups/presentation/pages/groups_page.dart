@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +10,7 @@ import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
+import '../../../payments/presentation/widgets/exit_pending_payments_sheet.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 
 extension _FirstOrNullExt<T> on Iterable<T> {
@@ -33,7 +34,7 @@ class _PlayerDto {
   // mensalista ratings
   final int? attackRating;
   final int? defenseRating;
-  final int? overallRating;   // displayed as "Físico"
+  final int? overallRating; // displayed as "Físico"
 
   const _PlayerDto({
     required this.id,
@@ -70,7 +71,7 @@ class _PlayerDto {
         isGuest: j['isGuest'] as bool? ?? false,
         status: j['status'] as int? ?? 1,
         guestStarRating: j['guestStarRating'] as int?,
-        attackRating:  j['attackRating']  as int?,
+        attackRating: j['attackRating'] as int?,
         defenseRating: j['defenseRating'] as int?,
         overallRating: j['overallRating'] as int?,
       );
@@ -230,10 +231,9 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     return result.where((g) => g['groupId'] == activeGroupId).toList();
   }
 
-  _MyPlayerItem? get _myPlayerInExpanded =>
-      _expandedGroupId == null
-          ? null
-          : _myPlayers.where((p) => p.groupId == _expandedGroupId).firstOrNull;
+  _MyPlayerItem? get _myPlayerInExpanded => _expandedGroupId == null
+      ? null
+      : _myPlayers.where((p) => p.groupId == _expandedGroupId).firstOrNull;
 
   String get _activePlayerId => _myPlayerInExpanded?.playerId ?? '';
 
@@ -265,9 +265,10 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
         _dio.get(ApiConstants.extraCharges(groupId)),
       ]);
 
-      final gridRaw   = _unwrap(results[0].data);
+      final gridRaw = _unwrap(results[0].data);
       final extrasRaw = _unwrap(results[1].data) as List? ?? [];
-      final grid      = gridRaw is Map<String, dynamic> ? gridRaw : <String, dynamic>{};
+      final grid =
+          gridRaw is Map<String, dynamic> ? gridRaw : <String, dynamic>{};
 
       final hasMonthlyFee = (grid['monthlyFee'] as num? ?? 0) > 0;
       final map = <String, _PaymentBadge>{};
@@ -275,7 +276,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       // ── monthly grid rows ──
       for (final row in (grid['players'] as List? ?? [])) {
         final r = row as Map<String, dynamic>;
-        final playerId   = r['playerId'] as String? ?? '';
+        final playerId = r['playerId'] as String? ?? '';
         final joinedYear = r['joinedYear'] as int? ?? 0;
         final joinedMonth = r['joinedMonth'] as int? ?? 1;
 
@@ -302,7 +303,10 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
           final pid = p['playerId'] as String? ?? '';
           final existing = map[pid];
           if (existing != null) {
-            map[pid] = (pendingMonths: existing.pendingMonths, pendingExtras: existing.pendingExtras + 1);
+            map[pid] = (
+              pendingMonths: existing.pendingMonths,
+              pendingExtras: existing.pendingExtras + 1
+            );
           } else {
             map[pid] = (pendingMonths: 0, pendingExtras: 1);
           }
@@ -412,7 +416,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       _loadPaymentData(groupId);
     } catch (e) {
       setState(() {
-        _groupError = extractDioError(e, 'Não foi possível carregar os dados da patota.');
+        _groupError =
+            extractDioError(e, 'Não foi possível carregar os dados da patota.');
       });
     } finally {
       if (mounted) setState(() => _groupLoading = false);
@@ -443,9 +448,46 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     if (_activePlayerId.isEmpty) return;
     try {
       await _dio.post(ApiConstants.playerLeaveGroup(_activePlayerId));
+      await ref.read(authNotifierProvider.notifier).refreshGroupMembership();
+      ref.invalidate(myPlayersProvider);
       await _loadMine();
       _reloadGroup();
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final pending = data is Map ? data['data'] ?? data['Data'] : null;
+      if (pending is Map &&
+          ((pending['count'] ?? pending['Count'] ?? 0) as num) > 0) {
+        _showExitPendingSheet(Map<String, dynamic>.from(pending));
+      }
     } catch (_) {}
+  }
+
+  void _showExitPendingSheet(Map<String, dynamic> pending) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      builder: (_) => ExitPendingPaymentsSheet(
+        pending: pending,
+        title: 'Antes de sair, existem pendências',
+        forceLabel: 'Sair mesmo assim',
+        onContinueAfterPayment: () => _finishLeave(forceWithoutPayment: true),
+        onForceContinue: () => _finishLeave(forceWithoutPayment: true),
+      ),
+    );
+  }
+
+  Future<void> _finishLeave({required bool forceWithoutPayment}) async {
+    if (_activePlayerId.isEmpty) return;
+    await _dio.post(
+      ApiConstants.playerLeaveGroup(_activePlayerId),
+      data: {'forceWithoutPayment': forceWithoutPayment},
+    );
+    await ref.read(authNotifierProvider.notifier).refreshGroupMembership();
+    ref.invalidate(myPlayersProvider);
+    if (mounted) Navigator.of(context).pop();
+    await _loadMine();
+    _reloadGroup();
   }
 
   void _showCreateGroup() {
@@ -466,7 +508,9 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
 
           await _loadMine();
           await _loadAdminGroups();
-          await ref.read(authNotifierProvider.notifier).refreshGroupMembership();
+          await ref
+              .read(authNotifierProvider.notifier)
+              .refreshGroupMembership();
           ref.invalidate(myPlayersProvider);
           // Abre automaticamente se agora há exatamente uma patota
           if (_myGroups.length == 1) {
@@ -621,7 +665,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
           SizedBox(
             width: 18,
             height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+            child: CircularProgressIndicator(
+                strokeWidth: 2, color: Colors.white70),
           ),
           SizedBox(width: 12),
           Text(
@@ -663,7 +708,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     final isAdminHere = _isGroupAdmin(groupId);
     final account = ref.watch(accountStoreProvider).activeAccount;
     final isCreator = _group?.createdByUserId == account?.userId;
-    final icons = GroupIcons.from(ref.watch(groupSettingsProvider(groupId)).valueOrNull);
+    final icons =
+        GroupIcons.from(ref.watch(groupSettingsProvider(groupId)).valueOrNull);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -676,7 +722,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
               Row(
                 children: [
                   _GroupAvatar(
-                    letter: groupName.isEmpty ? 'G' : groupName.characters.first,
+                    letter:
+                        groupName.isEmpty ? 'G' : groupName.characters.first,
                     size: 48,
                     radius: 16,
                   ),
@@ -705,7 +752,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                                   : '',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 13, color: Colors.white60),
+                          style: const TextStyle(
+                              fontSize: 13, color: Colors.white60),
                         ),
                       ],
                     ),
@@ -782,7 +830,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
   Widget _buildAccordion(bool isDark) {
     final account = ref.watch(accountStoreProvider).activeAccount;
     final expandedIcons = _expandedGroupId != null
-        ? GroupIcons.from(ref.watch(groupSettingsProvider(_expandedGroupId!)).valueOrNull)
+        ? GroupIcons.from(
+            ref.watch(groupSettingsProvider(_expandedGroupId!)).valueOrNull)
         : GroupIcons.defaults;
 
     return Column(
@@ -798,7 +847,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                  border:
+                      Border.all(color: Colors.white.withValues(alpha: 0.2)),
                 ),
                 child: const Icon(
                   Icons.group_outlined,
@@ -823,7 +873,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                     ),
                     Text(
                       '${_myGroups.length} patotas',
-                      style: const TextStyle(fontSize: 13, color: Colors.white60),
+                      style:
+                          const TextStyle(fontSize: 13, color: Colors.white60),
                     ),
                   ],
                 ),
@@ -1081,7 +1132,9 @@ class _AccordionItem extends StatelessWidget {
                   Row(
                     children: [
                       _MiniGroupAvatar(
-                        letter: groupName.isEmpty ? 'G' : groupName.characters.first,
+                        letter: groupName.isEmpty
+                            ? 'G'
+                            : groupName.characters.first,
                         isExpanded: isExpanded,
                         isDark: isDark,
                       ),
@@ -1097,7 +1150,9 @@ class _AccordionItem extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF0F172A),
                               ),
                             ),
                             if (isAdminHere)
@@ -1251,7 +1306,8 @@ class _SmallBtn extends StatelessWidget {
       case _SmallBtnVariant.secondary:
         bg = isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9);
         textColor = isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569);
-        borderColor = isDark ? const Color(0xFF475569) : const Color(0xFFE2E8F0);
+        borderColor =
+            isDark ? const Color(0xFF475569) : const Color(0xFFE2E8F0);
         break;
       case _SmallBtnVariant.danger:
         bg = Colors.transparent;
@@ -1337,19 +1393,19 @@ class _GroupContentState extends State<_GroupContent> {
 
   @override
   Widget build(BuildContext context) {
-    final group          = widget.group;
-    final groupLoading   = widget.groupLoading;
-    final groupError     = widget.groupError;
-    final activePlayers  = widget.activePlayers;
-    final guestPlayers   = widget.guestPlayers;
-    final inactivePlayers= widget.inactivePlayers;
+    final group = widget.group;
+    final groupLoading = widget.groupLoading;
+    final groupError = widget.groupError;
+    final activePlayers = widget.activePlayers;
+    final guestPlayers = widget.guestPlayers;
+    final inactivePlayers = widget.inactivePlayers;
     final activePlayerId = widget.activePlayerId;
-    final isAdminHere    = widget.isAdminHere;
+    final isAdminHere = widget.isAdminHere;
     final isFinanceiroHere = widget.isFinanceiroHere;
-    final paymentMap     = widget.paymentMap;
-    final icons          = widget.icons;
-    final isDark         = widget.isDark;
-    final onEditPlayer   = widget.onEditPlayer;
+    final paymentMap = widget.paymentMap;
+    final icons = widget.icons;
+    final isDark = widget.isDark;
+    final onEditPlayer = widget.onEditPlayer;
 
     if (groupError != null) {
       return Container(
@@ -1394,7 +1450,9 @@ class _GroupContentState extends State<_GroupContent> {
 
     if (group == null) return const SizedBox.shrink();
 
-    if (activePlayers.isEmpty && guestPlayers.isEmpty && inactivePlayers.isEmpty) {
+    if (activePlayers.isEmpty &&
+        guestPlayers.isEmpty &&
+        inactivePlayers.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 40),
         child: Column(
@@ -1402,14 +1460,16 @@ class _GroupContentState extends State<_GroupContent> {
             Icon(
               Icons.group_outlined,
               size: 32,
-              color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.2),
+              color:
+                  (isDark ? Colors.white : Colors.black).withValues(alpha: 0.2),
             ),
             const SizedBox(height: 8),
             Text(
               'Nenhum jogador nesta patota.',
               style: TextStyle(
                 fontSize: 14,
-                color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                color:
+                    isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
               ),
             ),
           ],
@@ -1423,9 +1483,9 @@ class _GroupContentState extends State<_GroupContent> {
         // ── Tab bar (admin only) ─────────────────────────────────────
         if (isAdminHere) ...[
           _GroupTabBar(
-            tab:    _tab,
+            tab: _tab,
             isDark: isDark,
-            onTab:  (t) => setState(() => _tab = t),
+            onTab: (t) => setState(() => _tab = t),
           ),
           const SizedBox(height: 16),
         ],
@@ -1438,7 +1498,8 @@ class _GroupContentState extends State<_GroupContent> {
               style: TextStyle(
                 fontSize: 14,
                 fontStyle: FontStyle.italic,
-                color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                color:
+                    isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
               ),
             )
           else
@@ -1486,9 +1547,8 @@ class _GroupContentState extends State<_GroupContent> {
               count: inactivePlayers.length,
               iconData: Icons.close,
               badgeBg: const Color(0xFF94A3B8),
-              badgeTextColor: isDark
-                  ? const Color(0xFFCBD5E1)
-                  : const Color(0xFF64748B),
+              badgeTextColor:
+                  isDark ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
               badgeLabelBg:
                   isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
               players: inactivePlayers,
@@ -1521,8 +1581,8 @@ class _GroupContentState extends State<_GroupContent> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _GroupTabBar extends StatelessWidget {
-  final int          tab;
-  final bool         isDark;
+  final int tab;
+  final bool isDark;
   final void Function(int) onTab;
 
   const _GroupTabBar({
@@ -1542,18 +1602,18 @@ class _GroupTabBar extends StatelessWidget {
       child: Row(
         children: [
           _GroupTab(
-            label:  'Jogadores',
-            icon:   Icons.group_outlined,
+            label: 'Jogadores',
+            icon: Icons.group_outlined,
             active: tab == 0,
             isDark: isDark,
-            onTap:  () => onTab(0),
+            onTap: () => onTab(0),
           ),
           _GroupTab(
-            label:  'Avaliações',
-            icon:   Icons.star_rounded,
+            label: 'Avaliações',
+            icon: Icons.star_rounded,
             active: tab == 1,
             isDark: isDark,
-            onTap:  () => onTab(1),
+            onTap: () => onTab(1),
           ),
         ],
       ),
@@ -1562,10 +1622,10 @@ class _GroupTabBar extends StatelessWidget {
 }
 
 class _GroupTab extends StatelessWidget {
-  final String   label;
+  final String label;
   final IconData icon;
-  final bool     active;
-  final bool     isDark;
+  final bool active;
+  final bool isDark;
   final VoidCallback onTap;
 
   const _GroupTab({
@@ -1604,7 +1664,7 @@ class _GroupTab extends StatelessWidget {
             children: [
               Icon(
                 icon,
-                size:  15,
+                size: 15,
                 color: active
                     ? (isDark ? Colors.white : const Color(0xFF0F172A))
                     : (isDark
@@ -1615,7 +1675,7 @@ class _GroupTab extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize:   13,
+                  fontSize: 13,
                   fontWeight: active ? FontWeight.w600 : FontWeight.w500,
                   color: active
                       ? (isDark ? Colors.white : const Color(0xFF0F172A))
@@ -1637,10 +1697,10 @@ class _GroupTab extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _RatingsTab extends StatefulWidget {
-  final List<_PlayerDto>          players;
-  final String                    activePlayerId;
-  final bool                      isAdminHere;
-  final bool                      isDark;
+  final List<_PlayerDto> players;
+  final String activePlayerId;
+  final bool isAdminHere;
+  final bool isDark;
   final void Function(_PlayerDto) onEdit;
 
   const _RatingsTab({
@@ -1661,24 +1721,28 @@ class _RatingsTabState extends State<_RatingsTab> {
 
   double? _sortValue(_PlayerDto p) {
     switch (_sortBy) {
-      case 1:  return p.attackRating?.toDouble();
-      case 2:  return p.defenseRating?.toDouble();
-      case 3:  return p.overallRating?.toDouble();
-      default: return p.computedOverall;
+      case 1:
+        return p.attackRating?.toDouble();
+      case 2:
+        return p.defenseRating?.toDouble();
+      case 3:
+        return p.overallRating?.toDouble();
+      default:
+        return p.computedOverall;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark      = widget.isDark;
+    final isDark = widget.isDark;
     final mensalistas = widget.players.where((p) => !p.isGuest).toList();
-    final guests      = widget.players.where((p) =>  p.isGuest).toList();
+    final guests = widget.players.where((p) => p.isGuest).toList();
 
     mensalistas.sort((a, b) {
       final va = _sortValue(a);
       final vb = _sortValue(b);
       if (va == null && vb == null) return a.name.compareTo(b.name);
-      if (va == null) return  1;
+      if (va == null) return 1;
       if (vb == null) return -1;
       return vb.compareTo(va);
     });
@@ -1694,12 +1758,17 @@ class _RatingsTabState extends State<_RatingsTab> {
         padding: const EdgeInsets.symmetric(vertical: 40),
         child: Column(
           children: [
-            Icon(Icons.bar_chart_rounded, size: 36,
-                color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+            Icon(Icons.bar_chart_rounded,
+                size: 36,
+                color:
+                    isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
             const SizedBox(height: 8),
             Text('Nenhum jogador ainda.',
-                style: TextStyle(fontSize: 14,
-                    color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8))),
+                style: TextStyle(
+                    fontSize: 14,
+                    color: isDark
+                        ? const Color(0xFF64748B)
+                        : const Color(0xFF94A3B8))),
           ],
         ),
       );
@@ -1721,47 +1790,47 @@ class _RatingsTabState extends State<_RatingsTab> {
         // ── Mensalistas ──────────────────────────────────────────────
         if (mensalistas.isNotEmpty) ...[
           _RatingSectionHeader(
-            icon:      Icons.sports_soccer_rounded,
+            icon: Icons.sports_soccer_rounded,
             iconColor: const Color(0xFF3B82F6),
-            label:     'MENSALISTAS',
-            count:     mensalistas.length,
-            countBg:   isDark ? const Color(0xFF1E3A5F) : const Color(0xFFEFF6FF),
-            countFg:   const Color(0xFF1D4ED8),
-            isDark:    isDark,
+            label: 'MENSALISTAS',
+            count: mensalistas.length,
+            countBg: isDark ? const Color(0xFF1E3A5F) : const Color(0xFFEFF6FF),
+            countFg: const Color(0xFF1D4ED8),
+            isDark: isDark,
           ),
           const SizedBox(height: 8),
           ...mensalistas.asMap().entries.map((e) => _RatingRow(
-            rank:        e.key + 1,
-            player:      e.value,
-            sortBy:      _sortBy,
-            isMe:        e.value.id == widget.activePlayerId,
-            isAdminHere: widget.isAdminHere,
-            isDark:      isDark,
-            onEdit:      widget.onEdit,
-          )),
+                rank: e.key + 1,
+                player: e.value,
+                sortBy: _sortBy,
+                isMe: e.value.id == widget.activePlayerId,
+                isAdminHere: widget.isAdminHere,
+                isDark: isDark,
+                onEdit: widget.onEdit,
+              )),
         ],
 
         // ── Convidados ───────────────────────────────────────────────
         if (guests.isNotEmpty) ...[
           if (mensalistas.isNotEmpty) const SizedBox(height: 20),
           _RatingSectionHeader(
-            icon:      Icons.star_rounded,
+            icon: Icons.star_rounded,
             iconColor: const Color(0xFFF59E0B),
-            label:     'CONVIDADOS',
-            count:     guests.length,
-            countBg:   isDark ? const Color(0xFF3D2B00) : const Color(0xFFFEF3C7),
-            countFg:   const Color(0xFF92400E),
-            isDark:    isDark,
+            label: 'CONVIDADOS',
+            count: guests.length,
+            countBg: isDark ? const Color(0xFF3D2B00) : const Color(0xFFFEF3C7),
+            countFg: const Color(0xFF92400E),
+            isDark: isDark,
           ),
           const SizedBox(height: 8),
           ...guests.asMap().entries.map((e) => _StarRow(
-            rank:        e.key + 1,
-            player:      e.value,
-            isMe:        e.value.id == widget.activePlayerId,
-            isAdminHere: widget.isAdminHere,
-            isDark:      isDark,
-            onEdit:      widget.onEdit,
-          )),
+                rank: e.key + 1,
+                player: e.value,
+                isMe: e.value.id == widget.activePlayerId,
+                isAdminHere: widget.isAdminHere,
+                isDark: isDark,
+                onEdit: widget.onEdit,
+              )),
         ],
       ],
     );
@@ -1773,7 +1842,7 @@ class _RatingsTabState extends State<_RatingsTab> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _RatingsSortBar extends StatelessWidget {
-  final int  sortBy;
+  final int sortBy;
   final bool isDark;
   final void Function(int) onSort;
 
@@ -1803,16 +1872,23 @@ class _RatingsSortBar extends StatelessWidget {
               onTap: () => onSort(i),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: active
-                      ? (isDark ? const Color(0xFF334155) : const Color(0xFF0F172A))
-                      : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+                      ? (isDark
+                          ? const Color(0xFF334155)
+                          : const Color(0xFF0F172A))
+                      : (isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFF1F5F9)),
                   borderRadius: BorderRadius.circular(100),
                   border: Border.all(
                     color: active
                         ? Colors.transparent
-                        : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                        : (isDark
+                            ? const Color(0xFF334155)
+                            : const Color(0xFFE2E8F0)),
                   ),
                 ),
                 child: Row(
@@ -1845,12 +1921,12 @@ class _RatingsSortBar extends StatelessWidget {
 
 class _RatingSectionHeader extends StatelessWidget {
   final IconData icon;
-  final Color    iconColor;
-  final String   label;
-  final int      count;
-  final Color    countBg;
-  final Color    countFg;
-  final bool     isDark;
+  final Color iconColor;
+  final String label;
+  final int count;
+  final Color countBg;
+  final Color countFg;
+  final bool isDark;
 
   const _RatingSectionHeader({
     required this.icon,
@@ -1867,7 +1943,8 @@ class _RatingSectionHeader extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 20, height: 20,
+          width: 20,
+          height: 20,
           decoration: BoxDecoration(
             color: iconColor.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(6),
@@ -1878,7 +1955,9 @@ class _RatingSectionHeader extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
             color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),
           ),
         ),
@@ -1886,10 +1965,12 @@ class _RatingSectionHeader extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
-            color: countBg, borderRadius: BorderRadius.circular(100),
+            color: countBg,
+            borderRadius: BorderRadius.circular(100),
           ),
           child: Text('$count',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: countFg)),
+              style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w700, color: countFg)),
         ),
       ],
     );
@@ -1899,12 +1980,12 @@ class _RatingSectionHeader extends StatelessWidget {
 // ── Row for mensalistas: shows attack / defense / physical ratings ─────────────
 
 class _RatingRow extends StatelessWidget {
-  final int            rank;
-  final _PlayerDto     player;
-  final int            sortBy;   // 0=Overall 1=Ataque 2=Defesa 3=Físico
-  final bool           isMe;
-  final bool           isAdminHere;
-  final bool           isDark;
+  final int rank;
+  final _PlayerDto player;
+  final int sortBy; // 0=Overall 1=Ataque 2=Defesa 3=Físico
+  final bool isMe;
+  final bool isAdminHere;
+  final bool isDark;
   final void Function(_PlayerDto) onEdit;
 
   const _RatingRow({
@@ -1920,17 +2001,24 @@ class _RatingRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final overall = player.computedOverall;
-    final atk     = player.attackRating;
-    final def     = player.defenseRating;
-    final phys    = player.overallRating;
-    final hasAny  = overall != null;
+    final atk = player.attackRating;
+    final def = player.defenseRating;
+    final phys = player.overallRating;
+    final hasAny = overall != null;
 
     Color rankBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
     Color rankFg = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
     if (hasAny) {
-      if (rank == 1)      { rankBg = const Color(0xFFFBBF24); rankFg = const Color(0xFF78350F); }
-      else if (rank == 2) { rankBg = const Color(0xFFCBD5E1); rankFg = const Color(0xFF334155); }
-      else if (rank == 3) { rankBg = const Color(0xFFFDBA74); rankFg = const Color(0xFF7C2D12); }
+      if (rank == 1) {
+        rankBg = const Color(0xFFFBBF24);
+        rankFg = const Color(0xFF78350F);
+      } else if (rank == 2) {
+        rankBg = const Color(0xFFCBD5E1);
+        rankFg = const Color(0xFF334155);
+      } else if (rank == 3) {
+        rankBg = const Color(0xFFFDBA74);
+        rankFg = const Color(0xFF7C2D12);
+      }
     }
 
     return Container(
@@ -1944,7 +2032,9 @@ class _RatingRow extends StatelessWidget {
         border: Border.all(
           color: isMe
               ? const Color(0xFF6EE7B7)
-              : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0)),
+              : (isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : const Color(0xFFE2E8F0)),
           width: isMe ? 1.5 : 1,
         ),
       ),
@@ -1953,12 +2043,15 @@ class _RatingRow extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 28, height: 28,
-                decoration: BoxDecoration(color: rankBg, borderRadius: BorderRadius.circular(8)),
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                    color: rankBg, borderRadius: BorderRadius.circular(8)),
                 alignment: Alignment.center,
                 child: Text(
                   hasAny ? '$rank' : '—',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: rankFg),
+                  style: TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w700, color: rankFg),
                 ),
               ),
               const SizedBox(width: 10),
@@ -1968,7 +2061,8 @@ class _RatingRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
                     color: isDark ? Colors.white : const Color(0xFF0F172A),
                   ),
                 ),
@@ -1976,15 +2070,19 @@ class _RatingRow extends StatelessWidget {
               const SizedBox(width: 8),
               if (hasAny)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
+                    color: isDark
+                        ? const Color(0xFF334155)
+                        : const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     overall.toStringAsFixed(1),
                     style: TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
                       color: isDark ? Colors.white : const Color(0xFF0F172A),
                     ),
                   ),
@@ -1993,8 +2091,11 @@ class _RatingRow extends StatelessWidget {
                 Text(
                   'Sem avaliação',
                   style: TextStyle(
-                    fontSize: 11, fontStyle: FontStyle.italic,
-                    color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                    color: isDark
+                        ? const Color(0xFF475569)
+                        : const Color(0xFFCBD5E1),
                   ),
                 ),
               if (isAdminHere) ...[
@@ -2003,9 +2104,13 @@ class _RatingRow extends StatelessWidget {
                   onTap: () => onEdit(player),
                   borderRadius: BorderRadius.circular(8),
                   child: SizedBox(
-                    width: 24, height: 24,
-                    child: Icon(Icons.edit_outlined, size: 13,
-                        color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                    width: 24,
+                    height: 24,
+                    child: Icon(Icons.edit_outlined,
+                        size: 13,
+                        color: isDark
+                            ? const Color(0xFF64748B)
+                            : const Color(0xFF94A3B8)),
                   ),
                 ),
               ],
@@ -2017,21 +2122,27 @@ class _RatingRow extends StatelessWidget {
               children: [
                 const SizedBox(width: 38), // indent under rank badge
                 _RatingChip(
-                  emoji: '⚔️', value: atk,
+                  emoji: '⚔️',
+                  value: atk,
                   activeSort: sortBy == 1,
-                  color: const Color(0xFFEF4444), isDark: isDark,
+                  color: const Color(0xFFEF4444),
+                  isDark: isDark,
                 ),
                 const SizedBox(width: 6),
                 _RatingChip(
-                  emoji: '🛡️', value: def,
+                  emoji: '🛡️',
+                  value: def,
                   activeSort: sortBy == 2,
-                  color: const Color(0xFF3B82F6), isDark: isDark,
+                  color: const Color(0xFF3B82F6),
+                  isDark: isDark,
                 ),
                 const SizedBox(width: 6),
                 _RatingChip(
-                  emoji: '💪', value: phys,
+                  emoji: '💪',
+                  value: phys,
                   activeSort: sortBy == 3,
-                  color: const Color(0xFFF59E0B), isDark: isDark,
+                  color: const Color(0xFFF59E0B),
+                  isDark: isDark,
                 ),
               ],
             ),
@@ -2044,10 +2155,10 @@ class _RatingRow extends StatelessWidget {
 
 class _RatingChip extends StatelessWidget {
   final String emoji;
-  final int?   value;
-  final bool   activeSort;
-  final Color  color;
-  final bool   isDark;
+  final int? value;
+  final bool activeSort;
+  final Color color;
+  final bool isDark;
 
   const _RatingChip({
     required this.emoji,
@@ -2080,10 +2191,13 @@ class _RatingChip extends StatelessWidget {
           Text(
             value != null ? '$value' : '—',
             style: TextStyle(
-              fontSize: 12, fontWeight: FontWeight.w600,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
               color: activeSort
                   ? color
-                  : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                  : (isDark
+                      ? const Color(0xFF94A3B8)
+                      : const Color(0xFF64748B)),
             ),
           ),
         ],
@@ -2095,11 +2209,11 @@ class _RatingChip extends StatelessWidget {
 // ── Row for guests: shows star rating ────────────────────────────────────────
 
 class _StarRow extends StatelessWidget {
-  final int            rank;
-  final _PlayerDto     player;
-  final bool           isMe;
-  final bool           isAdminHere;
-  final bool           isDark;
+  final int rank;
+  final _PlayerDto player;
+  final bool isMe;
+  final bool isAdminHere;
+  final bool isDark;
   final void Function(_PlayerDto) onEdit;
 
   const _StarRow({
@@ -2113,15 +2227,22 @@ class _StarRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rating    = player.guestStarRating;
+    final rating = player.guestStarRating;
     final hasRating = rating != null;
 
     Color rankBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
     Color rankFg = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
     if (hasRating) {
-      if (rank == 1) { rankBg = const Color(0xFFFBBF24); rankFg = const Color(0xFF78350F); }
-      else if (rank == 2) { rankBg = const Color(0xFFCBD5E1); rankFg = const Color(0xFF334155); }
-      else if (rank == 3) { rankBg = const Color(0xFFFDBA74); rankFg = const Color(0xFF7C2D12); }
+      if (rank == 1) {
+        rankBg = const Color(0xFFFBBF24);
+        rankFg = const Color(0xFF78350F);
+      } else if (rank == 2) {
+        rankBg = const Color(0xFFCBD5E1);
+        rankFg = const Color(0xFF334155);
+      } else if (rank == 3) {
+        rankBg = const Color(0xFFFDBA74);
+        rankFg = const Color(0xFF7C2D12);
+      }
     }
 
     return Container(
@@ -2133,43 +2254,71 @@ class _StarRow extends StatelessWidget {
             : (isDark ? const Color(0xFF0F172A) : Colors.white),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isMe ? const Color(0xFF6EE7B7)
-              : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0)),
+          color: isMe
+              ? const Color(0xFF6EE7B7)
+              : (isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : const Color(0xFFE2E8F0)),
           width: isMe ? 1.5 : 1,
         ),
       ),
       child: Row(
         children: [
           Container(
-            width: 28, height: 28,
-            decoration: BoxDecoration(color: rankBg, borderRadius: BorderRadius.circular(8)),
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+                color: rankBg, borderRadius: BorderRadius.circular(8)),
             alignment: Alignment.center,
             child: Text(hasRating ? '$rank' : '—',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: rankFg)),
+                style: TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w700, color: rankFg)),
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(player.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
+            child: Text(player.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
                     color: isDark ? Colors.white : const Color(0xFF0F172A))),
           ),
           const SizedBox(width: 8),
           if (hasRating)
-            Row(mainAxisSize: MainAxisSize.min, children: List.generate(5, (i) => Text('★',
-                style: TextStyle(fontSize: 14, color: i < rating
-                    ? const Color(0xFFFBBF24)
-                    : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0))))))
+            Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(
+                    5,
+                    (i) => Text('★',
+                        style: TextStyle(
+                            fontSize: 14,
+                            color: i < rating
+                                ? const Color(0xFFFBBF24)
+                                : (isDark
+                                    ? const Color(0xFF334155)
+                                    : const Color(0xFFE2E8F0))))))
           else
-            Text('Sem avaliação', style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic,
-                color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1))),
+            Text('Sem avaliação',
+                style: TextStyle(
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                    color: isDark
+                        ? const Color(0xFF475569)
+                        : const Color(0xFFCBD5E1))),
           if (isAdminHere) ...[
             const SizedBox(width: 8),
             InkWell(
               onTap: () => onEdit(player),
               borderRadius: BorderRadius.circular(8),
-              child: SizedBox(width: 24, height: 24,
-                  child: Icon(Icons.edit_outlined, size: 13,
-                      color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8))),
+              child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: Icon(Icons.edit_outlined,
+                      size: 13,
+                      color: isDark
+                          ? const Color(0xFF64748B)
+                          : const Color(0xFF94A3B8))),
             ),
           ],
         ],
@@ -2218,7 +2367,7 @@ class _PlayerSection extends StatelessWidget {
     if (width >= 900) return 3;
     if (width >= 560) return 2;
     return 1;
-    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2261,7 +2410,8 @@ class _PlayerSection extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: badgeLabelBg,
                     borderRadius: BorderRadius.circular(100),
@@ -2310,7 +2460,7 @@ class _PlayerCard extends StatelessWidget {
   final _PlayerDto player;
   final String activePlayerId;
   final bool isAdminHere;
-  final _PaymentBadge? pmt;   // null = not a financeiro or no data
+  final _PaymentBadge? pmt; // null = not a financeiro or no data
   final GroupIcons icons;
   final bool dim;
   final bool isDark;
@@ -2418,7 +2568,9 @@ class _PlayerCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                           renderGroupIcon(
-                            player.isGoalkeeper ? icons.goalkeeper : icons.player,
+                            player.isGoalkeeper
+                                ? icons.goalkeeper
+                                : icons.player,
                             size: 13,
                             color: isDark
                                 ? const Color(0xFF64748B)
@@ -2426,7 +2578,8 @@ class _PlayerCard extends StatelessWidget {
                           ),
                         ],
                       ),
-                      if (player.userName != null && player.userName!.isNotEmpty)
+                      if (player.userName != null &&
+                          player.userName!.isNotEmpty)
                         Text(
                           '@${player.userName}',
                           maxLines: 1,
@@ -2523,7 +2676,8 @@ class _PaymentBadgeWidget extends StatelessWidget {
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle_outline, size: 11, color: Color(0xFF10B981)),
+            Icon(Icons.check_circle_outline,
+                size: 11, color: Color(0xFF10B981)),
             SizedBox(width: 4),
             Text(
               'Em dia',
@@ -2853,7 +3007,8 @@ class _AppInput extends StatelessWidget {
         hintText: hint,
         filled: true,
         fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
@@ -2899,13 +3054,15 @@ class _PrimaryBtn extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF0F172A),
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
         child: loading
             ? const SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white),
               )
             : Text(
                 label,
@@ -2960,8 +3117,9 @@ class _StarRatingWidget extends StatelessWidget {
                 '★',
                 style: TextStyle(
                   fontSize: 24,
-                  color:
-                      selected ? const Color(0xFFFBBF24) : const Color(0xFFCBD5E1),
+                  color: selected
+                      ? const Color(0xFFFBBF24)
+                      : const Color(0xFFCBD5E1),
                 ),
               ),
             ),
@@ -2977,12 +3135,12 @@ class _StarRatingWidget extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _RatingSlider extends StatelessWidget {
-  final String   label;
-  final String   icon;
-  final Color    color;
-  final int?     value;
-  final bool     disabled;
-  final bool     isDark;
+  final String label;
+  final String icon;
+  final Color color;
+  final int? value;
+  final bool disabled;
+  final bool isDark;
   final ValueChanged<int> onChanged;
 
   const _RatingSlider({
@@ -3011,7 +3169,8 @@ class _RatingSlider extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF374151),
+                color:
+                    isDark ? const Color(0xFFCBD5E1) : const Color(0xFF374151),
               ),
             ),
             const Spacer(),
@@ -3019,11 +3178,14 @@ class _RatingSlider extends StatelessWidget {
               duration: const Duration(milliseconds: 120),
               child: Container(
                 key: ValueKey(displayValue),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                 decoration: BoxDecoration(
                   color: value != null
                       ? color.withValues(alpha: 0.12)
-                      : (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
+                      : (isDark
+                          ? const Color(0xFF334155)
+                          : const Color(0xFFF1F5F9)),
                   borderRadius: BorderRadius.circular(100),
                 ),
                 child: Text(
@@ -3033,7 +3195,9 @@ class _RatingSlider extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     color: value != null
                         ? color
-                        : (isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                        : (isDark
+                            ? const Color(0xFF64748B)
+                            : const Color(0xFF94A3B8)),
                   ),
                 ),
               ),
@@ -3042,17 +3206,18 @@ class _RatingSlider extends StatelessWidget {
         ),
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
-            activeTrackColor:   color,
-            inactiveTrackColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-            thumbColor:         color,
-            overlayColor:       color.withValues(alpha: 0.12),
-            trackHeight:        4,
+            activeTrackColor: color,
+            inactiveTrackColor:
+                isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+            thumbColor: color,
+            overlayColor: color.withValues(alpha: 0.12),
+            trackHeight: 4,
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
           ),
           child: Slider(
             value: displayValue.toDouble(),
-            min:   0,
-            max:   10,
+            min: 0,
+            max: 10,
             divisions: 10,
             onChanged: disabled ? null : (v) => onChanged(v.round()),
           ),
@@ -3207,6 +3372,7 @@ class _EditPlayerSheet extends StatefulWidget {
   final _PlayerDto player;
   final bool isAdmin;
   final Future<void> Function(Map<String, dynamic>) onSaved;
+
   /// Called when admin confirms removing the player from the group. Null = feature not available.
   final Future<void> Function()? onRemove;
 
@@ -3232,7 +3398,7 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
   int? _overallRating;
   // guest rating
   int? _starRating;
-  bool _loading  = false;
+  bool _loading = false;
   bool _removing = false;
   bool _confirmRemove = false;
   String? _err;
@@ -3240,14 +3406,14 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
   @override
   void initState() {
     super.initState();
-    _nameCtrl      = TextEditingController(text: widget.player.name);
-    _isGuest       = widget.player.isGuest;
-    _isActive      = widget.player.status == 1;
-    _isGoalkeeper  = widget.player.isGoalkeeper;
-    _attackRating  = widget.player.attackRating;
+    _nameCtrl = TextEditingController(text: widget.player.name);
+    _isGuest = widget.player.isGuest;
+    _isActive = widget.player.status == 1;
+    _isGoalkeeper = widget.player.isGoalkeeper;
+    _attackRating = widget.player.attackRating;
     _defenseRating = widget.player.defenseRating;
     _overallRating = widget.player.overallRating;
-    _starRating    = widget.player.guestStarRating;
+    _starRating = widget.player.guestStarRating;
   }
 
   @override
@@ -3257,12 +3423,18 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
   }
 
   Future<void> _remove() async {
-    setState(() { _removing = true; _err = null; });
+    setState(() {
+      _removing = true;
+      _err = null;
+    });
     try {
       await widget.onRemove!();
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      setState(() { _err = _extractError(e); _confirmRemove = false; });
+      setState(() {
+        _err = _extractError(e);
+        _confirmRemove = false;
+      });
     } finally {
       if (mounted) setState(() => _removing = false);
     }
@@ -3288,12 +3460,12 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
       };
 
       if (widget.isAdmin) {
-        dto['status']  = _isActive ? 1 : 2;
+        dto['status'] = _isActive ? 1 : 2;
         dto['isGuest'] = _isGuest;
         if (_isGuest) {
           if (_starRating != null) dto['guestStarRating'] = _starRating;
         } else {
-          if (_attackRating  != null) dto['attackRating']  = _attackRating;
+          if (_attackRating != null) dto['attackRating'] = _attackRating;
           if (_defenseRating != null) dto['defenseRating'] = _defenseRating;
           if (_overallRating != null) dto['overallRating'] = _overallRating;
         }
@@ -3412,37 +3584,40 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
                       const SizedBox(height: 4),
                       Text(
                         'Defina o nível do jogador em cada categoria',
-                        style: TextStyle(fontSize: 11,
-                            color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? const Color(0xFF64748B)
+                                : const Color(0xFF94A3B8)),
                       ),
                       const SizedBox(height: 12),
                       _RatingSlider(
-                        label:    'Ataque',
-                        icon:     '⚔️',
-                        color:    const Color(0xFFEF4444),
-                        value:    _attackRating,
+                        label: 'Ataque',
+                        icon: '⚔️',
+                        color: const Color(0xFFEF4444),
+                        value: _attackRating,
                         disabled: _loading,
-                        isDark:   isDark,
+                        isDark: isDark,
                         onChanged: (v) => setState(() => _attackRating = v),
                       ),
                       const SizedBox(height: 8),
                       _RatingSlider(
-                        label:    'Defesa',
-                        icon:     '🛡️',
-                        color:    const Color(0xFF3B82F6),
-                        value:    _defenseRating,
+                        label: 'Defesa',
+                        icon: '🛡️',
+                        color: const Color(0xFF3B82F6),
+                        value: _defenseRating,
                         disabled: _loading,
-                        isDark:   isDark,
+                        isDark: isDark,
                         onChanged: (v) => setState(() => _defenseRating = v),
                       ),
                       const SizedBox(height: 8),
                       _RatingSlider(
-                        label:    'Físico',
-                        icon:     '💪',
-                        color:    const Color(0xFFF59E0B),
-                        value:    _overallRating,
+                        label: 'Físico',
+                        icon: '💪',
+                        color: const Color(0xFFF59E0B),
+                        value: _overallRating,
                         disabled: _loading,
-                        isDark:   isDark,
+                        isDark: isDark,
                         onChanged: (v) => setState(() => _overallRating = v),
                       ),
                     ] else ...[
@@ -3483,7 +3658,8 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
                           onPressed: (_loading || _removing)
                               ? null
                               : () => setState(() => _confirmRemove = true),
-                          icon: const Icon(Icons.person_remove_outlined, size: 15),
+                          icon: const Icon(Icons.person_remove_outlined,
+                              size: 15),
                           label: const Text('Remover da patota'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: const Color(0xFFE11D48),
@@ -3534,15 +3710,18 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
                                 child: OutlinedButton(
                                   onPressed: _removing
                                       ? null
-                                      : () => setState(() => _confirmRemove = false),
+                                      : () => setState(
+                                          () => _confirmRemove = false),
                                   style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 10),
                                     side: BorderSide(
                                         color: isDark
                                             ? const Color(0xFF475569)
                                             : const Color(0xFFCBD5E1)),
                                     shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10)),
+                                        borderRadius:
+                                            BorderRadius.circular(10)),
                                   ),
                                   child: Text(
                                     'Cancelar',
@@ -3564,17 +3743,21 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
                                           width: 13,
                                           height: 13,
                                           child: CircularProgressIndicator(
-                                              strokeWidth: 2, color: Colors.white),
+                                              strokeWidth: 2,
+                                              color: Colors.white),
                                         )
                                       : const Icon(Icons.person_remove_outlined,
                                           size: 13),
-                                  label: Text(_removing ? 'Removendo...' : 'Confirmar'),
+                                  label: Text(
+                                      _removing ? 'Removendo...' : 'Confirmar'),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(0xFFE11D48),
                                     foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 10),
                                     shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10)),
+                                        borderRadius:
+                                            BorderRadius.circular(10)),
                                   ),
                                 ),
                               ),
@@ -3612,10 +3795,10 @@ class _PendingInviteItem {
 
   factory _PendingInviteItem.fromJson(Map<String, dynamic> j) =>
       _PendingInviteItem(
-        inviteId: j['id']                 as String? ?? '',
-        userId:   j['targetUserId']       as String? ?? '',
+        inviteId: j['id'] as String? ?? '',
+        userId: j['targetUserId'] as String? ?? '',
         fullName: j['targetUserFullName'] as String? ?? '',
-        userName: j['targetUserLogin']    as String? ?? '',
+        userName: j['targetUserLogin'] as String? ?? '',
       );
 }
 
@@ -3641,11 +3824,11 @@ class _InviteSheet extends StatefulWidget {
 class _InviteSheetState extends State<_InviteSheet> {
   final _searchCtrl = TextEditingController();
   Timer? _debounce;
-  bool _loading        = false;
+  bool _loading = false;
   bool _pendingLoading = false;
-  bool _hasTried       = false;
+  bool _hasTried = false;
   String? _err;
-  List<_UserResult>        _results      = [];
+  List<_UserResult> _results = [];
   List<_PendingInviteItem> _pendingItems = [];
 
   Set<String> get _pendingUserIds => _pendingItems.map((e) => e.userId).toSet();
@@ -3660,8 +3843,9 @@ class _InviteSheetState extends State<_InviteSheet> {
   Future<void> _loadPendingInvites() async {
     if (mounted) setState(() => _pendingLoading = true);
     try {
-      final res  = await widget.dio.get(ApiConstants.groupPendingInvites(widget.groupId));
-      final raw  = _GroupsPageState._unwrap(res.data);
+      final res = await widget.dio
+          .get(ApiConstants.groupPendingInvites(widget.groupId));
+      final raw = _GroupsPageState._unwrap(res.data);
       final list = raw is List ? raw : [];
       final items = list
           .map((e) => _PendingInviteItem.fromJson(e as Map<String, dynamic>))
@@ -3728,8 +3912,9 @@ class _InviteSheetState extends State<_InviteSheet> {
 
   Future<void> _invite(_UserResult user) async {
     // Captura antes de qualquer await para funcionar mesmo após Navigator.pop
-    final messenger   = ScaffoldMessenger.of(context);
-    final displayName = user.fullName.isNotEmpty ? user.fullName : user.userName;
+    final messenger = ScaffoldMessenger.of(context);
+    final displayName =
+        user.fullName.isNotEmpty ? user.fullName : user.userName;
 
     // If there are unlinked guests, ask whether to associate this user with one.
     String? guestPlayerId;
@@ -3738,7 +3923,7 @@ class _InviteSheetState extends State<_InviteSheet> {
         context: context,
         builder: (_) => _LinkGuestDialog(
           userName: user.fullName.isNotEmpty ? user.fullName : user.userName,
-          guests:   widget.guestPlayers,
+          guests: widget.guestPlayers,
         ),
       );
       // null  = dialog dismissed (cancel) → abort invite
@@ -3772,22 +3957,23 @@ class _InviteSheetState extends State<_InviteSheet> {
           content: Text('Convite enviado para $displayName.'),
           backgroundColor: const Color(0xFF16A34A),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ));
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      final errMsg    = _extractError(e);
+      final errMsg = _extractError(e);
       final isPending = errMsg.toLowerCase().contains('pendente');
       if (isPending) await _loadPendingInvites();
       messenger
         ..clearSnackBars()
         ..showSnackBar(SnackBar(
           content: Text(errMsg),
-          backgroundColor: isPending
-              ? const Color(0xFFF59E0B)
-              : const Color(0xFFE11D48),
+          backgroundColor:
+              isPending ? const Color(0xFFF59E0B) : const Color(0xFFE11D48),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ));
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -3795,8 +3981,9 @@ class _InviteSheetState extends State<_InviteSheet> {
   }
 
   Future<void> _cancelInvite(_PendingInviteItem item) async {
-    final messenger   = ScaffoldMessenger.of(context);
-    final displayName = item.fullName.isNotEmpty ? item.fullName : item.userName;
+    final messenger = ScaffoldMessenger.of(context);
+    final displayName =
+        item.fullName.isNotEmpty ? item.fullName : item.userName;
     try {
       await widget.dio.delete(
         ApiConstants.groupCancelInvite(widget.groupId, item.inviteId),
@@ -3807,7 +3994,8 @@ class _InviteSheetState extends State<_InviteSheet> {
         ..showSnackBar(SnackBar(
           content: Text('Convite de $displayName cancelado.'),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ));
     } catch (e) {
       messenger
@@ -3816,7 +4004,8 @@ class _InviteSheetState extends State<_InviteSheet> {
           content: Text(_extractError(e)),
           backgroundColor: const Color(0xFFE11D48),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ));
     }
   }
@@ -3833,11 +4022,11 @@ class _InviteSheetState extends State<_InviteSheet> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _SheetHeader(
-              icon:     Icons.person_add_alt_1_outlined,
-              iconBg:   const Color(0xFF0F172A),
-              title:    'Convidar jogador',
+              icon: Icons.person_add_alt_1_outlined,
+              iconBg: const Color(0xFF0F172A),
+              title: 'Convidar jogador',
               subtitle: 'Busque por nome, usuário ou email',
-              isDark:   isDark,
+              isDark: isDark,
             ),
             TabBar(
               tabs: [
@@ -3853,7 +4042,8 @@ class _InviteSheetState extends State<_InviteSheet> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                            color:
+                                const Color(0xFFF59E0B).withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
@@ -3898,16 +4088,16 @@ class _InviteSheetState extends State<_InviteSheet> {
         children: [
           _AppInput(
             controller: _searchCtrl,
-            hint:    'Pesquisar...',
+            hint: 'Pesquisar...',
             enabled: !_loading,
-            isDark:  isDark,
+            isDark: isDark,
           ),
           if (_err != null) ...[
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerLeft,
-              child: Text(_err!,
-                  style: const TextStyle(color: Color(0xFFEF4444))),
+              child:
+                  Text(_err!, style: const TextStyle(color: Color(0xFFEF4444))),
             ),
           ],
           const SizedBox(height: 16),
@@ -3940,14 +4130,16 @@ class _InviteSheetState extends State<_InviteSheet> {
                         itemCount: _results.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
-                          final user     = _results[index];
-                          final name     = user.fullName.isEmpty
-                              ? user.userName : user.fullName;
-                          final isMember = widget.existingUserIds.contains(user.id);
+                          final user = _results[index];
+                          final name = user.fullName.isEmpty
+                              ? user.userName
+                              : user.fullName;
+                          final isMember =
+                              widget.existingUserIds.contains(user.id);
                           final isPending = _pendingUserIds.contains(user.id);
                           return _buildUserRow(
-                            isDark:   isDark,
-                            name:     name,
+                            isDark: isDark,
+                            name: name,
                             userName: user.userName,
                             trailing: isMember
                                 ? _StatusBadge(label: 'Membro', isDark: isDark)
@@ -3958,10 +4150,12 @@ class _InviteSheetState extends State<_InviteSheet> {
                                         color: const Color(0xFFF59E0B),
                                       )
                                     : ElevatedButton(
-                                        onPressed:
-                                            _loading ? null : () => _invite(user),
+                                        onPressed: _loading
+                                            ? null
+                                            : () => _invite(user),
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: const Color(0xFF0F172A),
+                                          backgroundColor:
+                                              const Color(0xFF0F172A),
                                           foregroundColor: Colors.white,
                                           padding: const EdgeInsets.symmetric(
                                               horizontal: 14, vertical: 8),
@@ -3992,9 +4186,7 @@ class _InviteSheetState extends State<_InviteSheet> {
           child: Text(
             'Nenhum convite pendente.',
             style: TextStyle(
-              color: isDark
-                  ? const Color(0xFF94A3B8)
-                  : const Color(0xFF64748B),
+              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
             ),
           ),
         ),
@@ -4008,19 +4200,18 @@ class _InviteSheetState extends State<_InviteSheet> {
         final item = _pendingItems[i];
         final name = item.fullName.isNotEmpty ? item.fullName : item.userName;
         return _buildUserRow(
-          isDark:   isDark,
-          name:     name,
+          isDark: isDark,
+          name: name,
           userName: item.userName,
           trailing: TextButton.icon(
             onPressed: () => _cancelInvite(item),
             style: TextButton.styleFrom(
               foregroundColor: const Color(0xFFEF4444),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8)),
             ),
-            icon:  const Icon(Icons.close, size: 16),
+            icon: const Icon(Icons.close, size: 16),
             label: const Text('Cancelar', style: TextStyle(fontSize: 13)),
           ),
         );
@@ -4111,8 +4302,8 @@ class _StatusBadge extends StatelessWidget {
     final bg = color != null
         ? color!.withValues(alpha: 0.15)
         : (isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0));
-    final fg = color ??
-        (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569));
+    final fg =
+        color ?? (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569));
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -4137,13 +4328,17 @@ class _StatusBadge extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _LinkGuestDialog extends StatelessWidget {
-  final String            userName;
-  final List<_PlayerDto>  guests;
+  final String userName;
+  final List<_PlayerDto> guests;
 
   /// Sentinel returned when the user chooses "Não vincular".
   static const _PlayerDto sentinel = _PlayerDto(
-    id: '__no_link__', name: '', skillPoints: 0,
-    isGoalkeeper: false, isGuest: true, status: 0,
+    id: '__no_link__',
+    name: '',
+    skillPoints: 0,
+    isGoalkeeper: false,
+    isGuest: true,
+    status: 0,
   );
 
   const _LinkGuestDialog({
@@ -4154,10 +4349,9 @@ class _LinkGuestDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg     = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final border = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : const Color(0xFFE2E8F0);
+    final bg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final border =
+        isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0);
 
     return Dialog(
       backgroundColor: bg,
@@ -4172,7 +4366,8 @@ class _LinkGuestDialog extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  width: 36, height: 36,
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
                     color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
@@ -4188,13 +4383,16 @@ class _LinkGuestDialog extends StatelessWidget {
                       Text(
                         'Vincular a convidado?',
                         style: TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w700,
-                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color:
+                              isDark ? Colors.white : const Color(0xFF0F172A),
                         ),
                       ),
                       Text(
                         userName,
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 12,
                           color: isDark
@@ -4212,7 +4410,8 @@ class _LinkGuestDialog extends StatelessWidget {
               'Deseja associar este usuário a um convidado já existente na patota?',
               style: TextStyle(
                 fontSize: 13,
-                color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                color:
+                    isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
               ),
             ),
             const SizedBox(height: 16),
@@ -4242,7 +4441,8 @@ class _LinkGuestDialog extends StatelessWidget {
                       child: Row(
                         children: [
                           Container(
-                            width: 32, height: 32,
+                            width: 32,
+                            height: 32,
                             decoration: BoxDecoration(
                               color: const Color(0xFFFEF3C7),
                               borderRadius: BorderRadius.circular(8),
@@ -4266,7 +4466,8 @@ class _LinkGuestDialog extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
                                 color: isDark
                                     ? Colors.white
                                     : const Color(0xFF0F172A),
@@ -4275,13 +4476,15 @@ class _LinkGuestDialog extends StatelessWidget {
                           ),
                           if (g.isGoalkeeper) ...[
                             const SizedBox(width: 6),
-                            Icon(Icons.shield_outlined, size: 13,
+                            Icon(Icons.shield_outlined,
+                                size: 13,
                                 color: isDark
                                     ? const Color(0xFF64748B)
                                     : const Color(0xFF94A3B8)),
                           ],
                           const SizedBox(width: 8),
-                          Icon(Icons.chevron_right_rounded, size: 18,
+                          Icon(Icons.chevron_right_rounded,
+                              size: 18,
                               color: isDark
                                   ? const Color(0xFF475569)
                                   : const Color(0xFFCBD5E1)),
