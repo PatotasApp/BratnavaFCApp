@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../../../core/api/api_constants.dart';
+import '../../../../core/utils/date_utils.dart';
 import '../../domain/entities/group_settings.dart';
 
 class GroupSettingsRemoteDataSource {
@@ -88,9 +89,7 @@ class GroupSettingsRemoteDataSource {
     final data = raw as Map<String, dynamic>;
     return (
       placeName: (data['placeName'] ?? data['PlaceName'] ?? '').toString(),
-      playedAt: DateTime.parse(
-        (data['playedAt'] ?? data['PlayedAt']).toString(),
-      ),
+      playedAt: parseApiDate((data['playedAt'] ?? data['PlayedAt']).toString()),
     );
   }
 
