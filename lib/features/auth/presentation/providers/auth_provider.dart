@@ -88,10 +88,10 @@ class AuthNotifier extends AsyncNotifier<void> {
       final activeGroupId = groupIds.length == 1 ? groupIds.first : null;
 
       final enriched = account.copyWith(
-        groupAdminIds:      roles['adminIds'],
+        groupAdminIds: roles['adminIds'],
         groupFinanceiroIds: roles['financeiroIds'],
-        activeGroupId:      activeGroupId,
-        keepLoggedIn:       keepLoggedIn,
+        activeGroupId: activeGroupId,
+        keepLoggedIn: keepLoggedIn,
       );
 
       await ref.read(accountStoreProvider.notifier).upsertAccount(enriched);
@@ -112,11 +112,11 @@ class AuthNotifier extends AsyncNotifier<void> {
     state = await AsyncValue.guard(() async {
       final useCase = ref.read(registerUseCaseProvider);
       await useCase(
-        userName:  userName,
+        userName: userName,
         firstName: firstName,
-        lastName:  lastName,
-        email:     email,
-        password:  password,
+        lastName: lastName,
+        email: email,
+        password: password,
       );
     });
   }
@@ -136,11 +136,11 @@ class AuthNotifier extends AsyncNotifier<void> {
       final dataSource = ref.read(_authDataSourceProvider);
       final roles = await dataSource.fetchMyGroupRoles(groupId);
       await ref.read(accountStoreProvider.notifier).upsertAccount(
-        account.copyWith(
-          activeGroupIsAdmin:      roles.isAdmin,
-          activeGroupIsFinanceiro: roles.isFinanceiro,
-        ),
-      );
+            account.copyWith(
+              activeGroupIsAdmin: roles.isAdmin,
+              activeGroupIsFinanceiro: roles.isFinanceiro,
+            ),
+          );
     } catch (_) {
       // silencioso — UI já usa os arrays de fallback
     }
@@ -156,11 +156,11 @@ class AuthNotifier extends AsyncNotifier<void> {
       final dataSource = ref.read(_authDataSourceProvider);
       final roles = await dataSource.fetchGroupRoles(account.userId);
       await ref.read(accountStoreProvider.notifier).upsertAccount(
-        account.copyWith(
-          groupAdminIds:      roles['adminIds'],
-          groupFinanceiroIds: roles['financeiroIds'],
-        ),
-      );
+            account.copyWith(
+              groupAdminIds: roles['adminIds'],
+              groupFinanceiroIds: roles['financeiroIds'],
+            ),
+          );
     } catch (_) {
       // Silencioso — permissões desatualizadas são melhor que crash
     }
@@ -178,16 +178,21 @@ class AuthNotifier extends AsyncNotifier<void> {
         dataSource.fetchMyGroupIds(),
       ).wait;
 
-      final resolvedGroupId = account.activeGroupId ??
-          (groupIds.length == 1 ? groupIds.first : null);
+      final currentGroupStillAvailable = account.activeGroupId != null &&
+          groupIds.contains(account.activeGroupId);
+      final resolvedGroupId = currentGroupStillAvailable
+          ? account.activeGroupId
+          : (groupIds.length == 1 ? groupIds.first : null);
 
       await ref.read(accountStoreProvider.notifier).upsertAccount(
-        account.copyWith(
-          groupAdminIds:      roles['adminIds'],
-          groupFinanceiroIds: roles['financeiroIds'],
-          activeGroupId:      resolvedGroupId,
-        ),
-      );
+            account.copyWith(
+              groupAdminIds: roles['adminIds'],
+              groupFinanceiroIds: roles['financeiroIds'],
+              activeGroupId: resolvedGroupId,
+              clearActiveGroupId: resolvedGroupId == null,
+              clearActivePlayerId: !currentGroupStillAvailable,
+            ),
+          );
     } catch (_) {}
   }
 
@@ -199,12 +204,12 @@ class AuthNotifier extends AsyncNotifier<void> {
     if (!JwtHelper.isExpiring(account.accessToken, bufferSeconds: 300)) return;
 
     debugPrint('🔄 proactiveRefresh: token expirando, renovando...');
-    final newToken =
-        await ref.read(authInterceptorProvider).tryRefresh();
+    final newToken = await ref.read(authInterceptorProvider).tryRefresh();
     if (newToken != null) {
       debugPrint('✅ proactiveRefresh: token renovado');
     } else {
-      debugPrint('⚠ proactiveRefresh: renovação falhou (interceptor tratará 401)');
+      debugPrint(
+          '⚠ proactiveRefresh: renovação falhou (interceptor tratará 401)');
     }
   }
 }
@@ -226,7 +231,7 @@ final tokenRefreshServiceProvider = Provider<void>((ref) {
   if (expiresAt == null) return;
 
   final refreshAt = expiresAt.subtract(const Duration(minutes: 5));
-  final delay     = refreshAt.difference(DateTime.now());
+  final delay = refreshAt.difference(DateTime.now());
 
   Timer? timer;
 

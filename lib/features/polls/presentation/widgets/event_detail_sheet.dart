@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/realtime/realtime_provider.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../data/datasources/polls_remote_datasource.dart';
@@ -1351,6 +1353,13 @@ class _ResultBar extends StatelessWidget {
   }
 }
 
+String formatVoteDateTime(String? votedAt) {
+  if (votedAt == null || votedAt.isEmpty) return 'Ainda não respondeu';
+  final parsed = parseApiInstantOrNull(votedAt);
+  if (parsed == null) return 'Ainda não respondeu';
+  return DateFormat('dd/MM/yy HH:mm', 'pt_BR').format(parsed);
+}
+
 class _StatusChip extends StatelessWidget {
   final bool isOpen;
   const _StatusChip({required this.isOpen});
@@ -1498,12 +1507,24 @@ class _AdminContent extends StatelessWidget {
                 child: Row(
                   children: [
                     Expanded(
-                        child: Text(m.playerName,
-                            style: TextStyle(
-                                fontSize: 13,
-                                color: isDark
-                                    ? AppColors.slate200
-                                    : AppColors.slate700))),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(m.playerName,
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  color: isDark
+                                      ? AppColors.slate200
+                                      : AppColors.slate700)),
+                          Text(formatVoteDateTime(m.votedAt),
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: isDark
+                                      ? AppColors.slate500
+                                      : AppColors.slate400)),
+                        ],
+                      ),
+                    ),
                     DropdownButton<String?>(
                       value: current,
                       hint: const Text('—', style: TextStyle(fontSize: 13)),
