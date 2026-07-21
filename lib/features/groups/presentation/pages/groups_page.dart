@@ -812,7 +812,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Minhas Patotas',
+                      'Minha patota',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(

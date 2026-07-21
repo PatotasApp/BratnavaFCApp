@@ -20,7 +20,7 @@ class PlayerHistoryPage extends ConsumerStatefulWidget {
 
 class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
   MyPlayer? _selectedPlayer;
-  late int  _selectedYear;
+  late int _selectedYear;
 
   @override
   void initState() {
@@ -34,9 +34,9 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
     final groupId = ref.read(accountStoreProvider).activeAccount?.activeGroupId;
     if (groupId != null && _selectedPlayer != null) {
       ref.invalidate(playerHistoryProvider((
-        groupId:  groupId,
+        groupId: groupId,
         playerId: _selectedPlayer!.playerId,
-        year:     _selectedYear,
+        year: _selectedYear,
       )));
     }
   }
@@ -112,7 +112,7 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Histórico do Jogador',
+                    'Meu Histórico',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 20,
@@ -201,9 +201,10 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
             children: [
               const Icon(Icons.error_outline, size: 16, color: Colors.red),
               const SizedBox(width: 6),
-              Text('Erro', style: TextStyle(
-                  fontSize: 13,
-                  color: isDark ? AppColors.slate400 : AppColors.slate500)),
+              Text('Erro',
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? AppColors.slate400 : AppColors.slate500)),
             ],
           ),
         ),
@@ -323,16 +324,15 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
 
   Widget _buildHistorySliver(BuildContext context, String groupId) {
     final player = _selectedPlayer!;
-    final args   = (
-      groupId:  groupId,
+    final args = (
+      groupId: groupId,
       playerId: player.playerId,
-      year:     _selectedYear,
+      year: _selectedYear,
     );
     final historyAsync = ref.watch(playerHistoryProvider(args));
 
     return historyAsync.when(
-      loading: () =>
-          const SliverToBoxAdapter(child: _SkeletonLoader()),
+      loading: () => const SliverToBoxAdapter(child: _SkeletonLoader()),
       error: (e, _) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
@@ -511,8 +511,8 @@ class _SummaryCard extends StatelessWidget {
   Widget _statPill({
     required String value,
     required String label,
-    required Color  color,
-    required bool   isDark,
+    required Color color,
+    required bool isDark,
   }) =>
       Column(
         children: [
@@ -597,29 +597,29 @@ class _MatchList extends StatelessWidget {
 
 class _MatchRow extends StatelessWidget {
   final MatchHistoryItem item;
-  final bool             isDark;
+  final bool isDark;
   const _MatchRow({required this.item, required this.isDark});
 
   Color get _resultColor {
-    if (item.isWin)  return const Color(0xFF16A34A);
+    if (item.isWin) return const Color(0xFF16A34A);
     if (item.isLoss) return const Color(0xFFDC2626);
     return isDark ? AppColors.slate500 : AppColors.slate400;
   }
 
   String get _resultLabel {
-    if (item.isWin)  return 'V';
+    if (item.isWin) return 'V';
     if (item.isLoss) return 'D';
     return 'E';
   }
 
   String get _resultFull {
-    if (item.isWin)  return 'Vitória';
+    if (item.isWin) return 'Vitória';
     if (item.isLoss) return 'Derrota';
     return 'Empate';
   }
 
   Color get _resultBg {
-    if (item.isWin)  return const Color(0xFFDCFCE7);
+    if (item.isWin) return const Color(0xFFDCFCE7);
     if (item.isLoss) return const Color(0xFFFFF1F2);
     return isDark ? AppColors.slate700 : AppColors.slate100;
   }
@@ -702,9 +702,8 @@ class _MatchRow extends StatelessWidget {
                         Icon(
                           Icons.location_on_outlined,
                           size: 11,
-                          color: isDark
-                              ? AppColors.slate500
-                              : AppColors.slate400,
+                          color:
+                              isDark ? AppColors.slate500 : AppColors.slate400,
                         ),
                         const SizedBox(width: 3),
                         Flexible(
@@ -777,8 +776,8 @@ class _MatchRow extends StatelessWidget {
 
   Widget _miniStat({
     required IconData icon,
-    required String   value,
-    required Color    color,
+    required String value,
+    required Color color,
   }) =>
       Row(
         mainAxisSize: MainAxisSize.min,
@@ -813,12 +812,10 @@ class _MatchRow extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: colorA,
-              border: Border.all(
-                  color: Colors.white.withAlpha(80), width: 1),
+              border: Border.all(color: Colors.white.withAlpha(80), width: 1),
             ),
           ),
-        if (colorA != null && colorB != null)
-          const SizedBox(width: 3),
+        if (colorA != null && colorB != null) const SizedBox(width: 3),
         if (colorB != null)
           Container(
             width: 8,
@@ -826,8 +823,7 @@ class _MatchRow extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: colorB,
-              border: Border.all(
-                  color: Colors.white.withAlpha(80), width: 1),
+              border: Border.all(color: Colors.white.withAlpha(80), width: 1),
             ),
           ),
       ],
@@ -863,7 +859,7 @@ class _SkeletonLoader extends StatefulWidget {
 class _SkeletonLoaderState extends State<_SkeletonLoader>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
-  late final Animation<double>   _anim;
+  late final Animation<double> _anim;
 
   @override
   void initState() {
@@ -872,8 +868,8 @@ class _SkeletonLoaderState extends State<_SkeletonLoader>
       vsync: this,
       duration: const Duration(milliseconds: 1100),
     )..repeat(reverse: true);
-    _anim = Tween<double>(begin: 0.4, end: 0.9).animate(
-        CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+    _anim = Tween<double>(begin: 0.4, end: 0.9)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
   }
 
   @override
@@ -885,7 +881,7 @@ class _SkeletonLoaderState extends State<_SkeletonLoader>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final base   = isDark ? AppColors.slate800 : AppColors.slate100;
+    final base = isDark ? AppColors.slate800 : AppColors.slate100;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -971,20 +967,20 @@ class _ErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(24),
-    child: Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF1F2),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFFFCDD2)),
-      ),
-      child: Text(
-        message,
-        style: const TextStyle(fontSize: 13, color: Color(0xFF9B1239)),
-      ),
-    ),
-  );
+        padding: const EdgeInsets.all(24),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF1F2),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFFFCDD2)),
+          ),
+          child: Text(
+            message,
+            style: const TextStyle(fontSize: 13, color: Color(0xFF9B1239)),
+          ),
+        ),
+      );
 }
 
 class _NoGroupState extends StatelessWidget {
@@ -992,18 +988,17 @@ class _NoGroupState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.history_rounded, size: 48, color: AppColors.slate500),
-        SizedBox(height: 12),
-        Text(
-          'Crie ou entre em um grupo',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-              color: AppColors.slate400, fontSize: 13),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.history_rounded, size: 48, color: AppColors.slate500),
+            SizedBox(height: 12),
+            Text(
+              'Crie ou entre em um grupo',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.slate400, fontSize: 13),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      );
 }
