@@ -7,6 +7,7 @@ import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../widgets/app_top_bar.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
+import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../polls/presentation/providers/polls_provider.dart';
 
 class ShellPage extends ConsumerStatefulWidget {
@@ -20,13 +21,32 @@ class ShellPage extends ConsumerStatefulWidget {
 
 class _ShellPageState extends ConsumerState<ShellPage>
     with WidgetsBindingObserver {
-
   static const _tabs = [
-    _TabItem(icon: Icons.home_outlined,          activeIcon: Icons.home,             label: 'Dashboard', path: '/app'),
-    _TabItem(icon: Icons.sports_soccer_outlined, activeIcon: Icons.sports_soccer,    label: 'Partidas',  path: '/app/matches'),
-    _TabItem(icon: Icons.group_outlined,         activeIcon: Icons.group,            label: 'Grupos',    path: '/app/groups'),
-    _TabItem(icon: Icons.history_outlined,       activeIcon: Icons.history,          label: 'Histórico', path: '/app/history'),
-    _TabItem(icon: Icons.more_horiz_outlined,    activeIcon: Icons.more_horiz,       label: 'Mais',      path: ''),
+    _TabItem(
+        icon: Icons.home_outlined,
+        activeIcon: Icons.home,
+        label: 'Dashboard',
+        path: '/app'),
+    _TabItem(
+        icon: Icons.sports_soccer_outlined,
+        activeIcon: Icons.sports_soccer,
+        label: 'Partidas',
+        path: '/app/matches'),
+    _TabItem(
+        icon: Icons.group_outlined,
+        activeIcon: Icons.group,
+        label: 'Minha patota',
+        path: '/app/groups'),
+    _TabItem(
+        icon: Icons.history_outlined,
+        activeIcon: Icons.history,
+        label: 'Histórico',
+        path: '/app/history'),
+    _TabItem(
+        icon: Icons.more_horiz_outlined,
+        activeIcon: Icons.more_horiz,
+        label: 'Mais',
+        path: ''),
   ];
 
   @override
@@ -101,9 +121,9 @@ class _ShellPageState extends ConsumerState<ShellPage>
         },
         destinations: _tabs
             .map((t) => NavigationDestination(
-                  icon:         Icon(t.icon),
+                  icon: Icon(t.icon),
                   selectedIcon: Icon(t.activeIcon),
-                  label:        t.label,
+                  label: t.label,
                 ))
             .toList(),
       ),
@@ -112,7 +132,7 @@ class _ShellPageState extends ConsumerState<ShellPage>
 
   void _openDrawer(BuildContext context) {
     showModalBottomSheet(
-      context:            context,
+      context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -125,8 +145,8 @@ class _ShellPageState extends ConsumerState<ShellPage>
 class _TabItem {
   final IconData icon;
   final IconData activeIcon;
-  final String   label;
-  final String   path;
+  final String label;
+  final String path;
 
   const _TabItem({
     required this.icon,
@@ -141,37 +161,75 @@ class _MoreSheet extends ConsumerWidget {
 
   // (icon, label, path, hasBadge, adminOnly)
   static const _items = [
-    (Icons.calendar_month_outlined,  'Calendário',            '/app/calendar',       false, false),
-    (Icons.palette_outlined,         'Cores',                 '/app/team-colors',    false, false),
-    (Icons.bar_chart_outlined,       'Visual Stats',          '/app/visual-stats',   false, true),
-    (Icons.timeline_outlined,        'Histórico do Jogador',  '/app/player-history', false, true),
-    (Icons.people_alt_outlined,      'Monte seu Time 🎉',     '/app/team-builder',   false, false),
-    (Icons.payments_outlined,        'Pagamentos',            '/app/payments',       false, false),
-    (Icons.how_to_vote_outlined,     'Votações',              '/app/polls',          true,  false),
-    (Icons.event_busy_outlined,      'Ausências',             '/app/absences',       false, false),
-    (Icons.monetization_on_outlined,  'Bet',                   '/app/bet',            false, false),
-    (Icons.video_library_outlined,   'Replays',               '/app/replays',        false, true),
-    (Icons.cake_outlined,            'Aniversários',          '/app/birthdays',      false, true),
-    (Icons.settings_outlined,        'Configurações',         '/app/settings',       false, true),
-    (Icons.manage_accounts_outlined, 'Usuários',              '/app/admin/users',    false, false),
+    (
+      Icons.calendar_month_outlined,
+      'Calendário',
+      '/app/calendar',
+      false,
+      false
+    ),
+    (Icons.palette_outlined, 'Cores', '/app/team-colors', false, false),
+    (
+      Icons.bar_chart_outlined,
+      'Estatísticas',
+      '/app/visual-stats',
+      false,
+      true
+    ),
+    (
+      Icons.timeline_outlined,
+      'Meu Histórico',
+      '/app/player-history',
+      false,
+      true
+    ),
+    (
+      Icons.people_alt_outlined,
+      'Monte seu Time 🎉',
+      '/app/team-builder',
+      false,
+      false
+    ),
+    (Icons.payments_outlined, 'Pagamentos', '/app/payments', false, false),
+    (Icons.how_to_vote_outlined, 'Votações', '/app/polls', true, false),
+    (Icons.event_busy_outlined, 'Ausências', '/app/absences', false, false),
+    (Icons.monetization_on_outlined, 'Bet', '/app/bet', false, false),
+    (Icons.video_library_outlined, 'Replays', '/app/replays', false, true),
+    (Icons.cake_outlined, 'Aniversários', '/app/birthdays', false, true),
+    (Icons.settings_outlined, 'Configurações', '/app/settings', false, true),
+    (
+      Icons.manage_accounts_outlined,
+      'Usuários',
+      '/app/admin/users',
+      false,
+      false
+    ),
   ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final account      = ref.watch(accountStoreProvider).activeAccount;
+    final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
-    final groupId      = account?.activeGroupId ?? activePlayer?.groupId;
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId;
 
     final isAdmin = groupId != null &&
         groupId.isNotEmpty &&
         (account?.isGroupAdmin(groupId) ?? false);
+    final settings = groupId != null
+        ? ref.watch(groupSettingsProvider(groupId)).valueOrNull
+        : null;
+    final canSeeStats = isAdmin || (settings?.showPlayerStats ?? false);
 
     final pendingCount = groupId != null
         ? ref.watch(pendingPollsCountProvider(groupId)).valueOrNull ?? 0
         : 0;
 
-    // Filter out admin-only items for regular players
-    final visibleItems = _items.where((item) => !item.$5 || isAdmin).toList();
+    // Filter out admin-only items for regular players. Statistics follow the
+    // group setting that also exposes goals/assists to non-admin players.
+    final visibleItems = _items.where((item) {
+      if (item.$3 == '/app/visual-stats') return canSeeStats;
+      return !item.$5 || isAdmin;
+    }).toList();
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -183,7 +241,7 @@ class _MoreSheet extends ConsumerWidget {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color:        AppColors.slate300,
+                color: AppColors.slate300,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -199,14 +257,18 @@ class _MoreSheet extends ConsumerWidget {
                             top: -4,
                             right: -4,
                             child: Container(
-                              width: 16, height: 16,
+                              width: 16,
+                              height: 16,
                               decoration: const BoxDecoration(
                                 color: Colors.red,
                                 shape: BoxShape.circle,
                               ),
                               alignment: Alignment.center,
                               child: Text('$pendingCount',
-                                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700)),
                             ),
                           ),
                         ],

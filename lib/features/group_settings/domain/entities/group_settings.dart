@@ -189,6 +189,9 @@ class GroupSettings {
   // Meta
   final bool isPersisted; // false = using defaults, prompt user to save
   final bool showPlayerStats; // true = regular players can see goals/assists
+  final bool showStatsGeneralTab;
+  final bool showStatsPerMatchTab;
+  final bool showStatsClassificationTab;
 
   // Notificações configuráveis
   final int?
@@ -223,6 +226,9 @@ class GroupSettings {
     this.mvpTieMaxPlayers = 2,
     this.isPersisted = false,
     this.showPlayerStats = false,
+    this.showStatsGeneralTab = true,
+    this.showStatsPerMatchTab = true,
+    this.showStatsClassificationTab = true,
     this.paymentDueDay,
     this.autoFinalizeMvpHours,
     this.matchSchedulingEnabled = false,
@@ -261,6 +267,10 @@ class GroupSettings {
       mvpTieMaxPlayers: (j['mvpTieMaxPlayers'] as int?) ?? 2,
       isPersisted: (j['isPersisted'] as bool?) ?? false,
       showPlayerStats: (j['showPlayerStats'] as bool?) ?? false,
+      showStatsGeneralTab: (j['showStatsGeneralTab'] as bool?) ?? true,
+      showStatsPerMatchTab: (j['showStatsPerMatchTab'] as bool?) ?? true,
+      showStatsClassificationTab:
+          (j['showStatsClassificationTab'] as bool?) ?? true,
       paymentDueDay: j['paymentDueDay'] as int?,
       autoFinalizeMvpHours: j['autoFinalizeMvpHours'] as int?,
       matchSchedulingEnabled: (j['matchSchedulingEnabled'] as bool?) ?? false,
@@ -296,6 +306,9 @@ class GroupSettings {
     required int mvpTieRule,
     int? mvpTieMaxPlayers,
     required bool showPlayerStats,
+    bool showStatsGeneralTab = true,
+    bool showStatsPerMatchTab = true,
+    bool showStatsClassificationTab = true,
     int? paymentDueDay,
     int? autoFinalizeMvpHours,
     bool matchSchedulingEnabled = false,
@@ -327,6 +340,9 @@ class GroupSettings {
         // mvpTieMaxPlayers only sent when rule == 2 (mirrors site behaviour)
         'mvpTieMaxPlayers': mvpTieRule == 2 ? mvpTieMaxPlayers : null,
         'showPlayerStats': showPlayerStats,
+        'showStatsGeneralTab': showStatsGeneralTab,
+        'showStatsPerMatchTab': showStatsPerMatchTab,
+        'showStatsClassificationTab': showStatsClassificationTab,
         'paymentDueDay': paymentMode == 0 ? paymentDueDay : null,
         'autoFinalizeMvpHours': autoFinalizeMvpHours,
         'matchSchedulingEnabled': matchSchedulingEnabled,

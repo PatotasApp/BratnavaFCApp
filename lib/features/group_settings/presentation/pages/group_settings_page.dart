@@ -319,6 +319,9 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   // ── Show player stats toggle ──────────────────────────────────────────────
   bool _showPlayerStats = false;
+  bool _showStatsGeneralTab = true;
+  bool _showStatsPerMatchTab = true;
+  bool _showStatsClassificationTab = true;
 
   // ── Notificações configuráveis ────────────────────────────────────────────
   int? _paymentDueDay; // null = sem lembrete
@@ -381,6 +384,9 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     _mvpTieMaxPlayers = s.mvpTieMaxPlayers;
     _mvpMaxCtrl = TextEditingController(text: s.mvpTieMaxPlayers.toString());
     _showPlayerStats = s.showPlayerStats;
+    _showStatsGeneralTab = s.showStatsGeneralTab;
+    _showStatsPerMatchTab = s.showStatsPerMatchTab;
+    _showStatsClassificationTab = s.showStatsClassificationTab;
     _paymentDueDay = s.paymentDueDay;
     _autoFinalizeMvpHours = s.autoFinalizeMvpHours;
     _matchSchedulingEnabled = s.matchSchedulingEnabled;
@@ -394,6 +400,100 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
       text: s.autoFinalizeMvpHours != null
           ? s.autoFinalizeMvpHours.toString()
           : '',
+    );
+  }
+
+  void _setStatsTab({
+    bool? general,
+    bool? perMatch,
+    bool? classification,
+  }) {
+    final nextGeneral = general ?? _showStatsGeneralTab;
+    final nextPerMatch = perMatch ?? _showStatsPerMatchTab;
+    final nextClassification = classification ?? _showStatsClassificationTab;
+    if (!nextGeneral && !nextPerMatch && !nextClassification) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Deixe pelo menos uma aba de estatisticas ativa.'),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _showStatsGeneralTab = nextGeneral;
+      _showStatsPerMatchTab = nextPerMatch;
+      _showStatsClassificationTab = nextClassification;
+    });
+  }
+
+  Widget _statsTabChips(bool isDark) {
+    Widget chip(String label, bool checked, VoidCallback onTap) => InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: checked
+                  ? (isDark ? AppColors.slate100 : AppColors.slate900)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: checked
+                    ? (isDark ? AppColors.slate100 : AppColors.slate900)
+                    : (isDark ? AppColors.slate700 : AppColors.slate200),
+              ),
+            ),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: checked
+                    ? (isDark ? AppColors.slate900 : Colors.white)
+                    : (isDark ? AppColors.slate300 : AppColors.slate600),
+              ),
+            ),
+          ),
+        );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Divider(color: isDark ? AppColors.slate700 : AppColors.slate100),
+        Text(
+          'Abas disponiveis',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: isDark ? AppColors.slate500 : AppColors.slate400,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            chip(
+              'Geral',
+              _showStatsGeneralTab,
+              () => _setStatsTab(general: !_showStatsGeneralTab),
+            ),
+            chip(
+              'Por partida',
+              _showStatsPerMatchTab,
+              () => _setStatsTab(perMatch: !_showStatsPerMatchTab),
+            ),
+            chip(
+              'Classificacao',
+              _showStatsClassificationTab,
+              () => _setStatsTab(
+                classification: !_showStatsClassificationTab,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -460,6 +560,9 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
         mvpTieRule: _mvpTieRule,
         mvpTieMaxPlayers: _mvpTieRule == 2 ? _mvpTieMaxPlayers : null,
         showPlayerStats: _showPlayerStats,
+        showStatsGeneralTab: _showStatsGeneralTab,
+        showStatsPerMatchTab: _showStatsPerMatchTab,
+        showStatsClassificationTab: _showStatsClassificationTab,
         paymentDueDay: _paymentMode == 0 ? _paymentDueDay : null,
         autoFinalizeMvpHours: _autoFinalizeMvpHours,
         matchSchedulingEnabled: _matchSchedulingEnabled,
@@ -1387,6 +1490,18 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
               ],
             ),
           ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.slate900 : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: isDark ? AppColors.slate700 : AppColors.slate200),
+            ),
+            padding: const EdgeInsets.all(16),
+            child: _statsTabChips(isDark),
+          ),
         ],
       );
 
@@ -1758,6 +1873,19 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                 ),
               ],
             ),
+          ),
+
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.slate900 : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: isDark ? AppColors.slate700 : AppColors.slate200),
+            ),
+            padding: const EdgeInsets.all(16),
+            child: _statsTabChips(isDark),
           ),
 
           const SizedBox(height: 20),
