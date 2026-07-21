@@ -177,11 +177,19 @@ class MatchNotifier extends StateNotifier<MatchState> {
             .catchError((_) => null);
         if (!mounted) return;
         _applyMatchmaking(d);
-        final goals = await _ds
-            .fetchGoals(groupId, matchId)
-            .catchError((_) => <MatchGoal>[]);
+        final details = await _ds
+            .fetchMatchDetails(groupId, matchId)
+            .catchError((_) => null);
         if (!mounted) return;
-        state = state.copyWith(goals: goals);
+        if (details != null) {
+          state = state.copyWith(
+            teamAGoals:
+                (details['teamAGoals'] ?? details['TeamAGoals']) as int?,
+            teamBGoals:
+                (details['teamBGoals'] ?? details['TeamBGoals']) as int?,
+            goals: _parseGoals(details['goals'] ?? details['Goals']),
+          );
+        }
       case MatchStep.post:
       case MatchStep.done:
         final d =
@@ -635,6 +643,7 @@ class MatchNotifier extends StateNotifier<MatchState> {
     final matchId = state.matchId;
     if (matchId == null) return;
     await _ds.publishMatchEvent(groupId, matchId, {'type': eventType});
+    await _loadStepPayload(matchId, state.step);
   }
 
   Future<void> addGoal({

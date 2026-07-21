@@ -22,8 +22,7 @@ class _Step4State extends ConsumerState<Step4JogoPage> {
   String? _assistMpId;
   bool _isOwnGoal = false;
   String? _editingGoalId;
-  bool _publishingGol = false;
-  bool _publishingJogada = false;
+  String? _publishingReplayType;
 
   @override
   void initState() {
@@ -102,20 +101,23 @@ class _Step4State extends ConsumerState<Step4JogoPage> {
   }
 
   Future<void> _triggerReplay(String eventType) async {
-    if (_publishingGol || _publishingJogada) return;
-    setState(() {
-      _publishingGol = eventType == 'Gol';
-      _publishingJogada = eventType == 'Jogada';
-    });
+    if (_publishingReplayType != null) return;
+    setState(() => _publishingReplayType = eventType);
     try {
       await ref.read(matchNotifierProvider.notifier).publishEvent(eventType);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(eventType == 'Jogada'
+                ? 'Evento registrado com sucesso.'
+                : 'Gol registrado com sucesso.'),
+          ),
+        );
+      }
       await Future<void>.delayed(const Duration(milliseconds: 900));
     } finally {
       if (mounted) {
-        setState(() {
-          _publishingGol = false;
-          _publishingJogada = false;
-        });
+        setState(() => _publishingReplayType = null);
       }
     }
   }
@@ -186,9 +188,13 @@ class _Step4State extends ConsumerState<Step4JogoPage> {
                   ),
                   const SizedBox(height: 16),
                   _ReplaySection(
-                    publishingGol: _publishingGol,
-                    publishingJogada: _publishingJogada,
-                    onGol: () => _triggerReplay('Gol'),
+                    publishingType: _publishingReplayType,
+                    teamAName: s.teamAColor?.name ?? 'Time A',
+                    teamBName: s.teamBColor?.name ?? 'Time B',
+                    teamAColor: s.teamAColor?.color,
+                    teamBColor: s.teamBColor?.color,
+                    onGolA: () => _triggerReplay('GolTimeA'),
+                    onGolB: () => _triggerReplay('GolTimeB'),
                     onJogada: () => _triggerReplay('Jogada'),
                   ),
                   const SizedBox(height: 16),
@@ -376,21 +382,29 @@ class _LiveStatusCard extends StatelessWidget {
 }
 
 class _ReplaySection extends StatelessWidget {
-  final bool publishingGol;
-  final bool publishingJogada;
-  final VoidCallback onGol;
+  final String? publishingType;
+  final String teamAName;
+  final String teamBName;
+  final Color? teamAColor;
+  final Color? teamBColor;
+  final VoidCallback onGolA;
+  final VoidCallback onGolB;
   final VoidCallback onJogada;
 
   const _ReplaySection({
-    required this.publishingGol,
-    required this.publishingJogada,
-    required this.onGol,
+    required this.publishingType,
+    required this.teamAName,
+    required this.teamBName,
+    required this.teamAColor,
+    required this.teamBColor,
+    required this.onGolA,
+    required this.onGolB,
     required this.onJogada,
   });
 
   @override
   Widget build(BuildContext context) {
-    final disabled = publishingGol || publishingJogada;
+    final disabled = publishingType != null;
     return Card(
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -409,54 +423,84 @@ class _ReplaySection extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            Row(
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
               children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.emerald700,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                    ),
-                    onPressed: disabled ? null : onGol,
-                    icon: publishingGol
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Icon(Icons.emoji_events_outlined, size: 18),
-                    label: const Text('GOL',
-                        style: TextStyle(fontWeight: FontWeight.w800)),
-                  ),
+                _ReplayButton(
+                  label: 'Gol $teamAName',
+                  color: teamAColor ?? AppColors.emerald700,
+                  loading: publishingType == 'GolTimeA',
+                  disabled: disabled,
+                  icon: Icons.emoji_events_outlined,
+                  onPressed: onGolA,
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.blue600,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                    ),
-                    onPressed: disabled ? null : onJogada,
-                    icon: publishingJogada
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Icon(Icons.bolt_rounded, size: 18),
-                    label: const Text('JOGADA',
-                        style: TextStyle(fontWeight: FontWeight.w800)),
-                  ),
+                _ReplayButton(
+                  label: 'Gol $teamBName',
+                  color: teamBColor ?? AppColors.rose500,
+                  loading: publishingType == 'GolTimeB',
+                  disabled: disabled,
+                  icon: Icons.emoji_events_outlined,
+                  onPressed: onGolB,
+                ),
+                _ReplayButton(
+                  label: 'Jogada',
+                  color: AppColors.blue600,
+                  loading: publishingType == 'Jogada',
+                  disabled: disabled,
+                  icon: Icons.bolt_rounded,
+                  onPressed: onJogada,
                 ),
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReplayButton extends StatelessWidget {
+  final String label;
+  final Color color;
+  final bool loading;
+  final bool disabled;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  const _ReplayButton({
+    required this.label,
+    required this.color,
+    required this.loading,
+    required this.disabled,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: (MediaQuery.sizeOf(context).width - 58) / 2,
+      child: FilledButton.icon(
+        style: FilledButton.styleFrom(
+          backgroundColor: color,
+          padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        onPressed: disabled ? null : onPressed,
+        icon: loading
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white),
+              )
+            : Icon(icon, size: 18),
+        label: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w800),
         ),
       ),
     );
