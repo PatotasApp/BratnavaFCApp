@@ -6,10 +6,10 @@ import 'push_token_api.dart';
 
 /// PushService pronto para uso, injetado com Dio autenticado e GoRouter.
 final pushServiceProvider = Provider<PushService>((ref) {
-  final dio    = ref.watch(dioProvider);
+  final dio = ref.watch(dioProvider);
   final router = ref.watch(routerProvider);
   return PushService(
     tokenApi: PushTokenApi(dio),
-    router:   router,
+    router: router,
   );
 });

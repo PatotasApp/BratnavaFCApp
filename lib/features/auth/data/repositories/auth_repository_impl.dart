@@ -23,10 +23,10 @@ class AuthRepositoryImpl implements AuthRepository {
     required String password,
   }) =>
       _remote.register(
-        userName:  userName,
+        userName: userName,
         firstName: firstName,
-        lastName:  lastName,
-        email:     email,
-        password:  password,
+        lastName: lastName,
+        email: email,
+        password: password,
       );
 }

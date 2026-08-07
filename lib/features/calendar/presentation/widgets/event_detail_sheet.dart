@@ -6,9 +6,9 @@ import 'calendar_utils.dart';
 
 class EventDetailSheet extends StatelessWidget {
   final CalendarEvent ev;
-  final bool          isAdmin;
-  final VoidCallback  onEdit;
-  final VoidCallback  onDelete;
+  final bool isAdmin;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   const EventDetailSheet({
     super.key,
@@ -26,11 +26,14 @@ class EventDetailSheet extends StatelessWidget {
     required VoidCallback onDelete,
   }) {
     return showModalBottomSheet(
-      context:       context,
+      context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => EventDetailSheet(
-        ev: ev, isAdmin: isAdmin, onEdit: onEdit, onDelete: onDelete,
+        ev: ev,
+        isAdmin: isAdmin,
+        onEdit: onEdit,
+        onDelete: onDelete,
       ),
     );
   }
@@ -38,8 +41,8 @@ class EventDetailSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final c      = eventColors(ev);
-    final ic     = eventIcon(ev);
+    final c = eventColors(ev);
+    final ic = eventIcon(ev);
     final isSystem = ev.type != 'manual';
 
     return Container(
@@ -47,7 +50,7 @@ class EventDetailSheet extends StatelessWidget {
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
       decoration: BoxDecoration(
-        color:        isDark ? AppColors.slate900 : Colors.white,
+        color: isDark ? AppColors.slate900 : AppColors.onDark,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: SafeArea(
@@ -59,9 +62,10 @@ class EventDetailSheet extends StatelessWidget {
             Center(
               child: Container(
                 margin: const EdgeInsets.only(top: 12, bottom: 8),
-                width: 36, height: 4,
+                width: 36,
+                height: 4,
                 decoration: BoxDecoration(
-                  color:        isDark ? AppColors.slate700 : AppColors.slate200,
+                  color: isDark ? AppColors.slate700 : AppColors.slate200,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -74,13 +78,15 @@ class EventDetailSheet extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    width: 48, height: 48,
+                    width: 48,
+                    height: 48,
                     decoration: BoxDecoration(
-                      color:        c.bg,
+                      color: c.bg,
                       borderRadius: BorderRadius.circular(14),
-                      border:       Border.all(color: c.border),
+                      border: Border.all(color: c.border),
                     ),
-                    child: Center(child: Text(ic, style: const TextStyle(fontSize: 22))),
+                    child: Center(
+                        child: Text(ic, style: const TextStyle(fontSize: 22))),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -90,9 +96,10 @@ class EventDetailSheet extends StatelessWidget {
                         Text(
                           ev.title,
                           style: TextStyle(
-                            fontSize:   18,
+                            fontSize: 18,
                             fontWeight: FontWeight.w700,
-                            color: isDark ? Colors.white : AppColors.slate900,
+                            color:
+                                isDark ? AppColors.onDark : AppColors.slate900,
                           ),
                         ),
                         if (ev.categoryName != null)
@@ -100,7 +107,9 @@ class EventDetailSheet extends StatelessWidget {
                             ev.categoryName!,
                             style: TextStyle(
                               fontSize: 12,
-                              color: isDark ? AppColors.slate400 : AppColors.slate500,
+                              color: isDark
+                                  ? AppColors.slate400
+                                  : AppColors.slate500,
                             ),
                           ),
                       ],
@@ -122,7 +131,9 @@ class EventDetailSheet extends StatelessWidget {
                     label: _formatDate(ev.date),
                     isDark: isDark,
                   ),
-                  if (!ev.timeTBD && ev.time != null && ev.time!.isNotEmpty) ...[
+                  if (!ev.timeTBD &&
+                      ev.time != null &&
+                      ev.time!.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     _InfoRow(
                       icon: Icons.access_time_rounded,
@@ -155,9 +166,12 @@ class EventDetailSheet extends StatelessWidget {
                         icon: const Icon(Icons.edit_outlined, size: 16),
                         label: const Text('Editar'),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: isDark ? AppColors.slate200 : AppColors.slate700,
+                          foregroundColor:
+                              isDark ? AppColors.slate200 : AppColors.slate700,
                           side: BorderSide(
-                            color: isDark ? AppColors.slate700 : AppColors.slate200,
+                            color: isDark
+                                ? AppColors.slate700
+                                : AppColors.slate200,
                           ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -169,7 +183,8 @@ class EventDetailSheet extends StatelessWidget {
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: onDelete,
-                        icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                        icon:
+                            const Icon(Icons.delete_outline_rounded, size: 16),
                         label: const Text('Excluir'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.rose600,
@@ -195,8 +210,18 @@ class EventDetailSheet extends StatelessWidget {
     try {
       final d = AppDateUtils.parseOrNow(dateStr);
       const months = [
-        'jan', 'fev', 'mar', 'abr', 'mai', 'jun',
-        'jul', 'ago', 'set', 'out', 'nov', 'dez',
+        'jan',
+        'fev',
+        'mar',
+        'abr',
+        'mai',
+        'jun',
+        'jul',
+        'ago',
+        'set',
+        'out',
+        'nov',
+        'dez',
       ];
       const weekdays = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
       return '${weekdays[d.weekday - 1]}, ${d.day} ${months[d.month - 1]}. ${d.year}';
@@ -208,18 +233,19 @@ class EventDetailSheet extends StatelessWidget {
 
 class _InfoRow extends StatelessWidget {
   final IconData icon;
-  final String   label;
-  final bool     isDark;
+  final String label;
+  final bool isDark;
 
-  const _InfoRow({required this.icon, required this.label, required this.isDark});
+  const _InfoRow(
+      {required this.icon, required this.label, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16,
-            color: isDark ? AppColors.slate500 : AppColors.slate400),
+        Icon(icon,
+            size: 16, color: isDark ? AppColors.slate500 : AppColors.slate400),
         const SizedBox(width: 10),
         Expanded(
           child: Text(

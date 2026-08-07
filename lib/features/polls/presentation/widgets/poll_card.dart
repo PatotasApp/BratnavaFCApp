@@ -18,7 +18,7 @@ class PollCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark   = Theme.of(context).brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final deadline = _formatDeadline();
 
     return InkWell(
@@ -33,7 +33,8 @@ class PollCard extends StatelessWidget {
               height: 10,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: poll.isOpen ? Colors.green.shade400 : AppColors.slate300,
+                color:
+                    poll.isOpen ? AppColors.primaryHover : AppColors.slate300,
               ),
             ),
             const SizedBox(width: 12),
@@ -51,7 +52,8 @@ class PollCard extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.white : AppColors.slate900,
+                            color:
+                                isDark ? AppColors.onDark : AppColors.slate900,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -60,32 +62,39 @@ class PollCard extends StatelessWidget {
                       if (poll.hasVoted) ...[
                         const SizedBox(width: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
+                            color: AppColors.blue50,
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.blue.shade100),
+                            border: Border.all(color: AppColors.blue50),
                           ),
                           child: Text(
                             'Votou',
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.blue.shade600),
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.infoLight),
                           ),
                         ),
                       ],
                       // Badge "vinculado à partida"
-                      if (poll.linkedMatchId != null && poll.linkedMatchId!.isNotEmpty) ...[
+                      if (poll.linkedMatchId != null &&
+                          poll.linkedMatchId!.isNotEmpty) ...[
                         const SizedBox(width: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color:        AppColors.emerald500.withValues(alpha: .1),
+                            color: AppColors.emerald500.withValues(alpha: .1),
                             borderRadius: BorderRadius.circular(20),
-                            border:       Border.all(
-                                color: AppColors.emerald500.withValues(alpha: .3)),
+                            border: Border.all(
+                                color:
+                                    AppColors.emerald500.withValues(alpha: .3)),
                           ),
                           child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            Icon(Icons.sports_soccer_rounded, size: 9,
-                                color: AppColors.emerald700),
+                            Icon(Icons.sports_soccer_rounded,
+                                size: 9, color: AppColors.emerald700),
                             const SizedBox(width: 3),
                             Text('Partida',
                                 style: TextStyle(
@@ -101,7 +110,10 @@ class PollCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       poll.description!,
-                      style: TextStyle(fontSize: 12, color: isDark ? AppColors.slate400 : AppColors.slate500),
+                      style: TextStyle(
+                          fontSize: 12,
+                          color:
+                              isDark ? AppColors.slate400 : AppColors.slate500),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -110,16 +122,22 @@ class PollCard extends StatelessWidget {
                   Wrap(
                     spacing: 6,
                     children: [
-                      _Meta('${poll.optionCount} opç${poll.optionCount != 1 ? 'ões' : 'ão'}', isDark),
+                      _Meta(
+                          '${poll.optionCount} opç${poll.optionCount != 1 ? 'ões' : 'ão'}',
+                          isDark),
                       _Dot(isDark),
-                      _Meta('${poll.totalVoters} votante${poll.totalVoters != 1 ? 's' : ''}', isDark),
+                      _Meta(
+                          '${poll.totalVoters} votante${poll.totalVoters != 1 ? 's' : ''}',
+                          isDark),
                       if (poll.allowMultipleVotes) ...[
                         _Dot(isDark),
-                        _Meta('Múltipla', isDark, icon: Icons.check_box_outlined),
+                        _Meta('Múltipla', isDark,
+                            icon: Icons.check_box_outlined),
                       ],
                       if (poll.showVotes) ...[
                         _Dot(isDark),
-                        _Meta('Público', isDark, icon: Icons.visibility_outlined),
+                        _Meta('Público', isDark,
+                            icon: Icons.visibility_outlined),
                       ],
                       if (deadline != null) ...[
                         _Dot(isDark),
@@ -127,7 +145,9 @@ class PollCard extends StatelessWidget {
                           poll.deadlinePassed ? 'Prazo encerrado' : deadline,
                           isDark,
                           icon: Icons.schedule,
-                          color: poll.deadlinePassed ? Colors.red.shade400 : Colors.amber.shade600,
+                          color: poll.deadlinePassed
+                              ? AppColors.prototypeDanger
+                              : AppColors.warningLight,
                         ),
                       ],
                     ],
@@ -136,7 +156,9 @@ class PollCard extends StatelessWidget {
               ),
             ),
 
-            Icon(Icons.chevron_right, size: 16, color: isDark ? AppColors.slate600 : AppColors.slate300),
+            Icon(Icons.chevron_right,
+                size: 16,
+                color: isDark ? AppColors.slate600 : AppColors.slate300),
           ],
         ),
       ),
@@ -145,10 +167,10 @@ class PollCard extends StatelessWidget {
 }
 
 class _Meta extends StatelessWidget {
-  final String   label;
-  final bool     isDark;
+  final String label;
+  final bool isDark;
   final IconData? icon;
-  final Color?   color;
+  final Color? color;
   const _Meta(this.label, this.isDark, {this.icon, this.color});
 
   @override
@@ -157,7 +179,10 @@ class _Meta extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (icon != null) ...[Icon(icon, size: 10, color: c), const SizedBox(width: 2)],
+        if (icon != null) ...[
+          Icon(icon, size: 10, color: c),
+          const SizedBox(width: 2)
+        ],
         Text(label, style: TextStyle(fontSize: 12, color: c)),
       ],
     );
@@ -168,6 +193,8 @@ class _Dot extends StatelessWidget {
   final bool isDark;
   const _Dot(this.isDark);
   @override
-  Widget build(BuildContext context) =>
-      Text('·', style: TextStyle(fontSize: 12, color: isDark ? AppColors.slate500 : AppColors.slate400));
+  Widget build(BuildContext context) => Text('·',
+      style: TextStyle(
+          fontSize: 12,
+          color: isDark ? AppColors.slate500 : AppColors.slate400));
 }

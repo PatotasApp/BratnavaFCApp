@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../domain/entities/calendar_event.dart';
 
@@ -10,7 +10,8 @@ class CalendarRemoteDataSource {
 
   Future<List<CalendarEvent>> fetchEvents(
       String groupId, String start, String end) async {
-    final res = await _dio.get(ApiConstants.calendarEvents(groupId, start, end));
+    final res =
+        await _dio.get(ApiConstants.calendarEvents(groupId, start, end));
     final raw = _unwrap(res.data);
     return (raw as List? ?? [])
         .map((e) => CalendarEvent.fromJson(e as Map<String, dynamic>))
@@ -18,13 +19,15 @@ class CalendarRemoteDataSource {
   }
 
   Future<void> createEvent(String groupId, Map<String, dynamic> dto) async {
-    final res = await _dio.post(ApiConstants.calendarEvents2(groupId), data: dto);
+    final res =
+        await _dio.post(ApiConstants.calendarEvents2(groupId), data: dto);
     _throwIfError(res.data);
   }
 
   Future<void> updateEvent(
       String groupId, String id, Map<String, dynamic> dto) async {
-    final res = await _dio.put(ApiConstants.calendarEventById(groupId, id), data: dto);
+    final res =
+        await _dio.put(ApiConstants.calendarEventById(groupId, id), data: dto);
     _throwIfError(res.data);
   }
 
@@ -44,18 +47,21 @@ class CalendarRemoteDataSource {
   }
 
   Future<void> createCategory(String groupId, Map<String, dynamic> dto) async {
-    final res = await _dio.post(ApiConstants.calendarCategories(groupId), data: dto);
+    final res =
+        await _dio.post(ApiConstants.calendarCategories(groupId), data: dto);
     _throwIfError(res.data);
   }
 
   Future<void> updateCategory(
       String groupId, String id, Map<String, dynamic> dto) async {
-    final res = await _dio.put(ApiConstants.calendarCategoryById(groupId, id), data: dto);
+    final res = await _dio.put(ApiConstants.calendarCategoryById(groupId, id),
+        data: dto);
     _throwIfError(res.data);
   }
 
   Future<void> deleteCategory(String groupId, String id) async {
-    final res = await _dio.delete(ApiConstants.calendarCategoryById(groupId, id));
+    final res =
+        await _dio.delete(ApiConstants.calendarCategoryById(groupId, id));
     _throwIfError(res.data);
   }
 

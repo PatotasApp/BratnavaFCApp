@@ -3,31 +3,35 @@
 class SpotlightPlayer {
   final String playerId;
   final String playerName;
-  final int    goals;
-  final int    assists;
-  final int    mvpCount;
-  final int    matchCount;
+  final int goals;
+  final int assists;
+  final int mvpCount;
+  final int matchCount;
   final double winRate; // 0–1 fraction
+  final bool isGoalkeeper;
 
   const SpotlightPlayer({
     required this.playerId,
     required this.playerName,
-    this.goals      = 0,
-    this.assists    = 0,
-    this.mvpCount   = 0,
+    this.goals = 0,
+    this.assists = 0,
+    this.mvpCount = 0,
     this.matchCount = 0,
-    this.winRate    = 0,
+    this.winRate = 0,
+    this.isGoalkeeper = false,
   });
 
   factory SpotlightPlayer.fromJson(Map<String, dynamic> j) => SpotlightPlayer(
-    playerId:   (j['playerId']   ?? '') as String,
-    playerName: (j['playerName'] ?? '') as String,
-    goals:      (j['goals']      as num?)?.toInt() ?? 0,
-    assists:    (j['assists']    as num?)?.toInt() ?? 0,
-    mvpCount:   (j['mvpCount']   as num?)?.toInt() ?? 0,
-    matchCount: (j['matchCount'] as num?)?.toInt() ?? 0,
-    winRate:    (j['winRate']    as num?)?.toDouble() ?? 0,
-  );
+        playerId: (j['playerId'] ?? '') as String,
+        playerName: (j['playerName'] ?? '') as String,
+        goals: (j['goals'] as num?)?.toInt() ?? 0,
+        assists: (j['assists'] as num?)?.toInt() ?? 0,
+        mvpCount: (j['mvpCount'] as num?)?.toInt() ?? 0,
+        matchCount: (j['matchCount'] as num?)?.toInt() ?? 0,
+        winRate: (j['winRate'] as num?)?.toDouble() ?? 0,
+        isGoalkeeper:
+            (j['isGoalkeeper'] ?? j['goalkeeper'] ?? false) as bool? ?? false,
+      );
 }
 
 // ── Full report ───────────────────────────────────────────────────────────────
@@ -75,11 +79,11 @@ class PlayerSpotlightReport {
         : <SpotlightPlayer>[];
 
     return PlayerSpotlightReport(
-      topScorer:   parseSlot('topScorer'),
-      topAssist:   parseSlot('topAssist'),
-      topMvp:      parseSlot('topMvp'),
+      topScorer: parseSlot('topScorer'),
+      topAssist: parseSlot('topAssist'),
+      topMvp: parseSlot('topMvp'),
       bestWinRate: parseSlot('bestWinRate'),
-      players:     players,
+      players: players,
     );
   }
 }

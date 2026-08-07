@@ -4,7 +4,7 @@ class TeamColor {
   final String id;
   final String name;
   final String hexValue; // always includes '#'
-  final bool   isActive;
+  final bool isActive;
 
   const TeamColor({
     required this.id,
@@ -16,8 +16,8 @@ class TeamColor {
   Color get color => _parseHex(hexValue) ?? const Color(0xFFe2e8f0);
 
   factory TeamColor.fromJson(Map<String, dynamic> j) => TeamColor(
-        id:       j['id'] as String,
-        name:     j['name'] as String,
+        id: j['id'] as String,
+        name: j['name'] as String,
         hexValue: _normalizeHex(j['hexValue'] as String? ?? ''),
         isActive: (j['isActive'] as bool?) ?? false,
       );

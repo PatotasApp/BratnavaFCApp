@@ -24,15 +24,16 @@ class EventCard extends StatelessWidget {
   String? _formatCost() {
     if (poll.costType == null || poll.costType!.isEmpty) return null;
     final label = poll.costType == 'individual' ? 'por pessoa' : 'rateio grupo';
-    if (poll.costAmount != null) return 'R\$ ${poll.costAmount!.toStringAsFixed(2)} $label';
+    if (poll.costAmount != null)
+      return 'R\$ ${poll.costAmount!.toStringAsFixed(2)} $label';
     return label;
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final icon   = poll.eventIcon ?? '📅';
-    final cost   = _formatCost();
+    final icon = poll.eventIcon ?? '📅';
+    final cost = _formatCost();
     final deadline = _formatDeadline();
 
     return InkWell(
@@ -87,7 +88,8 @@ class EventCard extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.white : AppColors.slate900,
+                            color:
+                                isDark ? AppColors.onDark : AppColors.slate900,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -95,15 +97,18 @@ class EventCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       if (poll.hasVoted)
-                        _Pill(label: 'Respondeu', color: Colors.blue.shade600, bg: Colors.blue.shade50),
+                        _Pill(
+                            label: 'Respondeu',
+                            color: AppColors.infoLight,
+                            bg: AppColors.blue50),
                       const SizedBox(width: 4),
                       _StatusBadge(isOpen: poll.isOpen),
                       if (poll.allowGuests) ...[
                         const SizedBox(width: 4),
                         const _Pill(
                           label: 'Convidados',
-                          color: Color(0xFF7C3AED),
-                          bg: Color(0xFFF5F3FF),
+                          color: AppColors.info,
+                          bg: AppColors.violet50,
                         ),
                       ],
                     ],
@@ -112,7 +117,10 @@ class EventCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       poll.description!,
-                      style: TextStyle(fontSize: 12, color: isDark ? AppColors.slate400 : AppColors.slate500),
+                      style: TextStyle(
+                          fontSize: 12,
+                          color:
+                              isDark ? AppColors.slate400 : AppColors.slate500),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -122,14 +130,23 @@ class EventCard extends StatelessWidget {
                     spacing: 8,
                     children: [
                       if (poll.eventLocation != null)
-                        _MetaChip(icon: Icons.location_on_outlined, label: poll.eventLocation!),
+                        _MetaChip(
+                            icon: Icons.location_on_outlined,
+                            label: poll.eventLocation!),
                       if (cost != null)
-                        _MetaChip(icon: Icons.attach_money, label: cost, color: Colors.amber.shade700),
+                        _MetaChip(
+                            icon: Icons.attach_money,
+                            label: cost,
+                            color: AppColors.warningLight),
                       if (deadline != null)
                         _MetaChip(
                           icon: Icons.schedule,
-                          label: poll.deadlinePassed ? 'Prazo encerrado' : 'Prazo: $deadline',
-                          color: poll.deadlinePassed ? Colors.red.shade400 : Colors.amber.shade600,
+                          label: poll.deadlinePassed
+                              ? 'Prazo encerrado'
+                              : 'Prazo: $deadline',
+                          color: poll.deadlinePassed
+                              ? AppColors.prototypeDanger
+                              : AppColors.warningLight,
                         ),
                     ],
                   ),
@@ -144,16 +161,24 @@ class EventCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.group_outlined, size: 12, color: isDark ? AppColors.slate500 : AppColors.slate400),
+                    Icon(Icons.group_outlined,
+                        size: 12,
+                        color:
+                            isDark ? AppColors.slate500 : AppColors.slate400),
                     const SizedBox(width: 2),
                     Text(
                       '${poll.totalVoters}',
-                      style: TextStyle(fontSize: 12, color: isDark ? AppColors.slate500 : AppColors.slate400),
+                      style: TextStyle(
+                          fontSize: 12,
+                          color:
+                              isDark ? AppColors.slate500 : AppColors.slate400),
                     ),
                   ],
                 ),
                 const SizedBox(height: 4),
-                Icon(Icons.chevron_right, size: 16, color: isDark ? AppColors.slate600 : AppColors.slate300),
+                Icon(Icons.chevron_right,
+                    size: 16,
+                    color: isDark ? AppColors.slate600 : AppColors.slate300),
               ],
             ),
           ],
@@ -174,16 +199,17 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: isOpen ? Colors.green.shade50 : AppColors.slate100,
+        color: isOpen ? AppColors.green50 : AppColors.slate100,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isOpen ? Colors.green.shade200 : AppColors.slate200),
+        border:
+            Border.all(color: isOpen ? AppColors.green200 : AppColors.slate200),
       ),
       child: Text(
         isOpen ? 'Aberto' : 'Encerrado',
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w600,
-          color: isOpen ? Colors.green.shade700 : AppColors.slate500,
+          color: isOpen ? AppColors.primaryPressed : AppColors.slate500,
         ),
       ),
     );
@@ -192,8 +218,8 @@ class _StatusBadge extends StatelessWidget {
 
 class _Pill extends StatelessWidget {
   final String label;
-  final Color  color;
-  final Color  bg;
+  final Color color;
+  final Color bg;
   const _Pill({required this.label, required this.color, required this.bg});
 
   @override
@@ -205,20 +231,25 @@ class _Pill extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
-      child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 10, fontWeight: FontWeight.w600, color: color)),
     );
   }
 }
 
 class _MetaChip extends StatelessWidget {
   final IconData icon;
-  final String   label;
-  final Color?   color;
+  final String label;
+  final Color? color;
   const _MetaChip({required this.icon, required this.label, this.color});
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? (Theme.of(context).brightness == Brightness.dark ? AppColors.slate500 : AppColors.slate400);
+    final c = color ??
+        (Theme.of(context).brightness == Brightness.dark
+            ? AppColors.slate500
+            : AppColors.slate400);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -229,4 +260,3 @@ class _MetaChip extends StatelessWidget {
     );
   }
 }
-

@@ -17,8 +17,8 @@ class BetRankingTab extends ConsumerStatefulWidget {
 class _BetRankingTabState extends ConsumerState<BetRankingTab>
     with AutomaticKeepAliveClientMixin {
   List<BetLeaderboardEntry>? _entries;
-  int?    _myBalance;
-  bool    _loading = true;
+  int? _myBalance;
+  bool _loading = true;
   String? _error;
 
   @override
@@ -32,7 +32,10 @@ class _BetRankingTabState extends ConsumerState<BetRankingTab>
 
   Future<void> _load() async {
     if (!mounted) return;
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final ds = ref.read(betDsProvider);
       final results = await Future.wait([
@@ -41,21 +44,24 @@ class _BetRankingTabState extends ConsumerState<BetRankingTab>
       ]);
       if (!mounted) return;
       setState(() {
-        _entries   = results[0] as List<BetLeaderboardEntry>;
+        _entries = results[0] as List<BetLeaderboardEntry>;
         _myBalance = results[1] as int;
-        _loading   = false;
+        _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() { _error = extractDioError(e); _loading = false; });
+      setState(() {
+        _error = extractDioError(e);
+        _loading = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final isDark   = Theme.of(context).brightness == Brightness.dark;
-    final account  = ref.watch(accountStoreProvider).activeAccount;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final account = ref.watch(accountStoreProvider).activeAccount;
     final myUserId = account?.userId ?? '';
 
     if (_loading) {
@@ -79,21 +85,20 @@ class _BetRankingTabState extends ConsumerState<BetRankingTab>
           // ── My summary card ────────────────────────────────────────────
           if (myEntry != null || _myBalance != null)
             _MySummaryCard(
-              isDark:    isDark,
-              balance:   _myBalance ?? myEntry?.balance ?? 0,
-              rank:      myEntry?.rank,
+              isDark: isDark,
+              balance: _myBalance ?? myEntry?.balance ?? 0,
+              rank: myEntry?.rank,
               totalBets: myEntry?.totalBets,
             ),
-          if (myEntry != null || _myBalance != null)
-            const SizedBox(height: 14),
+          if (myEntry != null || _myBalance != null) const SizedBox(height: 14),
 
           // ── Leaderboard ────────────────────────────────────────────────
           ...List.generate(_entries!.length, (i) {
-            final e       = _entries![i];
-            final isMe    = e.userId == myUserId;
+            final e = _entries![i];
+            final isMe = e.userId == myUserId;
             return _LeaderboardRow(
-              entry:  e,
-              isMe:   isMe,
+              entry: e,
+              isMe: isMe,
               isDark: isDark,
             );
           }),
@@ -107,7 +112,7 @@ class _BetRankingTabState extends ConsumerState<BetRankingTab>
 
 class _MySummaryCard extends StatelessWidget {
   final bool isDark;
-  final int  balance;
+  final int balance;
   final int? rank;
   final int? totalBets;
   const _MySummaryCard({
@@ -119,15 +124,15 @@ class _MySummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg     = isDark ? AppColors.slate800 : Colors.white;
-    final border  = isDark ? AppColors.slate700 : AppColors.slate200;
+    final bg = isDark ? AppColors.slate800 : AppColors.onDark;
+    final border = isDark ? AppColors.slate700 : AppColors.slate200;
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color:        bg,
+        color: bg,
         borderRadius: BorderRadius.circular(14),
-        border:       Border.all(color: border),
+        border: Border.all(color: border),
       ),
       child: Row(children: [
         // Balance
@@ -152,7 +157,8 @@ class _MySummaryCard extends StatelessWidget {
                 Text('BC',
                     style: TextStyle(
                         fontSize: 13,
-                        color: isDark ? AppColors.slate400 : AppColors.slate500)),
+                        color:
+                            isDark ? AppColors.slate400 : AppColors.slate500)),
               ]),
             ],
           ),
@@ -177,7 +183,7 @@ class _MySummaryCard extends StatelessWidget {
                 style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
-                    color: isDark ? Colors.white : AppColors.slate800),
+                    color: isDark ? AppColors.onDark : AppColors.slate800),
               ),
             ],
           ),
@@ -199,7 +205,7 @@ class _MySummaryCard extends StatelessWidget {
                 style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
-                    color: isDark ? Colors.white : AppColors.slate800),
+                    color: isDark ? AppColors.onDark : AppColors.slate800),
               ),
             ],
           ),
@@ -222,12 +228,12 @@ class _LeaderboardRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg     = isDark ? AppColors.slate800 : Colors.white;
-    final border  = isMe
-        ? const Color(0xFF3B82F6)
+    final bg = isDark ? AppColors.slate800 : AppColors.onDark;
+    final border = isMe
+        ? AppColors.info
         : (isDark ? AppColors.slate700 : AppColors.slate200);
     final rankColor = entry.rank <= 3
-        ? const Color(0xFFFBBF24)
+        ? AppColors.warning
         : (isDark ? AppColors.slate400 : AppColors.slate500);
 
     String? medal;
@@ -243,9 +249,9 @@ class _LeaderboardRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color:        bg,
+        color: bg,
         borderRadius: BorderRadius.circular(12),
-        border:       Border.all(color: border, width: isMe ? 2 : 1),
+        border: Border.all(color: border, width: isMe ? 2 : 1),
       ),
       child: Row(children: [
         // Rank / medal
@@ -274,20 +280,21 @@ class _LeaderboardRow extends StatelessWidget {
                     style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: isDark ? Colors.white : AppColors.slate800)),
+                        color: isDark ? AppColors.onDark : AppColors.slate800)),
                 if (isMe) ...[
                   const SizedBox(width: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                     decoration: BoxDecoration(
-                      color:        const Color(0xFF3B82F6).withValues(alpha: .15),
+                      color: AppColors.info.withValues(alpha: .15),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: const Text('Você',
                         style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF3B82F6))),
+                            color: AppColors.info)),
                   ),
                 ],
               ]),
@@ -362,11 +369,12 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 44, color: Color(0xFFF87171)),
+            const Icon(Icons.error_outline,
+                size: 44, color: AppColors.prototypeDanger),
             const SizedBox(height: 12),
             Text(message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFFF87171))),
+                style: const TextStyle(color: AppColors.prototypeDanger)),
             const SizedBox(height: 16),
             TextButton.icon(
               onPressed: onRetry,

@@ -3,8 +3,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/absence.dart';
 
 class AbsenceCard extends StatelessWidget {
-  final AbsenceDto   absence;
-  final bool         canEdit;
+  final AbsenceDto absence;
+  final bool canEdit;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -21,28 +21,40 @@ class AbsenceCard extends StatelessWidget {
 
   Color _typeColor() {
     switch (absence.absenceType) {
-      case 1:  return AppColors.blue500;
-      case 2:  return AppColors.rose500;
-      case 3:  return AppColors.amber500;
-      default: return AppColors.slate500;
+      case 1:
+        return AppColors.blue500;
+      case 2:
+        return AppColors.rose500;
+      case 3:
+        return AppColors.amber500;
+      default:
+        return AppColors.slate500;
     }
   }
 
   Color _typeBg(bool isDark) {
     switch (absence.absenceType) {
-      case 1:  return isDark ? const Color(0xFF1E3A5F) : const Color(0xFFEFF6FF);
-      case 2:  return isDark ? const Color(0xFF3D0012) : const Color(0xFFFFF1F2);
-      case 3:  return isDark ? const Color(0xFF3D2E00) : const Color(0xFFFFFBEB);
-      default: return isDark ? AppColors.slate800 : AppColors.slate100;
+      case 1:
+        return isDark ? AppColors.darkElevated : AppColors.blue50;
+      case 2:
+        return isDark ? AppColors.dangerBackground : AppColors.rose50;
+      case 3:
+        return isDark ? AppColors.warning : AppColors.amber50;
+      default:
+        return isDark ? AppColors.slate800 : AppColors.slate100;
     }
   }
 
   String _typeEmoji() {
     switch (absence.absenceType) {
-      case 1:  return '✈️';
-      case 2:  return '🏥';
-      case 3:  return '👤';
-      default: return '📋';
+      case 1:
+        return '✈️';
+      case 2:
+        return '🏥';
+      case 3:
+        return '👤';
+      default:
+        return '📋';
     }
   }
 
@@ -60,18 +72,18 @@ class AbsenceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark  = Theme.of(context).brightness == Brightness.dark;
-    final color   = _typeColor();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final color = _typeColor();
     final bgColor = _typeBg(isDark);
 
-    final cardBg        = isDark ? AppColors.slate800 : Colors.white;
-    final textPrimary   = isDark ? Colors.white       : AppColors.slate900;
-    final textSecondary = isDark ? AppColors.slate400  : AppColors.slate500;
+    final cardBg = isDark ? AppColors.slate800 : AppColors.onDark;
+    final textPrimary = isDark ? AppColors.onDark : AppColors.slate900;
+    final textSecondary = isDark ? AppColors.slate400 : AppColors.slate500;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       decoration: BoxDecoration(
-        color:        cardBg,
+        color: cardBg,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -80,9 +92,9 @@ class AbsenceCard extends StatelessWidget {
             ? []
             : [
                 BoxShadow(
-                  color:      Colors.black.withValues(alpha: .04),
+                  color: AppColors.darkApp.withValues(alpha: .04),
                   blurRadius: 6,
-                  offset:     const Offset(0, 2),
+                  offset: const Offset(0, 2),
                 ),
               ],
       ),
@@ -91,14 +103,14 @@ class AbsenceCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
             // ── Type icon ─────────────────────────────────────────────────────
             Container(
-              width: 40, height: 40,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
-                color:        bgColor,
+                color: bgColor,
                 borderRadius: BorderRadius.circular(10),
-                border:       Border.all(color: color.withValues(alpha: .3)),
+                border: Border.all(color: color.withValues(alpha: .3)),
               ),
               child: Center(
                 child: Text(
@@ -115,13 +127,12 @@ class AbsenceCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-
                   // Type label
                   Text(
                     absence.absenceTypeName,
                     style: TextStyle(
-                      color:      textPrimary,
-                      fontSize:   14,
+                      color: textPrimary,
+                      fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -132,7 +143,7 @@ class AbsenceCard extends StatelessWidget {
                   Text(
                     '${_fmtDate(absence.startDate)} até ${_fmtDate(absence.endDate)}',
                     style: TextStyle(
-                      color:    textSecondary,
+                      color: textSecondary,
                       fontSize: 12,
                     ),
                   ),
@@ -144,9 +155,9 @@ class AbsenceCard extends StatelessWidget {
                     Text(
                       absence.description!,
                       style: const TextStyle(
-                        color:    AppColors.rose500,
+                        color: AppColors.rose500,
                         fontSize: 12,
-                        height:   1.3,
+                        height: 1.3,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -159,12 +170,12 @@ class AbsenceCard extends StatelessWidget {
             // ── Actions menu ──────────────────────────────────────────────────
             if (canEdit)
               PopupMenuButton<String>(
-                iconSize:    18,
-                padding:     EdgeInsets.zero,
+                iconSize: 18,
+                padding: EdgeInsets.zero,
                 icon: Icon(Icons.more_vert_rounded,
                     size: 18, color: textSecondary),
                 onSelected: (v) {
-                  if (v == 'edit')   onEdit();
+                  if (v == 'edit') onEdit();
                   if (v == 'delete') onDelete();
                 },
                 itemBuilder: (_) => [

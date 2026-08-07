@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_colors.dart';
 
 enum AppButtonVariant { primary, secondary, danger }
 
@@ -14,7 +15,7 @@ class AppButton extends StatelessWidget {
     super.key,
     required this.label,
     this.onPressed,
-    this.variant   = AppButtonVariant.primary,
+    this.variant = AppButtonVariant.primary,
     this.isLoading = false,
     this.icon,
     this.width,
@@ -25,19 +26,20 @@ class AppButton extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     final (bg, fg, border) = switch (variant) {
-      AppButtonVariant.primary =>
-        (cs.primary, cs.onPrimary, Colors.transparent),
-      AppButtonVariant.secondary =>
-        (cs.surface, cs.onSurface, cs.outline),
-      AppButtonVariant.danger =>
-        (const Color(0xFFE11D48), Colors.white, Colors.transparent),
+      AppButtonVariant.primary => (
+          cs.primary,
+          cs.onPrimary,
+          AppColors.transparent
+        ),
+      AppButtonVariant.secondary => (cs.surface, cs.onSurface, cs.outline),
+      AppButtonVariant.danger => (cs.error, cs.onError, AppColors.transparent),
     };
 
     Widget child = isLoading
         ? SizedBox(
-            width:  18,
+            width: 18,
             height: 18,
-            child:  CircularProgressIndicator(
+            child: CircularProgressIndicator(
               strokeWidth: 2,
               color: fg,
             ),
@@ -52,9 +54,9 @@ class AppButton extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize:   14,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color:      fg,
+                  color: fg,
                 ),
               ),
             ],
@@ -62,13 +64,13 @@ class AppButton extends StatelessWidget {
 
     return SizedBox(
       width: width,
-      height: 44,
+      height: 48,
       child: ElevatedButton(
         onPressed: isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: bg,
           foregroundColor: fg,
-          elevation:       0,
+          elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(color: border),

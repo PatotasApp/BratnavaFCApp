@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../domain/entities/match_models.dart';
 
 /// Linha de gol exibida na lista de Steps 4 e 6.
@@ -10,6 +11,7 @@ class GoalEntryRow extends StatelessWidget {
   final Color? teamAColor;
   final Color? teamBColor;
   final List<MatchPlayerInfo> participants;
+  final GroupIcons icons;
   final bool isAdmin;
   final bool loading;
   final VoidCallback? onRemove;
@@ -23,6 +25,7 @@ class GoalEntryRow extends StatelessWidget {
     this.teamAColor,
     this.teamBColor,
     this.participants = const [],
+    this.icons = GroupIcons.defaults,
     this.isAdmin = false,
     this.loading = false,
     this.onRemove,
@@ -32,6 +35,7 @@ class GoalEntryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scorer = _findScorer();
+    final assister = _findAssist();
     final scorerTeam =
         scorer?.team == 1 || scorer?.team == 2 ? scorer!.team : null;
     final playerTeam = goal.isOwnGoal && scorerTeam != null
@@ -65,8 +69,8 @@ class GoalEntryRow extends StatelessWidget {
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  goal.isOwnGoal ? Icons.sports_soccer : Icons.sports_soccer,
+                renderGroupIcon(
+                  goal.isOwnGoal ? icons.ownGoal : icons.goal,
                   size: 18,
                   color: goal.isOwnGoal ? AppColors.rose500 : color,
                 ),
@@ -86,11 +90,23 @@ class GoalEntryRow extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        goal.scorerName ?? '—',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 13),
+                      Flexible(
+                        child: Text(
+                          goal.scorerName ?? '—',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
                       ),
+                      if (scorer != null) ...[
+                        const SizedBox(width: 4),
+                        renderGroupIcon(
+                          scorer.isGoalkeeper ? icons.goalkeeper : icons.player,
+                          size: 12,
+                          color: AppColors.slate400,
+                        ),
+                      ],
                       if (goal.isOwnGoal) ...[
                         const SizedBox(width: 4),
                         const Text(
@@ -111,14 +127,34 @@ class GoalEntryRow extends StatelessWidget {
                             fontWeight: FontWeight.w500),
                       ),
                       if (goal.assistName != null) ...[
-                        const Text(' · assist: ',
+                        const Text(' · ',
                             style: TextStyle(
                                 fontSize: 11, color: AppColors.slate400)),
-                        Text(
-                          goal.assistName!,
-                          style: const TextStyle(
-                              fontSize: 11, color: AppColors.slate500),
+                        renderGroupIcon(
+                          icons.assist,
+                          size: 11,
+                          color: AppColors.slate400,
                         ),
+                        const SizedBox(width: 3),
+                        Flexible(
+                          child: Text(
+                            goal.assistName!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 11, color: AppColors.slate500),
+                          ),
+                        ),
+                        if (assister != null) ...[
+                          const SizedBox(width: 3),
+                          renderGroupIcon(
+                            assister.isGoalkeeper
+                                ? icons.goalkeeper
+                                : icons.player,
+                            size: 10,
+                            color: AppColors.slate400,
+                          ),
+                        ],
                       ],
                     ],
                   ),
@@ -171,6 +207,20 @@ class GoalEntryRow extends StatelessWidget {
       }
       if (goal.scorerPlayerId != null &&
           player.playerId == goal.scorerPlayerId) {
+        return player;
+      }
+    }
+    return null;
+  }
+
+  MatchPlayerInfo? _findAssist() {
+    for (final player in participants) {
+      if (goal.assistMatchPlayerId != null &&
+          player.matchPlayerId == goal.assistMatchPlayerId) {
+        return player;
+      }
+      if (goal.assistPlayerId != null &&
+          player.playerId == goal.assistPlayerId) {
         return player;
       }
     }

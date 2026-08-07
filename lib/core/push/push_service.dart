@@ -11,7 +11,7 @@ import 'push_token_api.dart';
 /// Chamado quando o app está terminado ou em background.
 @pragma('vm:entry-point')
 Future<void> firebaseBackgroundMessageHandler(RemoteMessage message) async {
-  final log  = Logger();
+  final log = Logger();
   final data = message.data;
   log.d('[Push BG] type=${data["type"]} | data: $data');
 
@@ -20,8 +20,8 @@ Future<void> firebaseBackgroundMessageHandler(RemoteMessage message) async {
   // match_invite é data-only: exibe com botões SIM/NÃO
   if (data['type'] == 'match_invite') {
     await LocalNotifications.showMatchInvite(
-      title:   data['title'] ?? 'Convite para partida',
-      body:    data['body']  ?? 'Você foi convidado. Confirme sua presença!',
+      title: data['title'] ?? 'Convite para partida',
+      body: data['body'] ?? 'Você foi convidado. Confirme sua presença!',
       groupId: data['groupId'] ?? '',
       matchId: data['matchId'] ?? '',
     );
@@ -30,18 +30,20 @@ Future<void> firebaseBackgroundMessageHandler(RemoteMessage message) async {
 
   // poll_reminder de evento: exibe com botões Sim/Talvez/Não
   if (data['type'] == 'poll_reminder' && data['pollType'] == 'event') {
-    final optionSimId    = data['optionSimId']    ?? '';
+    final optionSimId = data['optionSimId'] ?? '';
     final optionTalvezId = data['optionTalvezId'] ?? '';
-    final optionNaoId    = data['optionNaoId']    ?? '';
-    if (optionSimId.isNotEmpty && optionTalvezId.isNotEmpty && optionNaoId.isNotEmpty) {
+    final optionNaoId = data['optionNaoId'] ?? '';
+    if (optionSimId.isNotEmpty &&
+        optionTalvezId.isNotEmpty &&
+        optionNaoId.isNotEmpty) {
       await LocalNotifications.showEventPollReminder(
-        title:          data['title'] ?? 'Votação encerrando! 🗳️',
-        body:           data['body']  ?? 'Vote antes que seja tarde!',
-        groupId:        data['groupId'] ?? '',
-        pollId:         data['pollId']  ?? '',
-        optionSimId:    optionSimId,
+        title: data['title'] ?? 'Votação encerrando! 🗳️',
+        body: data['body'] ?? 'Vote antes que seja tarde!',
+        groupId: data['groupId'] ?? '',
+        pollId: data['pollId'] ?? '',
+        optionSimId: optionSimId,
         optionTalvezId: optionTalvezId,
-        optionNaoId:    optionNaoId,
+        optionNaoId: optionNaoId,
       );
     }
   }
@@ -59,8 +61,7 @@ class PushService {
     required PushTokenApi tokenApi,
     required GoRouter router,
   })  : _tokenApi = tokenApi,
-        _router = router
-  {
+        _router = router {
     // Callbacks de navegação para toque no corpo das notificações locais
     LocalNotifications.onMatchInviteTapped = (groupId, matchId) {
       _router.push(notificationRoute('match_invite', {
@@ -71,7 +72,7 @@ class PushService {
 
     LocalNotifications.onEventPollTapped = (groupId, pollId) {
       _router.push(notificationRoute('poll_reminder', {
-        'pollId':  pollId,
+        'pollId': pollId,
         'groupId': groupId,
       }));
     };
@@ -147,19 +148,21 @@ class PushService {
     if (ok) {
       _log.i('[Push] Token registrado no backend com sucesso.');
     } else {
-      _log.e('[Push] Falha ao registrar token no backend — verifique autenticação e URL da API.');
+      _log.e(
+          '[Push] Falha ao registrar token no backend — verifique autenticação e URL da API.');
     }
   }
 
   /// App foi aberto pelo toque no corpo de uma notificação local (match_invite).
   Future<void> _handleLocalNotificationLaunch() async {
-    final details = await LocalNotifications.plugin.getNotificationAppLaunchDetails();
+    final details =
+        await LocalNotifications.plugin.getNotificationAppLaunchDetails();
     if (details == null || !details.didNotificationLaunchApp) return;
     final payload = details.notificationResponse?.payload;
     if (payload == null || !payload.contains('::')) return;
     // É um match_invite — extrai IDs do payload ("groupId::matchId") e navega
-    final parts   = payload.split('::');
-    final groupId = parts.isNotEmpty  ? parts[0] : '';
+    final parts = payload.split('::');
+    final groupId = parts.isNotEmpty ? parts[0] : '';
     final matchId = parts.length >= 2 ? parts[1] : '';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _router.push(notificationRoute('match_invite', {
@@ -174,7 +177,8 @@ class PushService {
   /// Notificações recebidas com app em FOREGROUND.
   void _setupForegroundListener() {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      _log.i('[Push FG] ${message.notification?.title} | data: ${message.data}');
+      _log.i(
+          '[Push FG] ${message.notification?.title} | data: ${message.data}');
       _showForegroundNotification(message);
     });
   }
@@ -182,7 +186,8 @@ class PushService {
   /// Usuário tocou na notificação com app em BACKGROUND (não terminado).
   void _setupOpenedAppListener() {
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      _log.d('[Push OPEN] ${message.notification?.title} | data: ${message.data}');
+      _log.d(
+          '[Push OPEN] ${message.notification?.title} | data: ${message.data}');
       _navigate(message.data);
     });
   }
@@ -191,7 +196,8 @@ class PushService {
   Future<void> _handleInitialMessage() async {
     final initial = await _fcm.getInitialMessage();
     if (initial != null) {
-      _log.d('[Push INIT] ${initial.notification?.title} | data: ${initial.data}');
+      _log.d(
+          '[Push INIT] ${initial.notification?.title} | data: ${initial.data}');
       // Aguarda o frame ser construído antes de navegar
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _navigate(initial.data);
@@ -218,14 +224,14 @@ class PushService {
   // ── Notificação em foreground ────────────────────────────────────────────
 
   void _showForegroundNotification(RemoteMessage message) {
-    final data  = message.data;
-    final type  = data['type'] as String?;
+    final data = message.data;
+    final type = data['type'] as String?;
 
     // match_invite é data-only — exibe com botões SIM/NÃO
     if (type == 'match_invite') {
       LocalNotifications.showMatchInvite(
-        title:   data['title'] ?? 'Convite para partida',
-        body:    data['body']  ?? 'Você foi convidado. Confirme sua presença!',
+        title: data['title'] ?? 'Convite para partida',
+        body: data['body'] ?? 'Você foi convidado. Confirme sua presença!',
         groupId: data['groupId'] ?? '',
         matchId: data['matchId'] ?? '',
       );
@@ -234,25 +240,27 @@ class PushService {
 
     // poll_reminder de evento — exibe com botões Sim/Talvez/Não
     if (type == 'poll_reminder' && data['pollType'] == 'event') {
-      final optionSimId    = data['optionSimId']    ?? '';
+      final optionSimId = data['optionSimId'] ?? '';
       final optionTalvezId = data['optionTalvezId'] ?? '';
-      final optionNaoId    = data['optionNaoId']    ?? '';
-      if (optionSimId.isNotEmpty && optionTalvezId.isNotEmpty && optionNaoId.isNotEmpty) {
+      final optionNaoId = data['optionNaoId'] ?? '';
+      if (optionSimId.isNotEmpty &&
+          optionTalvezId.isNotEmpty &&
+          optionNaoId.isNotEmpty) {
         LocalNotifications.showEventPollReminder(
-          title:          data['title'] ?? 'Votação encerrando! 🗳️',
-          body:           data['body']  ?? 'Vote antes que seja tarde!',
-          groupId:        data['groupId'] ?? '',
-          pollId:         data['pollId']  ?? '',
-          optionSimId:    optionSimId,
+          title: data['title'] ?? 'Votação encerrando! 🗳️',
+          body: data['body'] ?? 'Vote antes que seja tarde!',
+          groupId: data['groupId'] ?? '',
+          pollId: data['pollId'] ?? '',
+          optionSimId: optionSimId,
           optionTalvezId: optionTalvezId,
-          optionNaoId:    optionNaoId,
+          optionNaoId: optionNaoId,
         );
         return;
       }
     }
 
     final title = message.notification?.title ?? data['title'] as String? ?? '';
-    final body  = message.notification?.body  ?? data['body']  as String? ?? '';
+    final body = message.notification?.body ?? data['body'] as String? ?? '';
     if (title.isEmpty && body.isEmpty) return;
 
     LocalNotifications.show(title: title, body: body);

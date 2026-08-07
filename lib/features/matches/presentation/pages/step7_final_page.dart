@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
+import '../../../auth/presentation/providers/account_store.dart';
+import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../providers/match_provider.dart';
 
 class Step7FinalPage extends ConsumerStatefulWidget {
@@ -46,6 +49,10 @@ class _Step7FinalPageState extends ConsumerState<Step7FinalPage> {
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(matchNotifierProvider);
+    final groupId =
+        ref.watch(accountStoreProvider).activeAccount?.activeGroupId ?? '';
+    final icons =
+        GroupIcons.from(ref.watch(groupSettingsProvider(groupId)).valueOrNull);
     final fmt = DateFormat('dd/MM/yyyy HH:mm', 'pt_BR');
     final dateStr = s.playedAt != null ? fmt.format(s.playedAt!) : '—';
     final hasMvp = s.computedMvps.isNotEmpty;
@@ -66,21 +73,30 @@ class _Step7FinalPageState extends ConsumerState<Step7FinalPage> {
                         const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                          colors: [AppColors.amber400, AppColors.amber500]),
+                          colors: [AppColors.warning, AppColors.amber500]),
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                            color: AppColors.amber400.withValues(alpha: 0.4),
+                            color: AppColors.warning.withValues(alpha: 0.4),
                             blurRadius: 8,
                             offset: const Offset(0, 3)),
                       ],
                     ),
-                    child: const Text(
-                      '🏁 Finalizada',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          fontSize: 16),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.flag_rounded,
+                            color: AppColors.onDark, size: 18),
+                        SizedBox(width: 6),
+                        Text(
+                          'Finalizada',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.onDark,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -169,32 +185,45 @@ class _Step7FinalPageState extends ConsumerState<Step7FinalPage> {
                     padding: const EdgeInsets.all(20),
                     child: Column(
                       children: [
-                        const Row(
+                        Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.emoji_events,
-                                color: AppColors.amber400, size: 28),
-                            SizedBox(width: 8),
-                            Text('MVP',
+                            renderGroupIcon(
+                              icons.mvp,
+                              color: AppColors.warning,
+                              size: 28,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text('MVP',
                                 style: TextStyle(
                                     fontWeight: FontWeight.w800, fontSize: 18)),
                           ],
                         ),
                         const SizedBox(height: 12),
-                        Text(
-                          hasMvp
-                              ? s.computedMvps
-                                  .map((m) => m.playerName)
-                                  .join(', ')
-                              : '—',
-                          style: TextStyle(
-                            fontSize: hasMvp ? 20 : 16,
-                            fontWeight:
-                                hasMvp ? FontWeight.w700 : FontWeight.w400,
-                            color: hasMvp ? null : AppColors.slate400,
+                        if (hasMvp)
+                          ...s.computedMvps.map((m) {
+                            final player = s.participants
+                                .where((p) => p.playerId == m.playerId)
+                                .firstOrNull;
+                            return PlayerNameWithIcon(
+                              name: m.playerName,
+                              isGoalkeeper: player?.isGoalkeeper ?? false,
+                              icons: icons,
+                              iconSize: 18,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            );
+                          })
+                        else
+                          const Text(
+                            '—',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: AppColors.slate400,
+                            ),
                           ),
-                          textAlign: TextAlign.center,
-                        ),
                       ],
                     ),
                   ),
@@ -217,7 +246,7 @@ class _Step7FinalPageState extends ConsumerState<Step7FinalPage> {
                     label: const Text('Recalcular MVP'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.amber500,
-                      side: const BorderSide(color: AppColors.amber400),
+                      side: const BorderSide(color: AppColors.warning),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
@@ -355,7 +384,7 @@ class _ResultRow extends StatelessWidget {
               fontSize: 11,
               fontWeight: FontWeight.w600,
               color: isDraw
-                  ? AppColors.orange700
+                  ? AppColors.warningLight
                   : isWinner
                       ? AppColors.emerald700
                       : AppColors.rose600,

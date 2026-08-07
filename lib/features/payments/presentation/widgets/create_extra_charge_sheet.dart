@@ -20,9 +20,9 @@ class CreateExtraChargeSheet extends StatefulWidget {
 }
 
 class _CreateExtraChargeSheetState extends State<CreateExtraChargeSheet> {
-  final _nameCtrl    = TextEditingController();
-  final _descCtrl    = TextEditingController();
-  final _amountCtrl  = TextEditingController();
+  final _nameCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  final _amountCtrl = TextEditingController();
   final _dueDateCtrl = TextEditingController();
   late Set<String> _selected;
   bool _saving = false;
@@ -57,7 +57,7 @@ class _CreateExtraChargeSheetState extends State<CreateExtraChargeSheet> {
   }
 
   Future<void> _submit() async {
-    final name   = _nameCtrl.text.trim();
+    final name = _nameCtrl.text.trim();
     final amount = double.tryParse(_amountCtrl.text);
 
     if (name.isEmpty || amount == null) {
@@ -78,8 +78,8 @@ class _CreateExtraChargeSheetState extends State<CreateExtraChargeSheet> {
     setState(() => _saving = true);
     try {
       final dto = <String, dynamic>{
-        'name':      name,
-        'amount':    amount,
+        'name': name,
+        'amount': amount,
         'playerIds': _selected.toList(),
       };
       final desc = _descCtrl.text.trim();
@@ -108,7 +108,7 @@ class _CreateExtraChargeSheetState extends State<CreateExtraChargeSheet> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final border   = isDark ? AppColors.slate700 : AppColors.slate200;
+    final border = isDark ? AppColors.slate700 : AppColors.slate200;
     final divColor = isDark ? AppColors.slate800 : AppColors.slate50;
     final allSelected = _selected.length == widget.players.length;
 
@@ -120,61 +120,69 @@ class _CreateExtraChargeSheetState extends State<CreateExtraChargeSheet> {
         children: [
           SheetHandle(isDark: isDark),
           const SizedBox(height: 16),
-
           Text('Nova cobrança extra',
               style: TextStyle(
-                fontSize: 17, fontWeight: FontWeight.w800,
-                color: isDark ? Colors.white : AppColors.slate900,
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: isDark ? AppColors.onDark : AppColors.slate900,
               )),
           const SizedBox(height: 20),
-
           FieldLabel('Nome *', isDark),
           const SizedBox(height: 6),
           SheetField(
-            controller: _nameCtrl, isDark: isDark,
+            controller: _nameCtrl,
+            isDark: isDark,
             hint: 'Ex: Churrasco da patota',
           ),
           const SizedBox(height: 12),
-
           FieldLabel('Descrição', isDark),
           const SizedBox(height: 6),
           SheetField(
-            controller: _descCtrl, isDark: isDark,
-            hint: 'Opcional', maxLines: 2,
+            controller: _descCtrl,
+            isDark: isDark,
+            hint: 'Opcional',
+            maxLines: 2,
           ),
           const SizedBox(height: 12),
-
           Row(children: [
             Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                FieldLabel('Valor (R\$) *', isDark),
-                const SizedBox(height: 6),
-                SheetField(
-                  controller: _amountCtrl, isDark: isDark,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-                ),
-              ]),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FieldLabel('Valor (R\$) *', isDark),
+                    const SizedBox(height: 6),
+                    SheetField(
+                      controller: _amountCtrl,
+                      isDark: isDark,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))
+                      ],
+                    ),
+                  ]),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                FieldLabel('Vencimento', isDark),
-                const SizedBox(height: 6),
-                GestureDetector(
-                  onTap: _pickDate,
-                  child: AbsorbPointer(
-                    child: SheetField(
-                      controller: _dueDateCtrl, isDark: isDark,
-                      hint: 'Selecionar',
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    FieldLabel('Vencimento', isDark),
+                    const SizedBox(height: 6),
+                    GestureDetector(
+                      onTap: _pickDate,
+                      child: AbsorbPointer(
+                        child: SheetField(
+                          controller: _dueDateCtrl,
+                          isDark: isDark,
+                          hint: 'Selecionar',
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ]),
+                  ]),
             ),
           ]),
           const SizedBox(height: 16),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -200,41 +208,49 @@ class _CreateExtraChargeSheetState extends State<CreateExtraChargeSheet> {
           Container(
             constraints: const BoxConstraints(maxHeight: 200),
             decoration: BoxDecoration(
-              border:       Border.all(color: border),
+              border: Border.all(color: border),
               borderRadius: BorderRadius.circular(10),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: ListView.separated(
                 shrinkWrap: true,
-                itemCount:  widget.players.length,
-                separatorBuilder: (_, __) => Divider(height: 1, color: divColor),
+                itemCount: widget.players.length,
+                separatorBuilder: (_, __) =>
+                    Divider(height: 1, color: divColor),
                 itemBuilder: (_, i) {
-                  final p       = widget.players[i];
+                  final p = widget.players[i];
                   final checked = _selected.contains(p.id);
                   return InkWell(
                     onTap: () => setState(() {
-                      if (checked) _selected.remove(p.id);
-                      else         _selected.add(p.id);
+                      if (checked)
+                        _selected.remove(p.id);
+                      else
+                        _selected.add(p.id);
                     }),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 10),
                       child: Row(children: [
                         Checkbox(
-                          value:    checked,
+                          value: checked,
                           onChanged: (_) => setState(() {
-                            if (checked) _selected.remove(p.id);
-                            else         _selected.add(p.id);
+                            if (checked)
+                              _selected.remove(p.id);
+                            else
+                              _selected.add(p.id);
                           }),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
                           visualDensity: VisualDensity.compact,
                         ),
                         const SizedBox(width: 8),
                         Text(p.name,
                             style: TextStyle(
                               fontSize: 13,
-                              color: isDark ? Colors.white : AppColors.slate800,
+                              color: isDark
+                                  ? AppColors.onDark
+                                  : AppColors.slate800,
                             )),
                       ]),
                     ),
@@ -253,21 +269,22 @@ class _CreateExtraChargeSheetState extends State<CreateExtraChargeSheet> {
             ),
           ),
           const SizedBox(height: 24),
-
           Row(children: [
             Expanded(
               child: ActionBtn(
-                label:           'Criar cobrança',
-                icon:            Icons.add_circle_outline,
-                color:           isDark ? Colors.white : AppColors.slate900,
-                foregroundColor: isDark ? AppColors.slate900 : Colors.white,
-                loading:         _saving,
-                onTap:           _submit,
+                label: 'Criar cobrança',
+                icon: Icons.add_circle_outline,
+                color: isDark ? AppColors.onDark : AppColors.slate900,
+                foregroundColor: isDark ? AppColors.slate900 : AppColors.onDark,
+                loading: _saving,
+                onTap: _submit,
               ),
             ),
             const SizedBox(width: 8),
             OutlineBtn(
-              label: 'Cancelar', isDark: isDark, padH: 16,
+              label: 'Cancelar',
+              isDark: isDark,
+              padH: 16,
               onTap: () => Navigator.of(context).pop(),
             ),
           ]),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/entities/account.dart';
@@ -235,11 +236,22 @@ class _GroupSettingsPageWrapperState extends ConsumerState<GroupSettingsPage> {
   Widget build(BuildContext context) {
     final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
-    final groupId = account?.activeGroupId ?? activePlayer?.groupId;
+    // O jogador manda no grupo: `activeGroupId` da conta pode apontar
+    // para uma patota sem jogador nosso, e aí toda rota por grupo
+    // responde 403. Ver dashboard_page para o diagnóstico completo.
+    final groupId = activePlayer?.groupId ?? account?.activeGroupId;
 
     if (groupId == null || groupId.isEmpty) {
-      return const Scaffold(
-          body: _NoGroupState(message: 'Crie ou entre em um grupo'));
+      return Scaffold(
+        appBar: AppBar(
+          leading: const BackButton(),
+          title: const Text('Configurações'),
+        ),
+        body: const _NoGroupState(
+          title: 'Nenhuma patota ativa',
+          message: 'Crie ou entre em um grupo para acessar as configurações.',
+        ),
+      );
     }
 
     // Enquanto atualiza as roles, exibe loading para não bloquear admins
@@ -250,8 +262,22 @@ class _GroupSettingsPageWrapperState extends ConsumerState<GroupSettingsPage> {
 
     final isGroupAdm = account!.isGroupAdmin(groupId);
     if (!isGroupAdm) {
-      return const Scaffold(
-          body: _NoGroupState(message: 'Verifique suas permissões'));
+      return Scaffold(
+        appBar: AppBar(
+          leading: const BackButton(),
+          title: const Text('Configurações'),
+        ),
+        body: _NoGroupState(
+          message:
+              'Só administradores da patota abrem as configurações. Se você foi '
+              'promovido agora, recarregue para atualizar suas permissões.',
+          onRetry: () async {
+            setState(() => _refreshingRoles = true);
+            await ref.read(authNotifierProvider.notifier).refreshRoles();
+            if (mounted) setState(() => _refreshingRoles = false);
+          },
+        ),
+      );
     }
 
     final settingsAsync = ref.watch(groupSettingsProvider(groupId));
@@ -261,6 +287,10 @@ class _GroupSettingsPageWrapperState extends ConsumerState<GroupSettingsPage> {
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(
+        appBar: AppBar(
+          leading: const BackButton(),
+          title: const Text('Configurações'),
+        ),
         body: _ErrorState(
           message:
               extractDioError(e, 'Não foi possível carregar as configurações.'),
@@ -435,7 +465,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
             decoration: BoxDecoration(
               color: checked
                   ? (isDark ? AppColors.slate100 : AppColors.slate900)
-                  : Colors.transparent,
+                  : AppColors.transparent,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: checked
@@ -450,7 +480,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
                 color: checked
-                    ? (isDark ? AppColors.slate900 : Colors.white)
+                    ? (isDark ? AppColors.slate900 : AppColors.onDark)
                     : (isDark ? AppColors.slate300 : AppColors.slate600),
               ),
             ),
@@ -967,31 +997,38 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
           // ── 2. Configurações (tabbed) ─────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-              child: _CardSection(
-                iconBg: const Color(0xFF2563EB),
-                icon: Icons.settings_outlined,
-                title: 'Configurações',
-                subtitle: 'Regras, pagamento, MVP e ícones da patota',
-                child: _buildTabbedSettings(isDark),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildSettingsHero(detail?.name, isDark),
+                  const SizedBox(height: 16),
+                  _buildTabbedSettings(
+                    isDark,
+                    detail: detail,
+                    detailAsync: detailAsync,
+                  ),
+                ],
               ),
             ),
           ),
 
           // ── 3. Equipe da patota ───────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
-              child: _CardSection(
-                iconBg: const Color(0xFF334155),
-                icon: Icons.group_outlined,
-                title: 'Equipe da patota',
-                subtitle: 'Administradores e responsáveis financeiros',
-                child: _buildTeam(isDark,
-                    detail: detail, detailAsync: detailAsync),
+          // A equipe agora é exibida dentro da aba própria, acima.
+          if (_activeTab == -1)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+                child: _CardSection(
+                  iconBg: AppColors.darkBorder,
+                  icon: Icons.group_outlined,
+                  title: 'Equipe da patota',
+                  subtitle: 'Administradores e responsáveis financeiros',
+                  child: _buildTeam(isDark,
+                      detail: detail, detailAsync: detailAsync),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -999,51 +1036,117 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   // ── Section 1: Header ─────────────────────────────────────────────────────
 
-  Widget _buildHeader(String? groupName) => Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+  Widget _buildHeader(String? groupName) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
         ),
-        child: SafeArea(
-          bottom: false,
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: SizedBox(
+          height: 72,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withAlpha(25),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white.withAlpha(50)),
-                  ),
-                  child: const Icon(Icons.settings_outlined,
-                      size: 26, color: Colors.white),
+                IconButton(
+                  onPressed: () {
+                    if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      context.go('/app/groups');
+                    }
+                  },
+                  tooltip: 'Voltar',
+                  icon: const Icon(Icons.arrow_back_rounded),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        groupName ?? 'Configurações',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.5,
-                        ),
+                        'Configurações',
+                        maxLines: 2,
+                        style: theme.textTheme.titleLarge,
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Configure regras, ícones e gerencie a equipe da patota.',
+                        groupName?.isNotEmpty == true
+                            ? '$groupName · regras da patota'
+                            : 'Regras da patota',
+                        maxLines: 2,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsHero(String? groupName, bool isDark) => Container(
+        height: 68,
+        decoration: BoxDecoration(
+          color: AppColors.lightText,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.darkApp.withValues(alpha: isDark ? .25 : .12),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: CustomPaint(
+          painter: const _SettingsDotPatternPainter(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: AppColors.warningLight.withValues(alpha: .42),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: const Icon(
+                    Icons.settings_outlined,
+                    color: AppColors.primaryHover,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Configurações',
                         style: TextStyle(
-                          color: Colors.white.withAlpha(128),
-                          fontSize: 12,
+                          color: AppColors.onDark,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        '${groupName?.isNotEmpty == true ? groupName : 'Patoteiros'} · regras da patota',
+                        maxLines: 2,
+                        style: const TextStyle(
+                          color: AppColors.blue200,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
@@ -1057,9 +1160,21 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   // ── Tab bar ───────────────────────────────────────────────────────────────
 
-  static const _kTabLabels = ['Geral', 'Pagamento', 'MVP', 'Ícones'];
+  static const _kTabLabels = ['Geral', 'Pagamento', 'MVP', 'Ícones', 'Equipe'];
+  static const _kTabIcons = [
+    Icons.tune_rounded,
+    Icons.account_balance_wallet_outlined,
+    Icons.emoji_events_outlined,
+    Icons.category_outlined,
+    Icons.shield_outlined,
+  ];
 
-  Widget _buildTabbedSettings(bool isDark) => Column(
+  Widget _buildTabbedSettings(
+    bool isDark, {
+    required GroupDetail? detail,
+    required AsyncValue<GroupDetail> detailAsync,
+  }) =>
+      Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildTabBar(isDark),
@@ -1068,8 +1183,12 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
           if (_activeTab == 1) _buildTabPagamento(isDark),
           if (_activeTab == 2) _buildTabMvp(isDark),
           if (_activeTab == 3) _buildIcons(isDark),
-          const SizedBox(height: 20),
-          _buildSaveButton(isDark),
+          if (_activeTab == 4)
+            _buildTeam(isDark, detail: detail, detailAsync: detailAsync),
+          if (_activeTab != 4) ...[
+            const SizedBox(height: 20),
+            _buildSaveButton(isDark),
+          ],
         ],
       );
 
@@ -1089,34 +1208,55 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   Widget _buildTabBtn(int idx, String label, bool isDark) {
     final sel = _activeTab == idx;
-    return GestureDetector(
+    return InkWell(
       onTap: () => setState(() => _activeTab = idx),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: sel
-              ? (isDark ? AppColors.slate700 : Colors.white)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(7),
-          boxShadow: sel
-              ? [
-                  BoxShadow(
-                      color: Colors.black.withAlpha(20),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1))
-                ]
-              : null,
-        ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: sel ? FontWeight.w600 : FontWeight.w500,
+      borderRadius: BorderRadius.circular(7),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
             color: sel
-                ? (isDark ? Colors.white : AppColors.slate900)
-                : (isDark ? AppColors.slate400 : AppColors.slate500),
+                ? (isDark ? AppColors.slate700 : AppColors.onDark)
+                : AppColors.transparent,
+            borderRadius: BorderRadius.circular(7),
+            boxShadow: sel
+                ? [
+                    BoxShadow(
+                        color: AppColors.darkApp.withAlpha(20),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1))
+                  ]
+                : null,
+          ),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _kTabIcons[idx],
+                  size: 13,
+                  color: sel
+                      ? (isDark ? AppColors.onDark : AppColors.slate900)
+                      : (isDark ? AppColors.slate400 : AppColors.slate500),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: sel ? FontWeight.w600 : FontWeight.w500,
+                    color: sel
+                        ? (isDark ? AppColors.onDark : AppColors.slate900)
+                        : (isDark ? AppColors.slate400 : AppColors.slate500),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1130,8 +1270,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
         children: [
           _subCard(
             isDark: isDark,
-            accentBg: const Color(0xFFEEF2FF),
-            accentFg: const Color(0xFF4F46E5),
+            accentBg: AppColors.blue50,
+            accentFg: AppColors.infoLight,
             icon: Icons.group_outlined,
             title: 'Jogadores',
             subtitle: 'Por partida',
@@ -1162,8 +1302,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
           const SizedBox(height: 12),
           _subCard(
             isDark: isDark,
-            accentBg: const Color(0xFFFFFBEB),
-            accentFg: const Color(0xFFD97706),
+            accentBg: AppColors.amber50,
+            accentFg: AppColors.warningLight,
             icon: Icons.calendar_today_outlined,
             title: 'Padrões',
             subtitle: 'Local, dia e horário',
@@ -1201,8 +1341,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
           const SizedBox(height: 12),
           _subCard(
             isDark: isDark,
-            accentBg: const Color(0xFFECFEFF),
-            accentFg: const Color(0xFF0891B2),
+            accentBg: AppColors.blue50,
+            accentFg: AppColors.infoLight,
             icon: Icons.event_repeat_outlined,
             title: 'Agendar inicio das partidas',
             subtitle: 'Manual ou recorrente',
@@ -1275,8 +1415,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                         icon: const Icon(Icons.add_rounded, size: 18),
                         label: const Text('Adicionar agendamento'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.slate900,
-                          foregroundColor: Colors.white,
+                          backgroundColor: AppColors.accent,
+                          foregroundColor: AppColors.lightText,
                           disabledBackgroundColor:
                               isDark ? AppColors.slate800 : AppColors.slate200,
                           disabledForegroundColor:
@@ -1333,8 +1473,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                                     : Icons.schedule_rounded,
                                 size: 18,
                                 color: item.created
-                                    ? const Color(0xFF10B981)
-                                    : const Color(0xFFF59E0B),
+                                    ? AppColors.accent
+                                    : AppColors.warning,
                               ),
                               const SizedBox(width: 9),
                               Expanded(
@@ -1385,13 +1525,13 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                                   ),
                                   icon:
                                       const Icon(Icons.edit_outlined, size: 18),
-                                  color: const Color(0xFF2563EB),
+                                  color: AppColors.infoLight,
                                 ),
                               IconButton(
                                 onPressed: () => _removeManualSchedule(index),
                                 icon: const Icon(Icons.delete_outline_rounded,
                                     size: 18),
-                                color: const Color(0xFFEF4444),
+                                color: AppColors.prototypeDanger,
                               ),
                             ],
                           ),
@@ -1436,56 +1576,61 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
           const SizedBox(height: 12),
           Container(
             decoration: BoxDecoration(
-              color: isDark ? AppColors.slate900 : Colors.white,
+              color: isDark ? AppColors.slate900 : AppColors.onDark,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                   color: isDark ? AppColors.slate700 : AppColors.slate200),
             ),
             padding: const EdgeInsets.all(16),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color:
-                        isDark ? AppColors.slate700 : const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(Icons.bar_chart_rounded,
-                      size: 18,
-                      color: isDark
-                          ? AppColors.slate300
-                          : const Color(0xFF2563EB)),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Exibir gols e assistências',
-                          style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: isDark
-                                  ? AppColors.slate100
-                                  : AppColors.slate900)),
-                      const SizedBox(height: 2),
-                      Text('Jogadores comuns poderão ver gols e assistências.',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: isDark
-                                  ? AppColors.slate400
-                                  : AppColors.slate500)),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Switch(
-                  value: _showPlayerStats,
-                  onChanged: (v) => setState(() => _showPlayerStats = v),
-                  activeThumbColor:
-                      isDark ? AppColors.slate100 : AppColors.slate900,
+                Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.slate700 : AppColors.blue50,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.bar_chart_rounded,
+                          size: 18,
+                          color: isDark
+                              ? AppColors.slate300
+                              : AppColors.infoLight),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Exibir gols e assistências',
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark
+                                      ? AppColors.slate100
+                                      : AppColors.slate900)),
+                          const SizedBox(height: 2),
+                          Text(
+                              'Jogadores comuns poderão ver gols e assistências.',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark
+                                      ? AppColors.slate400
+                                      : AppColors.slate500)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Switch(
+                      value: _showPlayerStats,
+                      onChanged: (v) => setState(() => _showPlayerStats = v),
+                      activeThumbColor:
+                          isDark ? AppColors.slate100 : AppColors.slate900,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1494,7 +1639,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
-              color: isDark ? AppColors.slate900 : Colors.white,
+              color: isDark ? AppColors.slate900 : AppColors.onDark,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                   color: isDark ? AppColors.slate700 : AppColors.slate200),
@@ -1509,8 +1654,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   Widget _buildTabPagamento(bool isDark) => _subCard(
         isDark: isDark,
-        accentBg: const Color(0xFFECFDF5),
-        accentFg: const Color(0xFF059669),
+        accentBg: AppColors.emerald50,
+        accentFg: AppColors.primaryPressed,
         icon: Icons.payments_outlined,
         title: 'Pagamento',
         subtitle: 'Modo de cobrança',
@@ -1569,8 +1714,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
         children: [
           _subCard(
             isDark: isDark,
-            accentBg: const Color(0xFFFFFBEB),
-            accentFg: const Color(0xFFD97706),
+            accentBg: AppColors.amber50,
+            accentFg: AppColors.warningLight,
             icon: Icons.emoji_events_outlined,
             title: 'Empate no MVP',
             subtitle:
@@ -1580,8 +1725,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
           const SizedBox(height: 12),
           _subCard(
             isDark: isDark,
-            accentBg: const Color(0xFFF0F9FF),
-            accentFg: const Color(0xFF0284C7),
+            accentBg: AppColors.blue50,
+            accentFg: AppColors.infoLight,
             icon: Icons.timer_outlined,
             title: 'Encerrar votação MVP automaticamente',
             subtitle: 'Finaliza a partida após um tempo configurado',
@@ -1592,55 +1737,68 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   // ── Save button (shared) ──────────────────────────────────────────────────
 
-  Widget _buildSaveButton(bool isDark) => Row(
-        children: [
-          SizedBox(
-            height: 44,
-            child: FilledButton.icon(
-              onPressed: _saving ? null : _save,
-              icon: _saving
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.save_outlined, size: 15),
-              label: Text(_saving ? 'Salvando…' : 'Salvar configurações',
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600)),
-              style: FilledButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
+  Widget _buildSaveButton(bool isDark) => Container(
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.slate900 : AppColors.onDark,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isDark ? AppColors.slate700 : AppColors.slate200,
           ),
-          const SizedBox(width: 12),
-          if (_saveMsg != null)
-            Expanded(
-              child: Text('${_saveMsgOk ? '✓ ' : '✕ '}$_saveMsg',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: _saveMsgOk
-                          ? AppColors.emerald500
-                          : AppColors.rose500)),
-            )
-          else if (!_isPersisted)
-            const Expanded(
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline_rounded,
-                      size: 13, color: AppColors.amber500),
-                  SizedBox(width: 4),
-                  Flexible(
-                    child: Text('Usando valores padrão — salve para persistir.',
-                        style:
-                            TextStyle(fontSize: 11, color: AppColors.amber500)),
-                  ),
-                ],
+        ),
+        padding: const EdgeInsets.all(8),
+        child: Row(
+          children: [
+            SizedBox(
+              height: 44,
+              child: FilledButton.icon(
+                onPressed: _saving ? null : _save,
+                icon: _saving
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.onDark))
+                    : const Icon(Icons.save_outlined, size: 15),
+                label: Text(_saving ? 'Salvando…' : 'Salvar configurações',
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600)),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  foregroundColor: AppColors.lightText,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
               ),
             ),
-        ],
+            const SizedBox(width: 12),
+            if (_saveMsg != null)
+              Expanded(
+                child: Text('${_saveMsgOk ? '✓ ' : '✕ '}$_saveMsg',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: _saveMsgOk
+                            ? AppColors.emerald500
+                            : AppColors.rose500)),
+              )
+            else if (!_isPersisted)
+              const Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded,
+                        size: 13, color: AppColors.amber500),
+                    SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                          'Usando valores padrão — salve para persistir.',
+                          style: TextStyle(
+                              fontSize: 11, color: AppColors.amber500)),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       );
 
   // ── Section 2: Configurações gerais ──────────────────────────────────────
@@ -1651,8 +1809,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
           // 3 sub-cards in a column (mobile) — matches site's md:grid-cols-3
           _subCard(
             isDark: isDark,
-            accentBg: const Color(0xFFEEF2FF),
-            accentFg: const Color(0xFF4F46E5),
+            accentBg: AppColors.blue50,
+            accentFg: AppColors.infoLight,
             icon: Icons.group_outlined,
             title: 'Jogadores',
             subtitle: 'Por partida',
@@ -1685,8 +1843,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
           _subCard(
             isDark: isDark,
-            accentBg: const Color(0xFFFFFBEB),
-            accentFg: const Color(0xFFD97706),
+            accentBg: AppColors.amber50,
+            accentFg: AppColors.warningLight,
             icon: Icons.calendar_today_outlined,
             title: 'Padrões',
             subtitle: 'Local, dia e horário',
@@ -1726,8 +1884,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
           _subCard(
             isDark: isDark,
-            accentBg: const Color(0xFFECFDF5),
-            accentFg: const Color(0xFF059669),
+            accentBg: AppColors.emerald50,
+            accentFg: AppColors.primaryPressed,
             icon: Icons.payments_outlined,
             title: 'Pagamento',
             subtitle: 'Modo de cobrança',
@@ -1788,8 +1946,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
           // ── Empate no MVP ─────────────────────────────────────────────────────
           _subCard(
             isDark: isDark,
-            accentBg: const Color(0xFFFFFBEB),
-            accentFg: const Color(0xFFD97706),
+            accentBg: AppColors.amber50,
+            accentFg: AppColors.warningLight,
             icon: Icons.emoji_events_outlined,
             title: 'Empate no MVP',
             subtitle:
@@ -1801,8 +1959,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
           _subCard(
             isDark: isDark,
-            accentBg: const Color(0xFFF0F9FF),
-            accentFg: const Color(0xFF0284C7),
+            accentBg: AppColors.blue50,
+            accentFg: AppColors.infoLight,
             icon: Icons.timer_outlined,
             title: 'Encerrar votação MVP automaticamente',
             subtitle:
@@ -1815,62 +1973,75 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
           // ── Exibir gols e assistências ────────────────────────────────────────
           Container(
             decoration: BoxDecoration(
-              color: isDark ? AppColors.slate900 : Colors.white,
+              color: isDark ? AppColors.slate900 : AppColors.onDark,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                   color: isDark ? AppColors.slate700 : AppColors.slate200),
             ),
             padding: const EdgeInsets.all(16),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color:
-                        isDark ? AppColors.slate700 : const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    Icons.bar_chart_rounded,
-                    size: 18,
-                    color:
-                        isDark ? AppColors.slate300 : const Color(0xFF2563EB),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Exibir gols e assistências',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color:
-                              isDark ? AppColors.slate100 : AppColors.slate900,
-                        ),
+                Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.slate700 : AppColors.blue50,
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Jogadores comuns poderão ver gols e assistências. Administradores sempre visualizam.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color:
-                              isDark ? AppColors.slate400 : AppColors.slate500,
-                        ),
+                      child: Icon(
+                        Icons.bar_chart_outlined,
+                        size: 18,
+                        color:
+                            isDark ? AppColors.slate300 : AppColors.infoLight,
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Exibir gols e assistências',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? AppColors.slate100
+                                  : AppColors.slate900,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Jogadores comuns poderão ver gols e assistências. Administradores sempre visualizam.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? AppColors.slate400
+                                  : AppColors.slate500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Switch(
+                      value: _showPlayerStats,
+                      onChanged: (v) => setState(() => _showPlayerStats = v),
+                      activeThumbColor:
+                          isDark ? AppColors.slate100 : AppColors.slate900,
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Switch(
-                  value: _showPlayerStats,
-                  onChanged: (v) => setState(() => _showPlayerStats = v),
-                  activeThumbColor:
-                      isDark ? AppColors.slate100 : AppColors.slate900,
+                const SizedBox(height: 12),
+                Divider(
+                  height: 1,
+                  color: isDark ? AppColors.slate700 : AppColors.slate200,
                 ),
+                const SizedBox(height: 12),
+                _statsTabChips(isDark),
               ],
             ),
           ),
@@ -1879,74 +2050,79 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
-              color: isDark ? AppColors.slate900 : Colors.white,
+              color: isDark ? AppColors.slate900 : AppColors.onDark,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                   color: isDark ? AppColors.slate700 : AppColors.slate200),
             ),
             padding: const EdgeInsets.all(16),
-            child: _statsTabChips(isDark),
+            child: _statsTabChips(isDark), // Conteúdo da seção geral.
           ),
 
           const SizedBox(height: 20),
 
           // ── Save button + status ──────────────────────────────────────────────
-          Row(
-            children: [
-              SizedBox(
-                height: 44,
-                child: FilledButton.icon(
-                  onPressed: _saving ? null : _save,
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.save_outlined, size: 15),
-                  label: Text(_saving ? 'Salvando…' : 'Salvar configurações',
-                      style: const TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w600)),
-                  style: FilledButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              if (_saveMsg != null)
-                Expanded(
-                  child: Text(
-                    '${_saveMsgOk ? '✓ ' : '✕ '}$_saveMsg',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color:
-                          _saveMsgOk ? AppColors.emerald500 : AppColors.rose500,
+          // O salvar compartilhado é renderizado após todo o conteúdo da aba.
+          if (_activeTab == -1)
+            Row(
+              children: [
+                SizedBox(
+                  height: 44,
+                  child: FilledButton.icon(
+                    onPressed: _saving ? null : _save,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: AppColors.onDark))
+                        : const Icon(Icons.save_outlined, size: 15),
+                    label: Text(_saving ? 'Salvando…' : 'Salvar configurações',
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600)),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      foregroundColor: AppColors.lightText,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
-                )
-              else if (!_isPersisted)
-                const Expanded(
-                  child: Row(
-                    children: [
-                      Icon(Icons.info_outline_rounded,
-                          size: 13, color: AppColors.amber500),
-                      SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          'Usando valores padrão — salve para persistir.',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppColors.amber500,
+                ),
+                const SizedBox(width: 12),
+                if (_saveMsg != null)
+                  Expanded(
+                    child: Text(
+                      '${_saveMsgOk ? '✓ ' : '✕ '}$_saveMsg',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: _saveMsgOk
+                            ? AppColors.emerald500
+                            : AppColors.rose500,
+                      ),
+                    ),
+                  )
+                else if (!_isPersisted)
+                  const Expanded(
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline_rounded,
+                            size: 13, color: AppColors.amber500),
+                        SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            'Usando valores padrão — salve para persistir.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.amber500,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-            ],
-          ),
+              ],
+            ),
         ],
       );
 
@@ -1959,12 +2135,12 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           color: selected
-              ? (isDark ? Colors.white : AppColors.slate900)
+              ? AppColors.accent
               : (isDark ? AppColors.slate700 : AppColors.slate100),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: selected
-                ? (isDark ? Colors.white : AppColors.slate900)
+                ? AppColors.accent
                 : (isDark ? AppColors.slate600 : AppColors.slate200),
             width: 2,
           ),
@@ -1976,7 +2152,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: selected
-                  ? (isDark ? AppColors.slate900 : Colors.white)
+                  ? AppColors.lightText
                   : (isDark ? AppColors.slate400 : AppColors.slate500),
             ),
           ),
@@ -1994,12 +2170,12 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           color: selected
-              ? (isDark ? Colors.white : AppColors.slate900)
+              ? AppColors.accent
               : (isDark ? AppColors.slate700 : AppColors.slate100),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: selected
-                ? (isDark ? Colors.white : AppColors.slate900)
+                ? AppColors.accent
                 : (isDark ? AppColors.slate600 : AppColors.slate200),
             width: 2,
           ),
@@ -2011,7 +2187,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: selected
-                  ? (isDark ? AppColors.slate900 : Colors.white)
+                  ? AppColors.lightText
                   : (isDark ? AppColors.slate400 : AppColors.slate500),
             ),
           ),
@@ -2053,18 +2229,38 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: _mvpTieRule == rule.val
-                      ? (isDark ? Colors.white : AppColors.slate900)
-                      : (isDark ? AppColors.slate800 : Colors.white),
+                      ? AppColors.amber50
+                      : (isDark ? AppColors.slate800 : AppColors.slate100),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: _mvpTieRule == rule.val
-                        ? (isDark ? Colors.white : AppColors.slate900)
+                        ? AppColors.accent
                         : (isDark ? AppColors.slate600 : AppColors.slate200),
                     width: 2,
                   ),
                 ),
                 child: Row(
                   children: [
+                    Container(
+                      width: 16,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: _mvpTieRule == rule.val
+                              ? AppColors.accent
+                              : (isDark
+                                  ? AppColors.slate500
+                                  : AppColors.slate300),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: _mvpTieRule == rule.val
+                          ? const Icon(Icons.check_rounded,
+                              size: 11, color: AppColors.accent)
+                          : null,
+                    ),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2074,11 +2270,9 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: _mvpTieRule == rule.val
-                                  ? (isDark ? AppColors.slate900 : Colors.white)
-                                  : (isDark
-                                      ? Colors.white
-                                      : AppColors.slate900),
+                              color: isDark
+                                  ? AppColors.onDark
+                                  : AppColors.slate900,
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -2086,13 +2280,9 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                             rule.desc,
                             style: TextStyle(
                               fontSize: 11,
-                              color: _mvpTieRule == rule.val
-                                  ? (isDark
-                                      ? AppColors.slate500
-                                      : Colors.white70)
-                                  : (isDark
-                                      ? AppColors.slate500
-                                      : AppColors.slate400),
+                              color: isDark
+                                  ? AppColors.slate500
+                                  : AppColors.slate500,
                             ),
                           ),
                         ],
@@ -2221,7 +2411,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     final current = _icons[cat.key] ?? cat.defaultValue;
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate900 : Colors.white,
+        color: isDark ? AppColors.slate900 : AppColors.onDark,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -2342,7 +2532,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
             margin: const EdgeInsets.only(bottom: 16),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFFBEB),
+              color: AppColors.amber50,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: AppColors.amber200),
             ),
@@ -2354,7 +2544,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                 Flexible(
                   child: RichText(
                     text: const TextSpan(
-                      style: TextStyle(fontSize: 12, color: Color(0xFF92400E)),
+                      style: TextStyle(
+                          fontSize: 12, color: AppColors.warningLight),
                       children: [
                         TextSpan(
                             text: 'Sem financeiro cadastrado. ',
@@ -2373,8 +2564,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
         _memberCard(
           isDark: isDark,
-          accentColor: const Color(0xFF7C3AED),
-          borderColor: isDark ? AppColors.slate700 : const Color(0xFFDDD6FE),
+          accentColor: AppColors.info,
+          borderColor: isDark ? AppColors.slate700 : AppColors.violet200,
           icon: Icons.shield_outlined,
           title: 'Administradores',
           count: adminList.length,
@@ -2390,15 +2581,15 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
         const SizedBox(height: 12),
         _memberCard(
           isDark: isDark,
-          accentColor: const Color(0xFF059669),
-          borderColor: isDark ? AppColors.slate700 : const Color(0xFFA7F3D0),
+          accentColor: AppColors.primaryPressed,
+          borderColor: isDark ? AppColors.slate700 : AppColors.emerald200,
           icon: Icons.account_balance_wallet_outlined,
           title: 'Financeiros',
           count: finList.length,
           members: finList,
           crossIds: adminIds,
           crossRole: 'Adm.',
-          crossColor: const Color(0xFF7C3AED),
+          crossColor: AppColors.info,
           creatorId: null,
           isAdminList: false,
           footerText: 'Gerenciam pagamentos, mensalidades e cobranças.',
@@ -2422,7 +2613,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     required bool isAdminList,
     required String footerText,
   }) {
-    final bg = isDark ? AppColors.slate800 : Colors.white;
+    final bg = isDark ? AppColors.slate800 : AppColors.onDark;
     final border = isDark ? AppColors.slate700 : borderColor;
 
     return Container(
@@ -2451,7 +2642,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                     color: accentColor,
                     borderRadius: BorderRadius.circular(9),
                   ),
-                  child: Icon(icon, size: 15, color: Colors.white),
+                  child: Icon(icon, size: 15, color: AppColors.onDark),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -2463,7 +2654,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: isDark ? Colors.white : AppColors.slate800,
+                          color: isDark ? AppColors.onDark : AppColors.slate800,
                         ),
                       ),
                       Text(
@@ -2562,7 +2753,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                                     if (isCurrentUser) ...[
                                       const SizedBox(width: 5),
                                       _badge('Você', AppColors.slate700,
-                                          Colors.white),
+                                          AppColors.onDark),
                                     ],
                                     if (hasCross) ...[
                                       const SizedBox(width: 4),
@@ -2594,8 +2785,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
                           // Right action: Criador badge OR remove button
                           if (isCreator)
-                            _badge('Criador', const Color(0xFFFEF3C7),
-                                const Color(0xFFB45309),
+                            _badge('Criador', AppColors.amber50,
+                                AppColors.warningLight,
                                 border: AppColors.amber200)
                           else
                             GestureDetector(
@@ -2710,14 +2901,14 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(Icons.person_add_outlined,
-                      size: 13, color: Colors.white),
+                      size: 13, color: AppColors.onDark),
                   const SizedBox(width: 5),
                   Text(
                     isAdminList ? 'Adicionar admin' : 'Adicionar financeiro',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white,
+                      color: AppColors.onDark,
                     ),
                   ),
                 ],
@@ -2740,7 +2931,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
   }) =>
       Container(
         decoration: BoxDecoration(
-          color: isDark ? AppColors.slate900 : Colors.white,
+          color: isDark ? AppColors.slate900 : AppColors.onDark,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
               color: isDark ? AppColors.slate700 : AppColors.slate200),
@@ -2755,29 +2946,38 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: isDark ? AppColors.slate800 : accentBg,
+                    color: isDark ? AppColors.slate800 : AppColors.amber50,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(icon,
-                      size: 17, color: isDark ? AppColors.slate400 : accentFg),
+                  child: Icon(
+                    icon,
+                    size: 17,
+                    color: isDark ? AppColors.slate300 : AppColors.warningLight,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : AppColors.slate900,
-                        )),
-                    Text(subtitle,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color:
-                              isDark ? AppColors.slate500 : AppColors.slate400,
-                        )),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          maxLines: 2,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color:
+                                isDark ? AppColors.onDark : AppColors.slate900,
+                          )),
+                      Text(subtitle,
+                          maxLines: 2,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: isDark
+                                ? AppColors.slate500
+                                : AppColors.slate400,
+                          )),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -2862,7 +3062,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
       child: Center(
         child: Text(initials,
             style: const TextStyle(
-                color: Colors.white,
+                color: AppColors.onDark,
                 fontSize: 11,
                 fontWeight: FontWeight.w700)),
       ),
@@ -2915,7 +3115,7 @@ class _CardSection extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate800 : Colors.white,
+        color: isDark ? AppColors.slate800 : AppColors.onDark,
         borderRadius: BorderRadius.circular(14),
         border:
             Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
@@ -2941,7 +3141,7 @@ class _CardSection extends StatelessWidget {
                       ? Center(
                           child: Text(iconEmoji!,
                               style: const TextStyle(fontSize: 14)))
-                      : Icon(icon!, size: 14, color: Colors.white),
+                      : Icon(icon!, size: 14, color: AppColors.onDark),
                 ),
                 const SizedBox(width: 10),
                 Column(
@@ -2951,7 +3151,7 @@ class _CardSection extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : AppColors.slate900,
+                          color: isDark ? AppColors.onDark : AppColors.slate900,
                         )),
                     Text(subtitle,
                         style: TextStyle(
@@ -3083,7 +3283,7 @@ class _DayDropdown extends StatelessWidget {
             child: DropdownButton<int?>(
               value: value,
               isExpanded: true,
-              dropdownColor: isDark ? AppColors.slate800 : Colors.white,
+              dropdownColor: isDark ? AppColors.slate800 : AppColors.onDark,
               style: TextStyle(
                 fontSize: 13,
                 color: isDark ? AppColors.slate100 : AppColors.slate800,
@@ -3164,7 +3364,7 @@ class _DueDayDropdown extends StatelessWidget {
             child: DropdownButton<int?>(
               value: value,
               isExpanded: true,
-              dropdownColor: isDark ? AppColors.slate800 : Colors.white,
+              dropdownColor: isDark ? AppColors.slate800 : AppColors.onDark,
               style: TextStyle(
                 fontSize: 13,
                 color: isDark ? AppColors.slate100 : AppColors.slate800,
@@ -3457,7 +3657,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final roleLabel = widget.isAdminRole ? 'admin' : 'financeiro';
     final roleColor =
-        widget.isAdminRole ? const Color(0xFF7C3AED) : const Color(0xFF059669);
+        widget.isAdminRole ? AppColors.info : AppColors.primaryPressed;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -3486,7 +3686,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.person_add_outlined,
-                        size: 17, color: Colors.white),
+                        size: 17, color: AppColors.onDark),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -3497,7 +3697,9 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
-                              color: isDark ? Colors.white : AppColors.slate900,
+                              color: isDark
+                                  ? AppColors.onDark
+                                  : AppColors.slate900,
                             )),
                         Text(widget.groupName,
                             style: TextStyle(
@@ -3645,7 +3847,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: isDark ? AppColors.slate800 : Colors.white,
+            color: isDark ? AppColors.slate800 : AppColors.onDark,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
                 color: isDark ? AppColors.slate700 : AppColors.slate200),
@@ -3678,7 +3880,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : AppColors.slate900,
+                          color: isDark ? AppColors.onDark : AppColors.slate900,
                         )),
                     Text('@${u.userName ?? ''}',
                         style: TextStyle(
@@ -3750,15 +3952,16 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
                           width: 12,
                           height: 12,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
+                              strokeWidth: 2, color: AppColors.onDark))
                       : Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             const Icon(Icons.person_add_outlined,
-                                size: 12, color: Colors.white),
+                                size: 12, color: AppColors.onDark),
                             const SizedBox(width: 4),
                             Text(widget.isAdminRole ? 'Admin' : 'Fin.',
-                                style: const TextStyle(color: Colors.white)),
+                                style:
+                                    const TextStyle(color: AppColors.onDark)),
                           ],
                         ),
                 ),
@@ -3809,7 +4012,7 @@ class _ConfirmRemoveDialogState extends State<_ConfirmRemoveDialog> {
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: isDark ? Colors.white : AppColors.slate900,
+                      color: isDark ? AppColors.onDark : AppColors.slate900,
                     )),
               ],
             ),
@@ -3846,7 +4049,7 @@ class _ConfirmRemoveDialogState extends State<_ConfirmRemoveDialog> {
                           width: 14,
                           height: 14,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
+                              strokeWidth: 2, color: AppColors.onDark))
                       : const Text('Confirmar remoção'),
                 ),
               ],
@@ -3862,25 +4065,78 @@ class _ConfirmRemoveDialogState extends State<_ConfirmRemoveDialog> {
 
 class _NoGroupState extends StatelessWidget {
   final String message;
-  const _NoGroupState({required this.message});
+  final String title;
+  final Future<void> Function()? onRetry;
+
+  const _NoGroupState({
+    required this.message,
+    this.title = 'Sem acesso',
+    this.onRetry,
+  });
+
   @override
   Widget build(BuildContext context) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.settings_outlined,
-                size: 52, color: AppColors.slate500),
-            const SizedBox(height: 12),
-            const Text('Sem acesso',
-                style: TextStyle(color: AppColors.slate400, fontSize: 16)),
-            const SizedBox(height: 4),
-            Text(message,
-                textAlign: TextAlign.center,
-                style:
-                    const TextStyle(color: AppColors.slate500, fontSize: 13)),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.settings_outlined,
+                  size: 52, color: AppColors.slate500),
+              const SizedBox(height: 12),
+              Text(title,
+                  style:
+                      const TextStyle(color: AppColors.slate400, fontSize: 16)),
+              const SizedBox(height: 4),
+              Text(message,
+                  textAlign: TextAlign.center,
+                  style:
+                      const TextStyle(color: AppColors.slate500, fontSize: 13)),
+              const SizedBox(height: 24),
+              // Sempre precisa haver uma saída: sem estes botões o usuário fica
+              // preso, porque esta tela não tem AppBar própria em todos os fluxos.
+              if (onRetry != null) ...[
+                FilledButton.icon(
+                  onPressed: () => onRetry!(),
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Tentar novamente'),
+                ),
+                const SizedBox(height: 8),
+              ],
+              TextButton.icon(
+                onPressed: () {
+                  final navigator = Navigator.of(context);
+                  if (navigator.canPop()) {
+                    navigator.pop();
+                  } else {
+                    navigator.pushNamedAndRemoveUntil('/', (route) => false);
+                  }
+                },
+                icon: const Icon(Icons.arrow_back, size: 18),
+                label: const Text('Voltar'),
+              ),
+            ],
+          ),
         ),
       );
+}
+
+class _SettingsDotPatternPainter extends CustomPainter {
+  const _SettingsDotPatternPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = AppColors.accent.withValues(alpha: .3);
+    const spacing = 18.0;
+    for (var x = 8.0; x < size.width; x += spacing) {
+      for (var y = 8.0; y < size.height; y += spacing) {
+        canvas.drawCircle(Offset(x, y), 0.8, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _ErrorState extends StatelessWidget {

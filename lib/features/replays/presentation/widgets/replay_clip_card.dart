@@ -4,11 +4,11 @@ import '../../../../core/utils/date_utils.dart';
 import '../../domain/entities/replay_clip.dart';
 
 class ReplayClipCard extends StatelessWidget {
-  final ReplayClip    clip;
-  final bool          isAdmin;
-  final VoidCallback  onTap;
-  final VoidCallback  onLike;
-  final VoidCallback  onFavorite;
+  final ReplayClip clip;
+  final bool isAdmin;
+  final VoidCallback onTap;
+  final VoidCallback onLike;
+  final VoidCallback onFavorite;
   final VoidCallback? onDelete;
 
   const ReplayClipCard({
@@ -35,85 +35,89 @@ class ReplayClipCard extends StatelessWidget {
   String get _eventLabel {
     final parts = <String>[];
     if (clip.scorerName != null) parts.add(clip.scorerName!);
-    if (clip.assistName  != null) parts.add('ass: ${clip.assistName}');
+    if (clip.assistName != null) parts.add('ass: ${clip.assistName}');
     if (parts.isEmpty && clip.eventType != null) parts.add(clip.eventType!);
     return parts.join(' · ');
   }
 
   String get _eventEmoji {
     switch ((clip.eventType ?? '').toLowerCase()) {
-      case 'gol':    return '⚽';
-      case 'defesa': return '🧤';
-      case 'falta':  return '🟨';
-      default:       return '🎬';
+      case 'gol':
+        return '⚽';
+      case 'defesa':
+        return '🧤';
+      case 'falta':
+        return '🟨';
+      default:
+        return '🎬';
     }
   }
 
-  String get _minuteLabel =>
-      clip.minute != null ? "${clip.minute}'" : '';
+  String get _minuteLabel => clip.minute != null ? "${clip.minute}'" : '';
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final isDark       = Theme.of(context).brightness == Brightness.dark;
-    final bgCard       = isDark ? AppColors.slate800 : Colors.white;
-    final borderColor  = isDark ? AppColors.slate700 : AppColors.slate200;
-    final textPrimary  = isDark ? Colors.white       : AppColors.slate900;
-    final textSecond   = isDark ? Colors.white54      : AppColors.slate500;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgCard = isDark ? AppColors.slate800 : AppColors.onDark;
+    final borderColor = isDark ? AppColors.slate700 : AppColors.slate200;
+    final textPrimary = isDark ? AppColors.onDark : AppColors.slate900;
+    final textSecond = isDark ? AppColors.onDark54 : AppColors.slate500;
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
-          color:        bgCard,
+          color: bgCard,
           borderRadius: BorderRadius.circular(10),
-          border:       Border.all(color: borderColor),
+          border: Border.all(color: borderColor),
         ),
         child: Row(
           children: [
-
             // ── Thumbnail ─────────────────────────────────────────────────
             ClipRRect(
               borderRadius: const BorderRadius.only(
-                topLeft:     Radius.circular(9),
-                bottomLeft:  Radius.circular(9),
+                topLeft: Radius.circular(9),
+                bottomLeft: Radius.circular(9),
               ),
               child: SizedBox(
-                width:  72,
+                width: 72,
                 height: 72,
-                child:  Stack(
+                child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Container(color: const Color(0xFF0F172A)),
+                    Container(color: AppColors.lightText),
                     Center(
                       child: Container(
-                        width: 32, height: 32,
+                        width: 32,
+                        height: 32,
                         decoration: BoxDecoration(
-                          color:  Colors.white.withValues(alpha: .15),
-                          shape:  BoxShape.circle,
-                          border: Border.all(color: Colors.white30),
+                          color: AppColors.onDark.withValues(alpha: .15),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.onDark30),
                         ),
                         child: const Icon(Icons.play_arrow_rounded,
-                            size: 18, color: Colors.white),
+                            size: 18, color: AppColors.onDark),
                       ),
                     ),
                     // minute badge
                     if (clip.minute != null)
                       Positioned(
-                        right: 4, bottom: 4,
+                        right: 4,
+                        bottom: 4,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 4, vertical: 1),
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: .65),
+                            color: AppColors.darkApp.withValues(alpha: .65),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             _minuteLabel,
                             style: const TextStyle(
-                                color: Colors.white,
+                                color: AppColors.onDark,
                                 fontSize: 9,
                                 fontWeight: FontWeight.w700),
                           ),
@@ -127,18 +131,19 @@ class ReplayClipCard extends StatelessWidget {
             // ── Info ──────────────────────────────────────────────────────
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment:  MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     // Date + place
                     Text(
                       '$_formattedDate · ${clip.matchPlace}',
                       style: TextStyle(
-                        fontSize:   11,
+                        fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color:      textPrimary,
+                        color: textPrimary,
                       ),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
@@ -157,8 +162,8 @@ class ReplayClipCard extends StatelessWidget {
                       Text(
                         clip.teamName!,
                         style: TextStyle(
-                          fontSize:   10,
-                          color:      Theme.of(context).colorScheme.primary,
+                          fontSize: 10,
+                          color: Theme.of(context).colorScheme.primary,
                           fontWeight: FontWeight.w500,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -181,23 +186,24 @@ class ReplayClipCard extends StatelessWidget {
                     icon: clip.isLiked
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
-                    color:  clip.isLiked ? Colors.redAccent : textSecond,
-                    label:  clip.likeCount > 0 ? '${clip.likeCount}' : null,
-                    onTap:  onLike,
+                    color:
+                        clip.isLiked ? AppColors.prototypeDanger : textSecond,
+                    label: clip.likeCount > 0 ? '${clip.likeCount}' : null,
+                    onTap: onLike,
                   ),
                   // Favourite
                   _MiniBtn(
-                    icon:  clip.isFavorited
+                    icon: clip.isFavorited
                         ? Icons.star_rounded
                         : Icons.star_border_rounded,
-                    color: clip.isFavorited ? Colors.amber : textSecond,
+                    color: clip.isFavorited ? AppColors.warning : textSecond,
                     onTap: onFavorite,
                   ),
                   // Delete (admin only)
                   if (isAdmin && onDelete != null)
                     _MiniBtn(
-                      icon:  Icons.delete_outline_rounded,
-                      color: Colors.redAccent.withValues(alpha: .75),
+                      icon: Icons.delete_outline_rounded,
+                      color: AppColors.prototypeDanger.withValues(alpha: .75),
                       onTap: onDelete!,
                     ),
                 ],
@@ -213,9 +219,9 @@ class ReplayClipCard extends StatelessWidget {
 // ── Compact action button ─────────────────────────────────────────────────────
 
 class _MiniBtn extends StatelessWidget {
-  final IconData     icon;
-  final Color        color;
-  final String?      label;
+  final IconData icon;
+  final Color color;
+  final String? label;
   final VoidCallback onTap;
 
   const _MiniBtn({

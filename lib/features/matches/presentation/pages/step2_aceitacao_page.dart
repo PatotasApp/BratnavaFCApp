@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
+import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
@@ -18,6 +19,16 @@ class Step2AceitacaoPage extends ConsumerStatefulWidget {
 }
 
 class _Step2State extends ConsumerState<Step2AceitacaoPage> {
+  static const _tabAccepted = 'Aceitos';
+  static const _tabRejected = 'Não aceitos';
+  static const _tabPending = 'Pendentes';
+  static const _tabs = [_tabAccepted, _tabRejected, _tabPending];
+
+  /// O protótipo separa as três respostas em abas, com uma lista só embaixo.
+  /// Empilhar os três cards obrigava a rolar a tela inteira para chegar nos
+  /// pendentes, que é justamente onde há trabalho a fazer.
+  String _tab = _tabAccepted;
+
   Future<void> _goNext() async {
     await ref.read(matchNotifierProvider.notifier).goToMatchmaking();
   }
@@ -31,7 +42,10 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
     final rejected = s.rejectedPlayers;
     final pending = s.pendingPlayers;
     final myId = account?.activePlayerId ?? activePlayer?.playerId ?? '';
-    final gid = account?.activeGroupId ?? activePlayer?.groupId ?? '';
+    // O jogador manda no grupo: `activeGroupId` da conta pode apontar
+    // para uma patota sem jogador nosso, e aí toda rota por grupo
+    // responde 403. Ver dashboard_page para o diagnóstico completo.
+    final gid = activePlayer?.groupId ?? account?.activeGroupId ?? '';
     final isGroupAdmin =
         gid.isNotEmpty && (account?.isGroupAdmin(gid) ?? false);
     final isAdmin = (account?.isAdmin ?? false) || isGroupAdmin;
@@ -65,55 +79,34 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
                     widget.linkedPollStrip!,
                   ],
                   const SizedBox(height: 12),
-                  _InviteCard(
-                    title: 'Aceitos',
-                    count: accepted.length,
-                    items: accepted,
-                    variant: _InviteVariant.accepted,
-                    myId: myId,
-                    isAdmin: isAdmin,
-                    icons: icons,
-                    mutating: s.mutating,
-                    onAccept: (pid) => ref
-                        .read(matchNotifierProvider.notifier)
-                        .acceptInvite(pid),
-                    onReject: (pid) => ref
-                        .read(matchNotifierProvider.notifier)
-                        .rejectInvite(pid),
-                    onSetRole: (mpId, gk) => ref
-                        .read(matchNotifierProvider.notifier)
-                        .setPlayerRole(mpId, gk),
+                  PrototypeSegmented(
+                    items: _tabs,
+                    value: _tab,
+                    semanticLabel: 'Filtrar por resposta',
+                    onChanged: (t) => setState(() => _tab = t),
                   ),
                   const SizedBox(height: 12),
                   _InviteCard(
-                    title: 'Não Aceitos',
-                    count: rejected.length,
-                    items: rejected,
-                    variant: _InviteVariant.rejected,
+                    title: _tab,
+                    count: switch (_tab) {
+                      _tabRejected => rejected.length,
+                      _tabPending => pending.length,
+                      _ => accepted.length,
+                    },
+                    items: switch (_tab) {
+                      _tabRejected => rejected,
+                      _tabPending => pending,
+                      _ => accepted,
+                    },
+                    variant: switch (_tab) {
+                      _tabRejected => _InviteVariant.rejected,
+                      _tabPending => _InviteVariant.pending,
+                      _ => _InviteVariant.accepted,
+                    },
                     myId: myId,
                     isAdmin: isAdmin,
                     icons: icons,
-                    mutating: s.mutating,
-                    onAccept: (pid) => ref
-                        .read(matchNotifierProvider.notifier)
-                        .acceptInvite(pid),
-                    onReject: (pid) => ref
-                        .read(matchNotifierProvider.notifier)
-                        .rejectInvite(pid),
-                    onSetRole: (mpId, gk) => ref
-                        .read(matchNotifierProvider.notifier)
-                        .setPlayerRole(mpId, gk),
-                  ),
-                  const SizedBox(height: 12),
-                  _InviteCard(
-                    title: 'Pendentes',
-                    count: pending.length,
-                    items: pending,
-                    variant: _InviteVariant.pending,
-                    myId: myId,
-                    isAdmin: isAdmin,
-                    icons: icons,
-                    mutating: s.mutating,
+                    pendingPlayerIds: s.pendingPlayerIds,
                     onAccept: (pid) => ref
                         .read(matchNotifierProvider.notifier)
                         .acceptInvite(pid),
@@ -147,7 +140,7 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
+                              strokeWidth: 2, color: AppColors.onDark))
                       : const Icon(Icons.arrow_forward),
                   label: const Text('Ir para MatchMaking'),
                 ),
@@ -182,281 +175,166 @@ class _AcceptanceSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final pct = maxPlayers > 0
-        ? ((acceptedCount / maxPlayers) * 100).clamp(0, 100).round()
-        : 0;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final accent = AppColors.accentOf(theme.brightness);
+
     final dateText = playedAt == null
         ? null
-        : DateFormat('dd/MM/yyyy, HH:mm', 'pt_BR').format(playedAt!);
+        : DateFormat("EEEE, dd/MM/yyyy", "pt_BR").format(playedAt!);
     final place = placeName?.trim();
+    final meta = [
+      if (dateText != null) dateText[0].toUpperCase() + dateText.substring(1),
+      if (place != null && place.isNotEmpty) place,
+    ].join(' \u00b7 ');
 
+    // Espelha `.proto-acceptance-summary`: borda esquerda de 3px no accent,
+    // \u00edcone circular de 40px e a contagem em destaque (17px). A vers\u00e3o anterior
+    // usava azul \u2014 cor que n\u00e3o existe na paleta do prot\u00f3tipo \u2014 e escondia o
+    // n\u00famero num canto, atr\u00e1s de uma barra de porcentagem.
+    final borderColor = isDark ? AppColors.darkElevated : AppColors.lightBorder;
+
+    // A faixa lateral do accent é desenhada como filha, não como
+    // `Border(left: ... width: 3)`. Um `Border` não-uniforme junto de
+    // `borderRadius` é proibido pelo Flutter ("A borderRadius can only be
+    // given for a uniform Border"): o BoxDecoration falha ao pintar e o card
+    // inteiro sai vazio — sem ícone, sem texto, sem borda. Era esse o card em
+    // branco na tela, não dado faltando.
     return Container(
+      constraints: const BoxConstraints(minHeight: 76),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate900.withValues(alpha: .6) : Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isDark ? AppColors.slate700 : AppColors.slate200,
-        ),
+        color: isDark ? AppColors.darkSubtle : AppColors.lightCard,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: borderColor),
         boxShadow: isDark
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: .04),
-                  blurRadius: 5,
-                  offset: const Offset(0, 2),
+                  color: AppColors.shadow08,
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
                 ),
               ],
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          Container(height: 3, color: AppColors.blue500),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-            child: Column(
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 9, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: AppColors.blue50,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Text(
-                              'Aceitação',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.blue600,
-                              ),
-                            ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          children: [
+            // Faixa do accent: `Positioned` com top/bottom esticando na
+            // altura que o conteúdo definir. `Row` com stretch não serviria
+            // aqui — a altura chega sem limite, vindo de um scroll.
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 3,
+              child: ColoredBox(color: accent),
+            ),
+            Padding(
+              // 14 do protótipo + 3 da faixa.
+              padding: const EdgeInsets.fromLTRB(17, 12, 14, 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.accentBgOf(theme.brightness),
+                    ),
+                    child: Icon(Icons.groups_rounded,
+                        size: 20,
+                        color: AppColors.accentTextOf(theme.brightness)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          maxPlayers > 0
+                              ? "$acceptedCount / $maxPlayers confirmados"
+                              : "$acceptedCount confirmados",
+                          style: TextStyle(
+                            fontSize: 17,
+                            height: 1.2,
+                            fontWeight: FontWeight.w800,
+                            color:
+                                isDark ? AppColors.onDark : AppColors.lightText,
                           ),
-                          const SizedBox(height: 9),
-                          Wrap(
-                            spacing: 14,
-                            runSpacing: 5,
-                            children: [
-                              if (dateText != null)
-                                _SummaryMeta(
-                                  icon: Icons.access_time_rounded,
-                                  text: dateText,
-                                  isDark: isDark,
-                                ),
-                              if (place != null && place.isNotEmpty)
-                                _SummaryMeta(
-                                  icon: Icons.location_on_outlined,
-                                  text: place,
-                                  isDark: isDark,
-                                ),
-                            ],
+                        ),
+                        if (meta.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            meta,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? AppColors.darkTextMuted
+                                  : AppColors.lightTextMuted,
+                            ),
                           ),
                         ],
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.group_outlined,
-                                size: 15, color: AppColors.slate400),
-                            const SizedBox(width: 5),
-                            Text(
+                        if (pendingCount > 0) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            "$pendingCount aguardando resposta",
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? AppColors.darkTextMuted
+                                  : AppColors.lightTextMuted,
+                            ),
+                          ),
+                        ],
+                        if (acceptedOverLimit) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppColors.dangerBgOf(theme.brightness),
+                              borderRadius: BorderRadius.circular(9),
+                              border: Border.all(
+                                  color: AppColors.dangerOf(theme.brightness)),
+                            ),
+                            child: Text(
                               maxPlayers > 0
-                                  ? '$acceptedCount/$maxPlayers'
-                                  : '$acceptedCount',
+                                  ? 'Passou do limite: $acceptedCount / $maxPlayers. Recuse alguns para avan\u00e7ar.'
+                                  : 'Passou do limite. Recuse alguns para avan\u00e7ar.',
                               style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
-                                color: isDark
-                                    ? AppColors.slate100
-                                    : AppColors.slate800,
+                                fontSize: 12,
+                                color: AppColors.dangerOf(theme.brightness),
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Pendentes: $pendingCount',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.slate400,
                           ),
-                        ),
+                        ],
                       ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Text(
-                      'Confirmados',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark ? AppColors.slate400 : AppColors.slate500,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      '$pct%',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark ? AppColors.slate400 : AppColors.slate500,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 5),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
-                  child: LinearProgressIndicator(
-                    value: progress.clamp(0.0, 1.0),
-                    minHeight: 5,
-                    backgroundColor:
-                        isDark ? AppColors.slate700 : AppColors.slate100,
-                    color: AppColors.blue500,
-                  ),
-                ),
-                if (acceptedOverLimit) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    width: double.infinity,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: AppColors.rose50,
-                      borderRadius: BorderRadius.circular(9),
-                      border: Border.all(color: AppColors.rose200),
-                    ),
-                    child: Text(
-                      maxPlayers > 0
-                          ? 'Passou do limite: $acceptedCount / $maxPlayers. Recuse alguns para avançar.'
-                          : 'Passou do limite. Recuse alguns para avançar.',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.rose600,
-                        fontWeight: FontWeight.w500,
-                      ),
                     ),
                   ),
                 ],
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-class _SummaryMeta extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  final bool isDark;
-
-  const _SummaryMeta({
-    required this.icon,
-    required this.text,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: AppColors.slate400),
-          const SizedBox(width: 4),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 12,
-              color: isDark ? AppColors.slate300 : AppColors.slate600,
-            ),
-          ),
-        ],
-      );
-}
-
 enum _InviteVariant { accepted, rejected, pending }
 
+/// Restaram só as duas regras de comportamento. Os seis getters de cor
+/// (`topBorder`, `headerColor`, `countBg`, `countFg`, `avatarBg`, `avatarFg`)
+/// saíram junto com a repaginação: no protótipo a resposta não pinta card,
+/// cabeçalho nem avatar — quem indica o filtro é a aba selecionada.
 extension _InviteVariantX on _InviteVariant {
-  Color get topBorder {
-    switch (this) {
-      case _InviteVariant.accepted:
-        return AppColors.emerald500;
-      case _InviteVariant.rejected:
-        return AppColors.rose500;
-      case _InviteVariant.pending:
-        return AppColors.slate300;
-    }
-  }
-
-  Color get headerColor {
-    switch (this) {
-      case _InviteVariant.accepted:
-        return AppColors.emerald700;
-      case _InviteVariant.rejected:
-        return AppColors.rose500;
-      case _InviteVariant.pending:
-        return AppColors.slate500;
-    }
-  }
-
-  Color get countBg {
-    switch (this) {
-      case _InviteVariant.accepted:
-        return AppColors.emerald200;
-      case _InviteVariant.rejected:
-        return AppColors.rose200;
-      case _InviteVariant.pending:
-        return AppColors.slate200;
-    }
-  }
-
-  Color get countFg {
-    switch (this) {
-      case _InviteVariant.accepted:
-        return AppColors.emerald700;
-      case _InviteVariant.rejected:
-        return AppColors.rose600;
-      case _InviteVariant.pending:
-        return AppColors.slate600;
-    }
-  }
-
-  Color get avatarBg {
-    switch (this) {
-      case _InviteVariant.accepted:
-        return AppColors.emerald200;
-      case _InviteVariant.rejected:
-        return AppColors.rose200;
-      case _InviteVariant.pending:
-        return AppColors.slate200;
-    }
-  }
-
-  Color get avatarFg {
-    switch (this) {
-      case _InviteVariant.accepted:
-        return AppColors.emerald700;
-      case _InviteVariant.rejected:
-        return AppColors.rose600;
-      case _InviteVariant.pending:
-        return AppColors.slate500;
-    }
-  }
-
   bool get showAcceptBtn {
     return this == _InviteVariant.pending || this == _InviteVariant.rejected;
   }
@@ -468,8 +346,6 @@ extension _InviteVariantX on _InviteVariant {
 
 // ── Card de convite pessoal (para quem é admin e também jogador) ──────────────
 
-// ── Card de lista de convites ─────────────────────────────────────────────────
-
 class _InviteCard extends StatelessWidget {
   final String title;
   final int count;
@@ -478,7 +354,11 @@ class _InviteCard extends StatelessWidget {
   final String myId;
   final bool isAdmin;
   final GroupIcons icons;
-  final bool mutating;
+
+  /// playerIds com aceite/recusa em voo. Antes isto era um `bool mutating`
+  /// único, que desabilitava a tela inteira a cada toque.
+  final Set<String> pendingPlayerIds;
+
   final void Function(String pid) onAccept;
   final void Function(String pid) onReject;
   final void Function(String mpId, bool isGk) onSetRole;
@@ -491,7 +371,7 @@ class _InviteCard extends StatelessWidget {
     required this.myId,
     required this.isAdmin,
     this.icons = GroupIcons.defaults,
-    required this.mutating,
+    required this.pendingPlayerIds,
     required this.onAccept,
     required this.onReject,
     required this.onSetRole,
@@ -509,143 +389,111 @@ class _InviteCard extends StatelessWidget {
       return 0;
     });
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        decoration: BoxDecoration(
-          color:
-              isDark ? AppColors.slate900.withValues(alpha: 0.6) : Colors.white,
-          border: Border.all(
-              color: isDark
-                  ? AppColors.slate700.withValues(alpha: 0.6)
-                  : AppColors.slate200),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // ── Top accent bar ────────────────────────────────────────────
-            Container(height: 3, color: variant.topBorder),
-
-            // ── Header ───────────────────────────────────────────────────
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: isDark
-                        ? AppColors.slate700.withValues(alpha: 0.6)
-                        : AppColors.slate100,
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                        color: variant.headerColor,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: variant.countBg,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '$count',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: variant.countFg,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // ── Body ─────────────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                children: [
-                  if (regular.isEmpty && guests.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 20),
-                      child: Column(
-                        children: [
-                          Icon(Icons.group_outlined,
-                              size: 20, color: AppColors.slate400),
-                          SizedBox(height: 6),
-                          Text('Nenhum jogador',
-                              style: TextStyle(
-                                  fontSize: 12, color: AppColors.slate400)),
-                        ],
-                      ),
-                    )
-                  else ...[
-                    ...regular.map((p) => _PlayerRow(
-                          player: p,
-                          isMe: p.playerId == myId,
-                          isGuest: false,
-                          isAdmin: isAdmin,
-                          icons: icons,
-                          variant: variant,
-                          mutating: mutating,
-                          onAccept: onAccept,
-                          onReject: onReject,
-                          onSetRole: onSetRole,
-                        )),
-                    if (guests.isNotEmpty) ...[
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Row(children: [
-                          const Expanded(child: Divider()),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            child: Text(
-                              'CONVIDADOS',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.6,
-                                color: isDark
-                                    ? AppColors.slate500
-                                    : AppColors.slate400,
-                              ),
-                            ),
-                          ),
-                          const Expanded(child: Divider()),
-                        ]),
-                      ),
-                      ...guests.map((p) => _PlayerRow(
-                            player: p,
-                            isMe: p.playerId == myId,
-                            isGuest: true,
-                            isAdmin: isAdmin,
-                            icons: icons,
-                            variant: variant,
-                            mutating: mutating,
-                            onAccept: onAccept,
-                            onReject: onReject,
-                            onSetRole: onSetRole,
-                          )),
+    // `.proto-card`: raio 16, padding 14, borda neutra — sem barra colorida no
+    // topo e sem cabeçalho tingido pela variante. No protótipo a cor da
+    // resposta não pinta o card; quem diferencia é a aba selecionada.
+    return Container(
+      padding: const EdgeInsets.all(PrototypeLayout.cardPadding),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.slate900 : AppColors.lightCard,
+        border: Border.all(
+            color: isDark ? AppColors.slate700 : AppColors.lightBorder),
+        borderRadius: BorderRadius.circular(PrototypeLayout.cardRadius),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // `SectionTitle`: título em caixa normal + contagem num chip neutro.
+          PrototypeSectionTitle(title: title, count: '$count'),
+          const SizedBox(height: 10),
+          Column(
+            children: [
+              if (regular.isEmpty && guests.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20),
+                  child: Column(
+                    children: [
+                      Icon(Icons.group_outlined,
+                          size: 20, color: AppColors.slate400),
+                      SizedBox(height: 6),
+                      Text('Nenhum jogador',
+                          style: TextStyle(
+                              fontSize: 12, color: AppColors.slate400)),
                     ],
-                  ],
+                  ),
+                )
+              else ...[
+                ..._withDividers(
+                  regular.map(_row).toList(),
+                  isDark: isDark,
+                ),
+                if (guests.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(children: [
+                      const Expanded(child: Divider()),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Text(
+                          'CONVIDADOS',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.6,
+                            color: isDark
+                                ? AppColors.slate500
+                                : AppColors.slate400,
+                          ),
+                        ),
+                      ),
+                      const Expanded(child: Divider()),
+                    ]),
+                  ),
+                  ..._withDividers(
+                    guests.map(_row).toList(),
+                    isDark: isDark,
+                  ),
                 ],
-              ),
-            ),
-          ],
-        ),
+              ],
+            ],
+          ),
+        ],
       ),
     );
+  }
+
+  Widget _row(MatchPlayerInfo p) => _PlayerRow(
+        player: p,
+        isMe: p.playerId == myId,
+        isGuest: p.isGuest,
+        isAdmin: isAdmin,
+        icons: icons,
+        variant: variant,
+        // Aceite/recusa entram no conjunto pelo playerId; o toggle de goleiro,
+        // pelo matchPlayerId.
+        busy: pendingPlayerIds.contains(p.playerId) ||
+            pendingPlayerIds.contains(p.matchPlayerId),
+        onAccept: onAccept,
+        onReject: onReject,
+        onSetRole: onSetRole,
+      );
+
+  /// `.proto-card>.proto-list-row+.proto-list-row{border-top-color:…}` — o
+  /// protótipo separa as linhas de dentro de um card por um fio, não por
+  /// espaçamento com cada linha virando um cartão próprio.
+  static List<Widget> _withDividers(List<Widget> rows, {required bool isDark}) {
+    final out = <Widget>[];
+    for (var i = 0; i < rows.length; i++) {
+      if (i > 0) {
+        out.add(Divider(
+          height: 1,
+          thickness: 1,
+          color: isDark ? AppColors.slate800 : AppColors.lightBorder,
+        ));
+      }
+      out.add(rows[i]);
+    }
+    return out;
   }
 }
 
@@ -658,7 +506,11 @@ class _PlayerRow extends StatelessWidget {
   final bool isAdmin;
   final GroupIcons icons;
   final _InviteVariant variant;
-  final bool mutating;
+
+  /// Só esta linha tem uma ação em voo. As outras seguem clicáveis, para o
+  /// admin conseguir aceitar vários jogadores em sequência.
+  final bool busy;
+
   final void Function(String) onAccept;
   final void Function(String) onReject;
   final void Function(String, bool) onSetRole;
@@ -670,7 +522,7 @@ class _PlayerRow extends StatelessWidget {
     required this.isAdmin,
     this.icons = GroupIcons.defaults,
     required this.variant,
-    required this.mutating,
+    required this.busy,
     required this.onAccept,
     required this.onReject,
     required this.onSetRole,
@@ -689,47 +541,47 @@ class _PlayerRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+
+    // `.proto-avatar`: quadrado arredondado de 34 com raio 12, em accent-bg
+    // sobre accent-text — não um círculo colorido pela resposta. No protótipo
+    // o avatar não muda de cor conforme aceito/recusado/pendente.
     final avatarBg = isGuest
         ? (isDark
             ? AppColors.amber500.withValues(alpha: 0.3)
             : AppColors.amber200)
-        : variant.avatarBg;
-    final avatarFg = isGuest ? AppColors.orange700 : variant.avatarFg;
+        : AppColors.accentBgOf(theme.brightness);
+    final avatarFg = isGuest
+        ? AppColors.warningLight
+        : AppColors.accentTextOf(theme.brightness);
 
     final showAccept = _canAct && variant.showAcceptBtn;
     final showReject = _canAct && variant.showRejectBtn;
 
+    // `.proto-card>.proto-list-row`: fundo e borda transparentes. A linha só
+    // vira um cartão próprio quando está solta fora de um card.
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color:
-            isDark ? AppColors.slate800.withValues(alpha: 0.6) : Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isMe
-              ? AppColors.blue500.withValues(alpha: 0.4)
-              : isDark
-                  ? AppColors.slate700.withValues(alpha: 0.6)
-                  : AppColors.slate100,
-        ),
-      ),
+      constraints:
+          const BoxConstraints(minHeight: PrototypeLayout.listRowMinHeight),
+      padding: PrototypeLayout.listRowPadding,
       child: Row(
         children: [
-          // Avatar
           Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: avatarBg),
+            width: PrototypeLayout.avatarSize,
+            height: PrototypeLayout.avatarSize,
+            decoration: BoxDecoration(
+              color: avatarBg,
+              borderRadius: BorderRadius.circular(PrototypeLayout.avatarRadius),
+            ),
             child: Center(
               child: Text(
                 _initials(player.playerName),
                 style: TextStyle(
-                    fontSize: 11, fontWeight: FontWeight.w700, color: avatarFg),
+                    fontSize: 11, fontWeight: FontWeight.w800, color: avatarFg),
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: PrototypeLayout.rowGap),
 
           // Nome + badges
           Expanded(
@@ -740,20 +592,21 @@ class _PlayerRow extends StatelessWidget {
                 Text(
                   player.playerName,
                   style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: isMe ? FontWeight.w600 : FontWeight.w500,
-                    color: isDark ? AppColors.slate100 : AppColors.slate900,
+                    // `.proto-list-row` usa 12/700 no nome, não 13/500.
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? AppColors.onDark : AppColors.lightText,
                   ),
                 ),
                 // Goleiro toggle (admin) ou ícone (não-admin)
                 if (isAdmin)
                   GestureDetector(
-                    onTap: mutating
+                    onTap: busy
                         ? null
                         : () => onSetRole(
                             player.matchPlayerId, !player.isGoalkeeper),
                     child: Opacity(
-                      opacity: mutating ? 0.5 : 1,
+                      opacity: busy ? 0.5 : 1,
                       child: Tooltip(
                         message: player.isGoalkeeper
                             ? 'Goleiro – toque para mudar para linha'
@@ -766,27 +619,37 @@ class _PlayerRow extends StatelessWidget {
                       ),
                     ),
                   )
-                else if (player.isGoalkeeper)
-                  renderGroupIcon(icons.goalkeeper,
-                      size: 14, color: AppColors.slate400),
+                else
+                  renderGroupIcon(
+                    player.isGoalkeeper ? icons.goalkeeper : icons.player,
+                    size: 14,
+                    color: AppColors.slate400,
+                  ),
 
+                // `Badge tone="accent"` = `.proto-chip.active`: preenchido no
+                // accent com texto sobre ele. O azul não existe na paleta do
+                // protótipo.
                 if (isMe)
                   Container(
+                    // Sem `alignment` e sem `height`: dentro de um `Wrap` o
+                    // filho recebe a largura máxima da linha, e um `Container`
+                    // com alignment vira um `Align` que a preenche inteira —
+                    // era isso que esticava o badge de ponta a ponta. Só com
+                    // padding ele encolhe para o texto.
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: isDark
-                          ? AppColors.blue500.withValues(alpha: 0.3)
-                          : AppColors.blue200,
-                      borderRadius: BorderRadius.circular(8),
+                      color: AppColors.accentOf(theme.brightness),
+                      borderRadius: BorderRadius.circular(999),
                     ),
+                    // `--on-accent` no tema claro é #17191e, quase preto — não
+                    // branco. Conferido com tools/resolve-style.mjs.
                     child: Text('Você',
                         style: TextStyle(
                             fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: isDark
-                                ? AppColors.blue200
-                                : AppColors.blue600)),
+                            fontWeight: FontWeight.w700,
+                            height: 1.2,
+                            color: AppColors.onAccentOf(theme.brightness))),
                   ),
                 if (isGuest)
                   Container(
@@ -798,49 +661,39 @@ class _PlayerRow extends StatelessWidget {
                           : AppColors.amber200,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                          color: AppColors.amber400.withValues(alpha: 0.5)),
+                          color: AppColors.warning.withValues(alpha: 0.5)),
                     ),
                     child: const Text('Convidado',
                         style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.orange700)),
+                            color: AppColors.warningLight)),
                   ),
               ],
             ),
           ),
 
-          // Botões
+          // `.proto-icon-btn`: 44×44, raio 12, borda e fundo neutros, ícone em
+          // text-secondary. O protótipo não tinge esses botões de verde e
+          // vermelho — a ação já é clara pelo ícone e pela aba.
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               if (showReject)
                 _ActionBtn(
                   icon: Icons.close,
-                  color: AppColors.rose500,
-                  bgColor: isDark
-                      ? AppColors.rose500.withValues(alpha: 0.15)
-                      : AppColors.rose50,
-                  borderColor: isDark
-                      ? AppColors.rose500.withValues(alpha: 0.4)
-                      : AppColors.rose200,
+                  isDark: isDark,
                   tooltip: 'Recusar',
-                  enabled: !mutating,
+                  enabled: !busy,
                   onTap: () => onReject(player.playerId),
                 ),
               if (showAccept) ...[
-                const SizedBox(width: 4),
+                const SizedBox(width: 6),
                 _ActionBtn(
                   icon: Icons.check,
-                  color: AppColors.emerald500,
-                  bgColor: isDark
-                      ? AppColors.emerald500.withValues(alpha: 0.15)
-                      : AppColors.emerald50,
-                  borderColor: isDark
-                      ? AppColors.emerald500.withValues(alpha: 0.4)
-                      : AppColors.emerald200,
+                  isDark: isDark,
                   tooltip: 'Aceitar',
-                  enabled: !mutating,
+                  enabled: !busy,
                   onTap: () => onAccept(player.playerId),
                 ),
               ],
@@ -852,18 +705,19 @@ class _PlayerRow extends StatelessWidget {
   }
 }
 
+/// `.proto-icon-btn`: 44×44, raio 12, borda de card sobre fundo de card e
+/// ícone de 15 em text-secondary. Antes eram quadrados de 28 tingidos de verde
+/// ou vermelho — fora da paleta e abaixo do alvo de toque mínimo do protótipo.
 class _ActionBtn extends StatelessWidget {
   final IconData icon;
-  final Color color, bgColor, borderColor;
+  final bool isDark;
   final String tooltip;
   final bool enabled;
   final VoidCallback onTap;
 
   const _ActionBtn({
     required this.icon,
-    required this.color,
-    required this.bgColor,
-    required this.borderColor,
+    required this.isDark,
     required this.tooltip,
     required this.enabled,
     required this.onTap,
@@ -872,19 +726,34 @@ class _ActionBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Tooltip(
         message: tooltip,
-        child: GestureDetector(
-          onTap: enabled ? onTap : null,
-          child: Opacity(
-            opacity: enabled ? 1.0 : 0.4,
-            child: Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: bgColor,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: borderColor),
+        child: Semantics(
+          button: true,
+          enabled: enabled,
+          label: tooltip,
+          child: InkWell(
+            onTap: enabled ? onTap : null,
+            borderRadius: BorderRadius.circular(PrototypeLayout.controlRadius),
+            child: Opacity(
+              opacity: enabled ? 1.0 : 0.4,
+              child: Container(
+                width: PrototypeLayout.minimumTouchTarget,
+                height: PrototypeLayout.minimumTouchTarget,
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.slate900 : AppColors.lightCard,
+                  borderRadius:
+                      BorderRadius.circular(PrototypeLayout.controlRadius),
+                  border: Border.all(
+                      color:
+                          isDark ? AppColors.slate700 : AppColors.lightBorder),
+                ),
+                child: Icon(
+                  icon,
+                  size: 15,
+                  color: isDark
+                      ? AppColors.darkTextSecondary
+                      : AppColors.lightTextSecondary,
+                ),
               ),
-              child: Icon(icon, size: 14, color: color),
             ),
           ),
         ),

@@ -93,8 +93,7 @@ class GroupDto extends Equatable {
       );
 
   @override
-  List<Object?> get props =>
-      [groupId, name, isActive, createdAt, playerCount];
+  List<Object?> get props => [groupId, name, isActive, createdAt, playerCount];
 }
 
 // ── UserFilter ────────────────────────────────────────────────────────────────

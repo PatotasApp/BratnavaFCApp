@@ -23,9 +23,7 @@ class MembersRemoteDataSource {
     // Response shape: { success, data: { page, pageSize, total, items: [...] } }
     // Fall back to flat list if the API changes shape in the future.
     final raw = _unwrapPagedList(res.data);
-    return raw
-        .map((e) => AppUser.fromJson(e as Map<String, dynamic>))
-        .toList();
+    return raw.map((e) => AppUser.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   Future<AppUser> updateUser(
@@ -35,17 +33,17 @@ class MembersRemoteDataSource {
     required String userName,
     required String email,
     String? phone,
-    String? birthDate,   // ISO-8601, e.g. "1990-05-20"
-    bool?   isActive,
+    String? birthDate, // ISO-8601, e.g. "1990-05-20"
+    bool? isActive,
   }) async {
     final body = <String, dynamic>{
       'firstName': firstName,
-      'lastName':  lastName,
-      'userName':  userName,
-      'email':     email,
-      if (phone     != null) 'phone':     phone,
+      'lastName': lastName,
+      'userName': userName,
+      'email': email,
+      if (phone != null) 'phone': phone,
       if (birthDate != null) 'birthDate': birthDate,
-      if (isActive  != null) 'isActive':  isActive,
+      if (isActive != null) 'isActive': isActive,
     };
     final res = await _dio.put(ApiConstants.userById(id), data: body);
     return AppUser.fromJson(_unwrapMap(res.data));
@@ -60,7 +58,7 @@ class MembersRemoteDataSource {
       ApiConstants.changePassword(id),
       data: {
         'currentPassword': currentPassword,
-        'newPassword':     newPassword,
+        'newPassword': newPassword,
       },
     );
     _throwIfError(res.data);
@@ -92,18 +90,18 @@ class MembersRemoteDataSource {
   Future<GroupPlayer> createPlayer(
     String groupId,
     String name,
-    bool   isGoalkeeper,
-    int    skillPoints,
-    bool   isGuest,
+    bool isGoalkeeper,
+    int skillPoints,
+    bool isGuest,
   ) async {
     final res = await _dio.post(
       '/api/Players',
       data: {
-        'groupId':      groupId,
-        'name':         name,
+        'groupId': groupId,
+        'name': name,
         'isGoalkeeper': isGoalkeeper,
-        'skillPoints':  skillPoints,
-        'isGuest':      isGuest,
+        'skillPoints': skillPoints,
+        'isGuest': isGuest,
       },
     );
     final raw = _unwrapMap(res.data);
@@ -114,18 +112,18 @@ class MembersRemoteDataSource {
     String id,
     String groupId,
     String name,
-    bool   isGoalkeeper,
-    int    skillPoints,
-    bool   isGuest,
+    bool isGoalkeeper,
+    int skillPoints,
+    bool isGuest,
   ) async {
     final res = await _dio.put(
       ApiConstants.playerOps(id),
       data: {
-        'groupId':      groupId,
-        'name':         name,
+        'groupId': groupId,
+        'name': name,
         'isGoalkeeper': isGoalkeeper,
-        'skillPoints':  skillPoints,
-        'isGuest':      isGuest,
+        'skillPoints': skillPoints,
+        'isGuest': isGuest,
       },
     );
     final raw = _unwrapMap(res.data);

@@ -18,15 +18,15 @@ final myPlayersProvider = FutureProvider.autoDispose<List<MyPlayer>>(
 
 // ── History query params ──────────────────────────────────────────────────────
 
-typedef PlayerHistoryArgs = ({String groupId, String playerId, int year});
+typedef PlayerHistoryArgs = ({String groupId, String playerId, int? year});
 
 // ── History list ──────────────────────────────────────────────────────────────
 
-final playerHistoryProvider =
-    FutureProvider.autoDispose.family<List<MatchHistoryItem>, PlayerHistoryArgs>(
+final playerHistoryProvider = FutureProvider.autoDispose
+    .family<List<MatchHistoryItem>, PlayerHistoryArgs>(
   (ref, args) => ref.watch(_playerHistoryDsProvider).fetchPlayerHistory(
-    groupId:  args.groupId,
-    playerId: args.playerId,
-    year:     args.year,
-  ),
+        groupId: args.groupId,
+        playerId: args.playerId,
+        year: args.year,
+      ),
 );

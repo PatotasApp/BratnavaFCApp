@@ -61,20 +61,24 @@ class HistoryRemoteDataSource {
               ))
           .toList();
 
-      // Try to prepend the active match if it exists and isn't in history yet.
+      // Coloca a partida em aberto no topo, se ainda não estiver no histórico.
+      // Usa `upcoming` (headers) em vez de `/current`, que traz o detalhe
+      // completo da partida só para lermos o id.
       try {
-        final currentRes = await _dio.get(ApiConstants.currentMatch(groupId));
-        final current = unwrapMap(currentRes.data);
-        if (current != null) {
+        final currentRes =
+            await _dio.get(ApiConstants.upcomingMatches(groupId));
+        final headers = unwrapList(currentRes.data);
+        if (headers.isNotEmpty) {
+          final current = headers.first as Map<String, dynamic>;
           final activeId =
-              (current['id'] ?? current['matchId'] ?? '').toString();
+              (current['matchId'] ?? current['id'] ?? '').toString();
           final alreadyPresent = list.any((m) => m.id == activeId);
           if (!alreadyPresent && activeId.isNotEmpty) {
             list.insert(0, HistoryMatch.fromJson(current, groupId: groupId));
           }
         }
       } catch (_) {
-        // No active match or 404 — ignore.
+        // Nenhuma partida em aberto — ignora.
       }
 
       return list;

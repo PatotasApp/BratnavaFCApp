@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/realtime/realtime_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../data/datasources/polls_remote_datasource.dart';
 import '../../domain/entities/poll_detail.dart';
@@ -235,7 +236,7 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => ClosePollSheet(pollTitle: _poll.title),
     );
     if (result == null) return;
@@ -370,7 +371,7 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => _AddGuestSheet(
         onAdd: (name, isAdult) => _addGuest(name, isAdult),
       ),
@@ -500,7 +501,7 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
                       width: 14,
                       height: 14,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
+                          strokeWidth: 2, color: AppColors.onDark))
                   : const Icon(Icons.check_rounded, size: 16),
               label: const Text('Salvar'),
             ),
@@ -548,7 +549,7 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
       minChildSize: 0.5,
       builder: (_, controller) => Container(
         decoration: BoxDecoration(
-          color: isDark ? AppColors.slate900 : Colors.white,
+          color: isDark ? AppColors.slate900 : AppColors.onDark,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
@@ -583,7 +584,7 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
                                   fontSize: 18,
                                   fontWeight: FontWeight.w800,
                                   color: isDark
-                                      ? Colors.white
+                                      ? AppColors.onDark
                                       : AppColors.slate900,
                                 )),
                             if (_poll.description != null)
@@ -617,7 +618,7 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
                       _InfoChip(
                           icon: Icons.attach_money,
                           label: cost,
-                          color: Colors.amber.shade700),
+                          color: AppColors.warningLight),
                     _InfoChip(
                         icon: Icons.groups_2_outlined,
                         label:
@@ -627,8 +628,9 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
                         icon: Icons.schedule,
                         label:
                             'Prazo: ${_formatDate(_poll.deadlineDate)}${_poll.deadlineTime != null ? ' às ${_poll.deadlineTime}' : ''}',
-                        color:
-                            _poll.deadlinePassed ? Colors.red.shade400 : null,
+                        color: _poll.deadlinePassed
+                            ? AppColors.prototypeDanger
+                            : null,
                       ),
                   ]),
                   if (widget.isAdmin && _detailsOpen) ...[
@@ -658,10 +660,10 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
                                 ? '✕'
                                 : '~';
                         final selBg = opt.text == 'Sim'
-                            ? Colors.green.shade600
+                            ? AppColors.primaryPressed
                             : opt.text == 'Não'
-                                ? Colors.red.shade600
-                                : Colors.amber.shade600;
+                                ? AppColors.prototypeDanger
+                                : AppColors.warningLight;
                         return Expanded(
                           child: Padding(
                             padding: const EdgeInsets.only(right: 8),
@@ -745,6 +747,7 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
                   // ── Tab: Presenças ──
                   if (_tab == 1)
                     _PresencasContent(
+                      groupId: widget.groupId,
                       poll: _poll,
                       goingOptionId: _goingOptionId,
                       guestsForPlayer: _guestsForPlayer,
@@ -760,6 +763,7 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
                       isDark: isDark,
                       child: _adminOpen
                           ? _AdminContent(
+                              groupId: widget.groupId,
                               poll: _poll,
                               saving: _saving,
                               selections: _memberSelections,
@@ -814,8 +818,8 @@ class _TabChip extends StatelessWidget {
           border: Border(
             bottom: BorderSide(
               color: selected
-                  ? (isDark ? Colors.white : AppColors.slate900)
-                  : Colors.transparent,
+                  ? (isDark ? AppColors.onDark : AppColors.slate900)
+                  : AppColors.transparent,
               width: 2,
             ),
           ),
@@ -826,7 +830,7 @@ class _TabChip extends StatelessWidget {
             fontSize: 12,
             fontWeight: FontWeight.w500,
             color: selected
-                ? (isDark ? Colors.white : AppColors.slate900)
+                ? (isDark ? AppColors.onDark : AppColors.slate900)
                 : (isDark ? AppColors.slate500 : AppColors.slate400),
           ),
         ),
@@ -884,14 +888,16 @@ class _GuestSection extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: isDark ? Colors.white : AppColors.slate900,
+                      color: isDark ? AppColors.onDark : AppColors.slate900,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text('+ Adicionar',
                         style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
-                            color: isDark ? AppColors.slate900 : Colors.white)),
+                            color: isDark
+                                ? AppColors.slate900
+                                : AppColors.onDark)),
                   ),
                 )
               else
@@ -975,12 +981,14 @@ class _GuestSection extends StatelessWidget {
 }
 
 class _PresencasContent extends StatelessWidget {
+  final String groupId;
   final PollDetail poll;
   final String? goingOptionId;
   final List<PollGuest> Function(String) guestsForPlayer;
   final bool isDark;
 
   const _PresencasContent({
+    required this.groupId,
     required this.poll,
     required this.goingOptionId,
     required this.guestsForPlayer,
@@ -1022,13 +1030,20 @@ class _PresencasContent extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Row(children: [
                   Icon(Icons.check_circle_outline,
-                      size: 15, color: Colors.green.shade500),
+                      size: 15, color: AppColors.green500),
                   const SizedBox(width: 6),
-                  Text(vote.playerName,
+                  Expanded(
+                    child: ConfiguredPlayerName(
+                      groupId: groupId,
+                      name: vote.playerName,
+                      iconSize: 13,
                       style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: nameColor)),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: nameColor,
+                      ),
+                    ),
+                  ),
                 ]),
               ),
               ...guests.map((g) => Padding(
@@ -1075,7 +1090,7 @@ class _AddGuestSheetState extends State<_AddGuestSheet> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? AppColors.slate900 : Colors.white;
+    final bg = isDark ? AppColors.slate900 : AppColors.onDark;
     final border = isDark ? AppColors.slate700 : AppColors.slate200;
 
     return Padding(
@@ -1099,8 +1114,8 @@ class _AddGuestSheetState extends State<_AddGuestSheet> {
                 height: 4,
                 decoration: BoxDecoration(
                   color: isDark
-                      ? Colors.white.withValues(alpha: 0.2)
-                      : Colors.black.withValues(alpha: 0.15),
+                      ? AppColors.onDark.withValues(alpha: 0.2)
+                      : AppColors.darkApp.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(2),
                 ),
               )),
@@ -1109,7 +1124,7 @@ class _AddGuestSheetState extends State<_AddGuestSheet> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.white : AppColors.slate900,
+                    color: isDark ? AppColors.onDark : AppColors.slate900,
                   )),
               const SizedBox(height: 16),
               TextField(
@@ -1157,7 +1172,7 @@ class _AddGuestSheetState extends State<_AddGuestSheet> {
                   onPressed: _submit,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.slate900,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.onDark,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
@@ -1208,7 +1223,7 @@ class _TypeButton extends StatelessWidget {
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: selected
-                  ? Colors.white
+                  ? AppColors.onDark
                   : (isDark ? AppColors.slate400 : AppColors.slate600),
             )),
       ),
@@ -1247,7 +1262,7 @@ class _RsvpButton extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
         decoration: BoxDecoration(
-          color: isSelected ? selectedBg : Colors.transparent,
+          color: isSelected ? selectedBg : AppColors.transparent,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isSelected ? selectedBorder : idleBorder,
@@ -1261,14 +1276,14 @@ class _RsvpButton extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: isSelected ? Colors.white : idleText,
+                  color: isSelected ? AppColors.onDark : idleText,
                 )),
             const SizedBox(width: 5),
             Text(label,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
-                  color: isSelected ? Colors.white : idleText,
+                  color: isSelected ? AppColors.onDark : idleText,
                 )),
           ],
         ),
@@ -1359,16 +1374,16 @@ class _StatusChip extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: isOpen ? Colors.green.shade50 : AppColors.slate100,
+          color: isOpen ? AppColors.green50 : AppColors.slate100,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-              color: isOpen ? Colors.green.shade200 : AppColors.slate200),
+              color: isOpen ? AppColors.green200 : AppColors.slate200),
         ),
         child: Text(isOpen ? 'Aberto' : 'Encerrado',
             style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: isOpen ? Colors.green.shade700 : AppColors.slate500)),
+                color: isOpen ? AppColors.primaryPressed : AppColors.slate500)),
       );
 }
 
@@ -1445,6 +1460,7 @@ class _AdminPanel extends StatelessWidget {
 }
 
 class _AdminContent extends StatelessWidget {
+  final String groupId;
   final PollDetail poll;
   final bool saving;
   final Map<String, String?> selections;
@@ -1457,6 +1473,7 @@ class _AdminContent extends StatelessWidget {
   final bool isDark;
 
   const _AdminContent({
+    required this.groupId,
     required this.poll,
     required this.saving,
     required this.selections,
@@ -1498,12 +1515,17 @@ class _AdminContent extends StatelessWidget {
                 child: Row(
                   children: [
                     Expanded(
-                        child: Text(m.playerName,
-                            style: TextStyle(
-                                fontSize: 13,
-                                color: isDark
-                                    ? AppColors.slate200
-                                    : AppColors.slate700))),
+                      child: ConfiguredPlayerName(
+                        groupId: groupId,
+                        name: m.playerName,
+                        iconSize: 13,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color:
+                              isDark ? AppColors.slate200 : AppColors.slate700,
+                        ),
+                      ),
+                    ),
                     DropdownButton<String?>(
                       value: current,
                       hint: const Text('—', style: TextStyle(fontSize: 13)),
@@ -1550,7 +1572,7 @@ class _AdminContent extends StatelessWidget {
                 ),
                 style: OutlinedButton.styleFrom(
                   foregroundColor:
-                      poll.allowGuests ? Colors.purple.shade700 : null,
+                      poll.allowGuests ? AppColors.infoLight : null,
                 ),
               ),
               if (poll.isOpen)
@@ -1559,7 +1581,7 @@ class _AdminContent extends StatelessWidget {
                   icon: const Icon(Icons.lock_outlined, size: 15),
                   label: const Text('Encerrar', style: TextStyle(fontSize: 13)),
                   style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.orange.shade700),
+                      foregroundColor: AppColors.warningLight),
                 )
               else
                 OutlinedButton.icon(
@@ -1571,7 +1593,8 @@ class _AdminContent extends StatelessWidget {
                 onPressed: saving ? null : onDelete,
                 icon: const Icon(Icons.delete_outline, size: 15),
                 label: const Text('Excluir', style: TextStyle(fontSize: 13)),
-                style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.prototypeDanger),
               ),
             ],
           ),

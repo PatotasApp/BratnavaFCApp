@@ -17,12 +17,12 @@ class RegisterPage extends ConsumerStatefulWidget {
 }
 
 class _RegisterPageState extends ConsumerState<RegisterPage> {
-  final _formKey       = GlobalKey<FormState>();
+  final _formKey = GlobalKey<FormState>();
   final _firstNameCtrl = TextEditingController();
-  final _lastNameCtrl  = TextEditingController();
-  final _userNameCtrl  = TextEditingController();
-  final _emailCtrl     = TextEditingController();
-  final _passwordCtrl  = TextEditingController();
+  final _lastNameCtrl = TextEditingController();
+  final _userNameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
 
   bool _success = false;
 
@@ -40,18 +40,19 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     if (!_formKey.currentState!.validate()) return;
 
     await ref.read(authNotifierProvider.notifier).register(
-      userName:  _userNameCtrl.text.trim(),
-      firstName: _firstNameCtrl.text.trim(),
-      lastName:  _lastNameCtrl.text.trim(),
-      email:     _emailCtrl.text.trim(),
-      password:  _passwordCtrl.text,
-    );
+          userName: _userNameCtrl.text.trim(),
+          firstName: _firstNameCtrl.text.trim(),
+          lastName: _lastNameCtrl.text.trim(),
+          email: _emailCtrl.text.trim(),
+          password: _passwordCtrl.text,
+        );
 
     if (!mounted) return;
 
     final state = ref.read(authNotifierProvider);
     state.whenOrNull(
-      error: (e, _) => _showError(extractDioError(e, 'Não foi possível criar a conta.')),
+      error: (e, _) =>
+          _showError(extractDioError(e, 'Não foi possível criar a conta.')),
       data: (_) async {
         setState(() => _success = true);
         await Future.delayed(const Duration(milliseconds: 600));
@@ -65,11 +66,11 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       ..clearSnackBars()
       ..showSnackBar(
         SnackBar(
-          content:         Text(msg),
+          content: Text(msg),
           backgroundColor: AppColors.rose600,
-          behavior:        SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10)),
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
   }
@@ -77,7 +78,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     final isLoading = ref.watch(authNotifierProvider).isLoading;
-    final isDark    = Theme.of(context).brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       body: SafeArea(
@@ -105,19 +106,19 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                       Text(
                         'Já tem conta? ',
                         style: TextStyle(
-                          color:    isDark ? AppColors.slate400 : AppColors.slate500,
+                          color:
+                              isDark ? AppColors.slate400 : AppColors.slate500,
                           fontSize: 13,
                         ),
                       ),
-                      GestureDetector(
-                        onTap: () => context.go(
+                      TextButton(
+                        onPressed: () => context.go(
                           widget.addMode ? '/login?add=1' : '/login',
                         ),
-                        child: Text(
+                        child: const Text(
                           'Entrar',
                           style: TextStyle(
-                            color:      isDark ? Colors.white : AppColors.slate900,
-                            fontSize:   13,
+                            fontSize: 13,
                             fontWeight: FontWeight.w600,
                             decoration: TextDecoration.underline,
                           ),
@@ -138,9 +139,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color:        AppColors.emerald50,
+        color: AppColors.emerald50,
         borderRadius: BorderRadius.circular(16),
-        border:       const Border.fromBorderSide(
+        border: const Border.fromBorderSide(
             BorderSide(color: AppColors.emerald200)),
       ),
       child: const Row(
@@ -152,9 +153,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
             child: Text(
               'Usuário criado! Faça login.',
               style: TextStyle(
-                color:      AppColors.emerald700,
+                color: AppColors.emerald700,
                 fontWeight: FontWeight.w600,
-                fontSize:   14,
+                fontSize: 14,
               ),
             ),
           ),
@@ -167,18 +168,18 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color:        isDark ? AppColors.slate800 : Colors.white,
+        color: isDark ? AppColors.slate800 : AppColors.onDark,
         borderRadius: BorderRadius.circular(16),
-        border:       Border.all(
+        border: Border.all(
           color: isDark ? AppColors.slate700 : AppColors.slate200,
         ),
         boxShadow: isDark
             ? null
             : [
                 BoxShadow(
-                  color:      Colors.black.withValues(alpha: 0.04),
+                  color: AppColors.darkApp.withValues(alpha: 0.04),
                   blurRadius: 8,
-                  offset:     const Offset(0, 2),
+                  offset: const Offset(0, 2),
                 ),
               ],
       ),
@@ -208,10 +209,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
               children: [
                 Expanded(
                   child: AppTextField(
-                    label:      'Nome',
-                    hint:       'João',
+                    label: 'Nome',
+                    hint: 'João',
                     controller: _firstNameCtrl,
-                    validator:  (v) => v == null || v.trim().length < 2
+                    validator: (v) => v == null || v.trim().length < 2
                         ? 'Mínimo 2 caracteres.'
                         : null,
                   ),
@@ -219,10 +220,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: AppTextField(
-                    label:      'Sobrenome',
-                    hint:       'Silva',
+                    label: 'Sobrenome',
+                    hint: 'Silva',
                     controller: _lastNameCtrl,
-                    validator:  (v) => v == null || v.trim().length < 2
+                    validator: (v) => v == null || v.trim().length < 2
                         ? 'Mínimo 2 caracteres.'
                         : null,
                   ),
@@ -232,22 +233,23 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
             const SizedBox(height: 16),
 
             AppTextField(
-              label:      'Nome de usuário',
-              hint:       'joaosilva',
+              label: 'Nome de usuário',
+              hint: 'joaosilva',
               controller: _userNameCtrl,
-              validator:  (v) => v == null || v.trim().length < 2
+              validator: (v) => v == null || v.trim().length < 2
                   ? 'Mínimo 2 caracteres.'
                   : null,
             ),
             const SizedBox(height: 16),
 
             AppTextField(
-              label:        'E-mail',
-              hint:         'seu@email.com',
-              controller:   _emailCtrl,
+              label: 'E-mail',
+              hint: 'seu@email.com',
+              controller: _emailCtrl,
               keyboardType: TextInputType.emailAddress,
               validator: (v) {
-                if (v == null || v.trim().isEmpty) return 'E-mail é obrigatório.';
+                if (v == null || v.trim().isEmpty)
+                  return 'E-mail é obrigatório.';
                 if (!RegExp(r'^[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}$')
                     .hasMatch(v.trim())) {
                   return 'E-mail inválido.';
@@ -258,10 +260,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
             const SizedBox(height: 16),
 
             AppTextField(
-              label:           'Senha',
-              hint:            '••••••',
-              controller:      _passwordCtrl,
-              obscureText:     true,
+              label: 'Senha',
+              hint: '••••••',
+              controller: _passwordCtrl,
+              obscureText: true,
               textInputAction: TextInputAction.done,
               onEditingComplete: _submit,
               validator: (v) =>
@@ -270,10 +272,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
             const SizedBox(height: 24),
 
             AppButton(
-              label:     'Criar conta',
+              label: 'Criar conta',
               onPressed: _submit,
               isLoading: isLoading,
-              width:     double.infinity,
+              width: double.infinity,
             ),
           ],
         ),
@@ -285,19 +287,19 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     return Column(
       children: [
         Container(
-          width:  56,
+          width: 56,
           height: 56,
           decoration: BoxDecoration(
-            color:        isDark ? AppColors.slate800 : AppColors.slate900,
+            color: isDark ? AppColors.slate800 : AppColors.slate900,
             borderRadius: BorderRadius.circular(14),
           ),
           alignment: Alignment.center,
           child: const Text(
             'BFC',
             style: TextStyle(
-              color:         Colors.white,
-              fontWeight:    FontWeight.w800,
-              fontSize:      18,
+              color: AppColors.onDark,
+              fontWeight: FontWeight.w800,
+              fontSize: 18,
               letterSpacing: 1,
             ),
           ),

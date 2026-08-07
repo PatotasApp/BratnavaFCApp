@@ -8,6 +8,7 @@ class AbsenceDto {
   final String createdAt;
   final String? playerId;
   final String? playerName;
+  final bool isGoalkeeper;
 
   const AbsenceDto({
     required this.id,
@@ -19,6 +20,7 @@ class AbsenceDto {
     required this.createdAt,
     this.playerId,
     this.playerName,
+    this.isGoalkeeper = false,
   });
 
   factory AbsenceDto.fromJson(Map<String, dynamic> json) => AbsenceDto(
@@ -35,6 +37,9 @@ class AbsenceDto {
         createdAt: (json['createdAt'] ?? json['CreatedAt'] ?? '').toString(),
         playerId: (json['playerId'] ?? json['PlayerId'])?.toString(),
         playerName: (json['playerName'] ?? json['PlayerName'])?.toString(),
+        isGoalkeeper:
+            (json['isGoalkeeper'] ?? json['IsGoalkeeper'] ?? false) as bool? ??
+                false,
       );
 }
 

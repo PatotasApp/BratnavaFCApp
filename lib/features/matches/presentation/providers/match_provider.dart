@@ -192,6 +192,13 @@ class MatchNotifier extends StateNotifier<MatchState> {
         }
       case MatchStep.post:
       case MatchStep.done:
+        // O placar final também precisa das cores e dos nomes definidos na
+        // escalação. O payload de pós-jogo não os inclui.
+        final matchmaking = await _ds
+            .fetchMatchmaking(groupId, matchId)
+            .catchError((_) => null);
+        if (!mounted) return;
+        _applyMatchmaking(matchmaking);
         final d =
             await _ds.fetchPostgame(groupId, matchId).catchError((_) => null);
         if (!mounted) return;
@@ -208,22 +215,23 @@ class MatchNotifier extends StateNotifier<MatchState> {
     if (groupId.isEmpty) return;
     state = state.copyWith(loading: true, error: null);
     try {
-      // Carrega cores, configurações e lista de partidas em paralelo
+      // Carrega cores, configurações e lista de partidas em paralelo.
+      //
+      // `/current` foi removido daqui: ele devolve o MatchDetailsDto inteiro
+      // (escalação, gols, times, aceitação, pós-jogo) só para extrairmos id,
+      // stepKey e placeName — que o `upcoming` já traz num payload pequeno.
+      // Era a chamada mais lenta da abertura do app. É o mesmo caminho que o
+      // site usa: upcoming → escolhe a partida → carrega só a etapa atual.
       final results = await Future.wait([
         _ds.fetchTeamColors(groupId).catchError((_) => <TeamColorInfo>[]),
         _ds.fetchGroupSettings(groupId).catchError((_) => null),
-        _ds.fetchCurrentMatchStub(groupId).catchError((e) {
-          if (e is DioException && e.response?.statusCode == 404) return null;
-          throw e;
-        }),
         _ds.fetchUpcomingMatches(groupId).catchError((_) => <MatchHeaderDto>[]),
       ]);
       if (!mounted) return;
 
       final colors = results[0] as List<TeamColorInfo>;
       final settings = results[1] as MatchGroupSettings?;
-      final stub = results[2] as Map<String, dynamic>?;
-      final upcoming = results[3] as List<MatchHeaderDto>;
+      final upcoming = results[2] as List<MatchHeaderDto>;
 
       state = state.copyWith(
         availableColors: colors,
@@ -239,32 +247,43 @@ class MatchNotifier extends StateNotifier<MatchState> {
         );
       }
 
-      // Sem partida ativa → estado create
-      if (stub == null) {
-        state = state.copyWith(matchId: null, step: MatchStep.create);
+      // Sem partida em aberto → estado create
+      if (upcoming.isEmpty) {
+        state = state.copyWith(
+          matchId: null,
+          step: MatchStep.create,
+          selectedMatchIdx: 0,
+        );
         return;
       }
 
-      final matchId =
-          _id(stub['id'] ?? stub['matchId'] ?? stub['Id'] ?? stub['MatchId']);
-      if (matchId.isEmpty) {
+      // Mantém a partida já selecionada quando ela continua na lista; senão
+      // cai na primeira. Mesma prioridade que o site aplica.
+      final previousId = state.matchId;
+      final keptIdx = previousId == null
+          ? -1
+          : upcoming.indexWhere((h) => h.matchId == previousId);
+      final idx = keptIdx >= 0
+          ? keptIdx
+          : state.selectedMatchIdx.clamp(0, upcoming.length - 1);
+      final header = upcoming[idx];
+
+      if (header.matchId.isEmpty) {
         state = state.copyWith(matchId: null, step: MatchStep.create);
         return;
       }
-
-      final rawStatus = stub['status'] ?? stub['Status'] ?? 0;
-      final rawKey = stub['stepKey'] ?? stub['StepKey'];
-      final step = rawKey != null
-          ? MatchStep.fromKey(rawKey.toString())
-          : MatchStep.fromStatus((rawStatus as num).toInt());
 
       state = state.copyWith(
-        matchId: matchId,
-        step: step,
-        placeName: stub['placeName'] as String? ?? stub['PlaceName'] as String?,
+        matchId: header.matchId,
+        step: header.step,
+        selectedMatchIdx: idx,
+        placeName: header.placeName,
+        canRewind: header.canRewind,
+        teamAGoals: header.teamAGoals,
+        teamBGoals: header.teamBGoals,
       );
 
-      await _loadStepPayload(matchId, step);
+      await _loadStepPayload(header.matchId, header.step);
       if (!mounted) return;
 
       // Auto-refresh para não-admin
@@ -360,10 +379,14 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await loadInitial();
       return true;
     } catch (e) {
-      state = state.copyWith(
-          mutating: false,
-          error: extractDioError(e, 'Falha ao criar partida.'));
+      state =
+          state.copyWith(error: extractDioError(e, 'Falha ao criar partida.'));
       return false;
+    } finally {
+      // `loadInitial()` mexe em `loading`, nunca em `mutating`. Sem este
+      // `finally`, o caminho de sucesso saía com `mutating: true` preso e o
+      // botão girava para sempre.
+      state = state.copyWith(mutating: false);
     }
   }
 
@@ -388,35 +411,53 @@ class MatchNotifier extends StateNotifier<MatchState> {
 
   // ── Step 2 – Aceitação ────────────────────────────────────────────────────
 
-  Future<void> acceptInvite(String playerId) async {
-    final matchId = state.matchId;
-    if (matchId == null) return;
-    state = state.copyWith(mutating: true);
+  /// Marca/desmarca um jogador como "em voo" sem tocar nos demais.
+  void _setPlayerPending(String playerId, bool pending) {
+    final next = Set<String>.from(state.pendingPlayerIds);
+    if (pending) {
+      next.add(playerId);
+    } else {
+      next.remove(playerId);
+    }
+    state = state.copyWith(pendingPlayerIds: next);
+  }
+
+  /// Aceita/recusa um convite. Trava só a linha daquele jogador — o admin
+  /// costuma percorrer a lista aceitando vários seguidos, e travar a tela
+  /// inteira a cada toque tornava isso um de cada vez.
+  Future<void> _respondInvite(
+    String playerId, {
+    required Future<void> Function() call,
+    required String errorMessage,
+  }) async {
+    if (state.matchId == null) return;
+    // Toque repetido na mesma linha não dispara um segundo request.
+    if (state.pendingPlayerIds.contains(playerId)) return;
+
+    _setPlayerPending(playerId, true);
     try {
-      await _ds.acceptInvite(groupId, matchId, playerId);
+      await call();
       await refresh();
     } catch (e) {
-      state = state.copyWith(
-          error: extractDioError(e, 'Falha ao aceitar convite.'));
+      state = state.copyWith(error: extractDioError(e, errorMessage));
     } finally {
-      state = state.copyWith(mutating: false);
+      // `refresh()` reconstrói o estado, então o jogador precisa sair do
+      // conjunto depois dela — senão a linha ficaria travada para sempre.
+      _setPlayerPending(playerId, false);
     }
   }
 
-  Future<void> rejectInvite(String playerId) async {
-    final matchId = state.matchId;
-    if (matchId == null) return;
-    state = state.copyWith(mutating: true);
-    try {
-      await _ds.rejectInvite(groupId, matchId, playerId);
-      await refresh();
-    } catch (e) {
-      state = state.copyWith(
-          error: extractDioError(e, 'Falha ao recusar convite.'));
-    } finally {
-      state = state.copyWith(mutating: false);
-    }
-  }
+  Future<void> acceptInvite(String playerId) => _respondInvite(
+        playerId,
+        call: () => _ds.acceptInvite(groupId, state.matchId!, playerId),
+        errorMessage: 'Falha ao aceitar convite.',
+      );
+
+  Future<void> rejectInvite(String playerId) => _respondInvite(
+        playerId,
+        call: () => _ds.rejectInvite(groupId, state.matchId!, playerId),
+        errorMessage: 'Falha ao recusar convite.',
+      );
 
   Future<void> goToMatchmaking() async {
     final matchId = state.matchId;
@@ -607,18 +648,23 @@ class MatchNotifier extends StateNotifier<MatchState> {
     }
   }
 
+  /// Também é ação por linha — segue a mesma regra do aceite/recusa e trava
+  /// apenas o jogador afetado. A chave aqui é o `matchPlayerId`, que convive
+  /// com os `playerId` no mesmo conjunto: são ids distintos, sem colisão.
   Future<void> setPlayerRole(String matchPlayerId, bool isGoalkeeper) async {
-    final matchId = state.matchId;
-    if (matchId == null) return;
-    state = state.copyWith(mutating: true);
+    if (state.matchId == null) return;
+    if (state.pendingPlayerIds.contains(matchPlayerId)) return;
+
+    _setPlayerPending(matchPlayerId, true);
     try {
-      await _ds.setPlayerRole(groupId, matchId, matchPlayerId, isGoalkeeper);
+      await _ds.setPlayerRole(
+          groupId, state.matchId!, matchPlayerId, isGoalkeeper);
       await refresh();
     } catch (e) {
       state = state.copyWith(
           error: extractDioError(e, 'Falha ao alterar função do jogador.'));
     } finally {
-      state = state.copyWith(mutating: false);
+      _setPlayerPending(matchPlayerId, false);
     }
   }
 
@@ -832,8 +878,12 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await loadInitial();
     } catch (e) {
       state = state.copyWith(
-          mutating: false,
           error: extractDioError(e, 'Falha ao excluir partida.'));
+    } finally {
+      // Mesmo caso do `createMatch`: no sucesso o `mutating` ficava preso e a
+      // tela de criar partida, para onde a exclusão leva de volta, abria com o
+      // botão "Criar Partida" girando e inerte.
+      state = state.copyWith(mutating: false);
     }
   }
 
@@ -928,7 +978,8 @@ final matchNotifierProvider =
   final acc = ref.watch(accountStoreProvider.select((s) => s.activeAccount));
   // Fallback: usa groupId do player ativo se activeGroupId ainda não está persistido.
   final player = ref.watch(activePlayerProvider);
-  final groupId = acc?.activeGroupId ?? player?.groupId ?? '';
+  // Ver dashboard_page: o grupo sai do jogador, senão as rotas dão 403.
+  final groupId = player?.groupId ?? acc?.activeGroupId ?? '';
   final isAdmin = (acc?.isAdmin ?? false) ||
       (groupId.isNotEmpty && (acc?.isGroupAdmin(groupId) ?? false));
   return MatchNotifier(ref.read(matchDsProvider), groupId, isAdmin);

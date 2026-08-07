@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
@@ -183,7 +185,7 @@ class _AbsencesPageState extends ConsumerState<AbsencesPage> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => AbsenceFormSheet(
         onSave: (dto) async {
           await _ds.create(dto);
@@ -203,7 +205,7 @@ class _AbsencesPageState extends ConsumerState<AbsencesPage> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => AbsenceFormSheet(
         initial: absence,
         onSave: (dto) async {
@@ -252,7 +254,10 @@ class _AbsencesPageState extends ConsumerState<AbsencesPage> {
   Widget build(BuildContext context) {
     final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
-    final groupId = account?.activeGroupId ?? activePlayer?.groupId ?? '';
+    // O jogador manda no grupo: `activeGroupId` da conta pode apontar
+    // para uma patota sem jogador nosso, e aí toda rota por grupo
+    // responde 403. Ver dashboard_page para o diagnóstico completo.
+    final groupId = activePlayer?.groupId ?? account?.activeGroupId ?? '';
     final activePlayerId =
         account?.activePlayerId ?? activePlayer?.playerId ?? '';
 
@@ -268,128 +273,84 @@ class _AbsencesPageState extends ConsumerState<AbsencesPage> {
         _upcoming.items.where((a) => a.startDate.compareTo(today) > 0).toList();
     final groupedUpcoming = _groupByMonth(upcoming);
 
+    // Rota do shell sem AppBar: precisa respeitar o inset da status bar.
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: groupId.isEmpty
-            ? () async {}
-            : () async {
-                await _refresh(groupId);
-              },
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
-                child: _Header(
-                  loading: _loading,
-                  total: _upcoming.total,
-                  onAddTap: groupId.isEmpty ? null : () => _openCreate(groupId),
-                ),
-              ),
-            ),
-            if (groupId.isEmpty)
-              const SliverToBoxAdapter(
-                child: _InfoState(
-                    message: 'Selecione uma patota para ver ausências.'),
-              )
-            else if (_loading)
-              const SliverToBoxAdapter(child: _SkeletonList())
-            else if (_error != null)
-              SliverToBoxAdapter(child: _InfoState(message: _error!))
-            else
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: groupId.isEmpty
+              ? () async {}
+              : () async {
+                  await _refresh(groupId);
+                },
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (_upcoming.items.isEmpty)
-                        const _EmptyState()
-                      else ...[
-                        if (ongoing.isNotEmpty) ...[
-                          _SectionTitle(
-                            label: 'Fora agora',
-                            count: ongoing.length,
-                            active: true,
-                          ),
-                          const SizedBox(height: 8),
-                          ...ongoing.map(
-                            (a) => Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: _AbsenceCard(
-                                absence: a,
-                                active: true,
-                                isSelf: a.playerId == activePlayerId,
-                                onEdit: () => _openEdit(groupId, a),
-                                onDelete: () => _delete(groupId, a),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                        ...groupedUpcoming.map((group) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 14),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _SectionTitle(label: group.label),
-                                const SizedBox(height: 8),
-                                ...group.items.map(
-                                  (a) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
-                                    child: _AbsenceCard(
-                                      absence: a,
-                                      active: false,
-                                      isSelf: a.playerId == activePlayerId,
-                                      onEdit: () => _openEdit(groupId, a),
-                                      onDelete: () => _delete(groupId, a),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                        _LoadMoreButton(
-                          loaded: _upcoming.items.length,
-                          total: _upcoming.total,
-                          loading: _loadingMore,
-                          onTap: () => _loadMoreUpcoming(groupId),
-                        ),
-                      ],
-                      const SizedBox(height: 4),
-                      _PastHeader(
-                        total: _pastLoaded ? _past.total : null,
-                        expanded: _showPast,
-                        loading: _loadingPast && !_pastLoaded,
-                        onTap: () => _togglePast(groupId),
-                      ),
-                      if (_showPast) ...[
-                        const SizedBox(height: 8),
-                        if (_loadingPast && !_pastLoaded)
-                          const _SkeletonList(compact: true)
-                        else if (_past.items.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 2),
-                            child: Text(
-                              'Nenhuma ausência encerrada.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.slate400,
-                              ),
-                            ),
-                          )
+                  padding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
+                  child: _Header(
+                    loading: _loading,
+                    total: _upcoming.total,
+                    onAddTap:
+                        groupId.isEmpty ? null : () => _openCreate(groupId),
+                  ),
+                ),
+              ),
+              if (groupId.isEmpty)
+                const SliverToBoxAdapter(
+                  child: _InfoState(
+                      message: 'Selecione uma patota para ver ausências.'),
+                )
+              else if (_loading)
+                const SliverToBoxAdapter(child: _SkeletonList())
+              else if (_error != null)
+                SliverToBoxAdapter(child: _InfoState(message: _error!))
+              else
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_upcoming.items.isEmpty)
+                          const _EmptyState()
                         else ...[
-                          Opacity(
-                            opacity: 0.62,
-                            child: Column(
-                              children: _past.items
-                                  .map(
+                          if (ongoing.isNotEmpty) ...[
+                            _SectionTitle(
+                              label: 'Fora agora',
+                              count: ongoing.length,
+                              active: true,
+                            ),
+                            const SizedBox(height: 8),
+                            ...ongoing.map(
+                              (a) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _AbsenceCard(
+                                  groupId: groupId,
+                                  absence: a,
+                                  active: true,
+                                  isSelf: a.playerId == activePlayerId,
+                                  onEdit: () => _openEdit(groupId, a),
+                                  onDelete: () => _delete(groupId, a),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          ...groupedUpcoming.map((group) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 14),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _SectionTitle(label: group.label),
+                                  const SizedBox(height: 8),
+                                  ...group.items.map(
                                     (a) => Padding(
                                       padding: const EdgeInsets.only(bottom: 8),
                                       child: _AbsenceCard(
+                                        groupId: groupId,
                                         absence: a,
                                         active: false,
                                         isSelf: a.playerId == activePlayerId,
@@ -397,23 +358,73 @@ class _AbsencesPageState extends ConsumerState<AbsencesPage> {
                                         onDelete: () => _delete(groupId, a),
                                       ),
                                     ),
-                                  )
-                                  .toList(),
-                            ),
-                          ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
                           _LoadMoreButton(
-                            loaded: _past.items.length,
-                            total: _past.total,
-                            loading: _loadingPast,
-                            onTap: () => _loadPast(groupId, append: true),
+                            loaded: _upcoming.items.length,
+                            total: _upcoming.total,
+                            loading: _loadingMore,
+                            onTap: () => _loadMoreUpcoming(groupId),
                           ),
                         ],
+                        // O protótipo simplesmente não desenha a seção quando ela
+                        // está vazia. Aqui a contagem só chega depois do
+                        // carregamento preguiçoso, então mantemos o cabeçalho
+                        // enquanto não se sabe e o removemos quando volta zero —
+                        // em vez de deixar "ENCERRADAS · 0" ocupando espaço.
+                        if (!_pastLoaded || _past.total > 0) ...[
+                          const SizedBox(height: 4),
+                          _PastHeader(
+                            total: _pastLoaded ? _past.total : null,
+                            expanded: _showPast,
+                            loading: _loadingPast && !_pastLoaded,
+                            onTap: () => _togglePast(groupId),
+                          ),
+                          if (_showPast) ...[
+                            const SizedBox(height: 8),
+                            if (_loadingPast && !_pastLoaded)
+                              const _SkeletonList(compact: true)
+                            else ...[
+                              Opacity(
+                                opacity: 0.62,
+                                child: Column(
+                                  children: _past.items
+                                      .map(
+                                        (a) => Padding(
+                                          padding:
+                                              const EdgeInsets.only(bottom: 8),
+                                          child: _AbsenceCard(
+                                            groupId: groupId,
+                                            absence: a,
+                                            active: false,
+                                            isSelf:
+                                                a.playerId == activePlayerId,
+                                            onEdit: () => _openEdit(groupId, a),
+                                            onDelete: () => _delete(groupId, a),
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                                ),
+                              ),
+                              _LoadMoreButton(
+                                loaded: _past.items.length,
+                                total: _past.total,
+                                loading: _loadingPast,
+                                onTap: () => _loadPast(groupId, append: true),
+                              ),
+                            ],
+                          ],
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -472,17 +483,35 @@ class _Header extends StatelessWidget {
               children: [
                 Row(
                   children: [
+                    IconButton(
+                      onPressed: () {
+                        if (context.canPop()) {
+                          context.pop();
+                        } else {
+                          context.go('/app');
+                        }
+                      },
+                      tooltip: 'Voltar',
+                      style: IconButton.styleFrom(
+                        backgroundColor: AppColors.onDark.withAlpha(20),
+                        foregroundColor: AppColors.onDark,
+                        side: BorderSide(color: AppColors.onDark.withAlpha(40)),
+                      ),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                    ),
+                    const SizedBox(width: 4),
                     Container(
                       width: 38,
                       height: 38,
                       decoration: BoxDecoration(
-                        color: Colors.white.withAlpha(20),
+                        color: AppColors.onDark.withAlpha(20),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.white.withAlpha(36)),
+                        border:
+                            Border.all(color: AppColors.onDark.withAlpha(36)),
                       ),
                       child: const Icon(
                         Icons.event_busy_outlined,
-                        color: Colors.white,
+                        color: AppColors.onDark,
                         size: 20,
                       ),
                     ),
@@ -494,7 +523,7 @@ class _Header extends StatelessWidget {
                           const Text(
                             'Ausências',
                             style: TextStyle(
-                              color: Colors.white,
+                              color: AppColors.onDark,
                               fontSize: 20,
                               fontWeight: FontWeight.w900,
                             ),
@@ -503,7 +532,7 @@ class _Header extends StatelessWidget {
                           Text(
                             subtitle,
                             style: const TextStyle(
-                              color: Colors.white60,
+                              color: AppColors.onDark60,
                               fontSize: 12,
                             ),
                           ),
@@ -518,7 +547,7 @@ class _Header extends StatelessWidget {
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text('Nova ausência'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.white,
+                    backgroundColor: AppColors.onDark,
                     foregroundColor: AppColors.slate900,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 14,
@@ -541,7 +570,7 @@ class _Header extends StatelessWidget {
 class _HeaderDotsPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white.withAlpha(12);
+    final paint = Paint()..color = AppColors.onDark.withAlpha(12);
     for (var x = 0.0; x < size.width; x += 22) {
       for (var y = 0.0; y < size.height; y += 22) {
         canvas.drawCircle(Offset(x, y), 1, paint);
@@ -647,6 +676,7 @@ class _PastHeader extends StatelessWidget {
 }
 
 class _AbsenceCard extends StatelessWidget {
+  final String groupId;
   final AbsenceDto absence;
   final bool active;
   final bool isSelf;
@@ -654,6 +684,7 @@ class _AbsenceCard extends StatelessWidget {
   final VoidCallback onDelete;
 
   const _AbsenceCard({
+    required this.groupId,
     required this.absence,
     required this.active,
     required this.isSelf,
@@ -674,7 +705,7 @@ class _AbsenceCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.onDark,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: active ? AppColors.rose200 : AppColors.slate200,
@@ -710,10 +741,12 @@ class _AbsenceCard extends StatelessWidget {
                 Row(
                   children: [
                     Flexible(
-                      child: Text(
-                        playerName,
+                      child: ConfiguredPlayerName(
+                        groupId: groupId,
+                        name: playerName,
+                        isGoalkeeper: absence.isGoalkeeper,
+                        iconSize: 13,
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
@@ -742,12 +775,40 @@ class _AbsenceCard extends StatelessWidget {
                         ),
                       ),
                     ],
+                    // O protótipo marca a ausência em curso com um badge
+                    // vermelho na própria linha. A borda rosa do card sozinha
+                    // não diz que está ativa *agora* — some no meio da lista.
+                    if (active) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.rose50,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: AppColors.rose200),
+                        ),
+                        child: const Text(
+                          'Ativa',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.rose600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 2),
+                // Duas linhas: "Viagem · 17/07/2026 até 31/07/2026" não cabe
+                // em uma só ao lado do ícone de 40, e cortar a data final
+                // ("até 31/07/2…") esconde justamente a informação que importa.
                 Text(
                   '${absence.absenceTypeName} · $dateLabel',
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 11,
@@ -864,7 +925,7 @@ class _EmptyState extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 42, horizontal: 24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.onDark,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.slate200),
       ),

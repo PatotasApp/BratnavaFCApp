@@ -13,7 +13,7 @@ class AccountState {
   final String? activeAccountId;
 
   const AccountState({
-    this.accounts        = const [],
+    this.accounts = const [],
     this.activeAccountId,
   });
 
@@ -39,7 +39,7 @@ class AccountState {
     String? activeAccountId,
   }) =>
       AccountState(
-        accounts:        accounts        ?? this.accounts,
+        accounts: accounts ?? this.accounts,
         activeAccountId: activeAccountId ?? this.activeAccountId,
       );
 }
@@ -56,7 +56,7 @@ class AccountStore extends StateNotifier<AccountState> {
   // ── Persistência ──────────────────────────────────────────────────────────
 
   void _load() {
-    final raw      = _prefs.getString(AppConstants.accountsStorageKey);
+    final raw = _prefs.getString(AppConstants.accountsStorageKey);
     final activeId = _prefs.getString(AppConstants.activeAccountKey);
 
     if (raw == null) return;
@@ -72,8 +72,10 @@ class AccountStore extends StateNotifier<AccountState> {
       // handlers Dio ativos, podendo crashar o engine Flutter.
       final activeList = list.where((a) {
         if (!a.keepLoggedIn) return false;
-        final accessExpired  = a.accessToken.isEmpty  || JwtHelper.isExpired(a.accessToken);
-        final refreshExpired = a.refreshToken.isEmpty || JwtHelper.isExpired(a.refreshToken);
+        final accessExpired =
+            a.accessToken.isEmpty || JwtHelper.isExpired(a.accessToken);
+        final refreshExpired =
+            a.refreshToken.isEmpty || JwtHelper.isExpired(a.refreshToken);
         if (accessExpired && refreshExpired) return false;
         return true;
       }).toList();
@@ -82,7 +84,8 @@ class AccountStore extends StateNotifier<AccountState> {
           ? activeId
           : (activeList.isNotEmpty ? activeList.first.userId : null);
 
-      state = AccountState(accounts: activeList, activeAccountId: validActiveId);
+      state =
+          AccountState(accounts: activeList, activeAccountId: validActiveId);
     } catch (_) {}
   }
 
@@ -101,7 +104,8 @@ class AccountStore extends StateNotifier<AccountState> {
 
   /// Adiciona ou atualiza uma conta e a torna ativa.
   Future<void> upsertAccount(Account account) async {
-    final existing = state.accounts.indexWhere((a) => a.userId == account.userId);
+    final existing =
+        state.accounts.indexWhere((a) => a.userId == account.userId);
     final list = List<Account>.from(state.accounts);
 
     if (existing >= 0) {
@@ -131,17 +135,17 @@ class AccountStore extends StateNotifier<AccountState> {
     final a = state.accounts[idx];
     final list = List<Account>.from(state.accounts);
     list[idx] = Account(
-      userId:            a.userId,
-      name:              a.name,
-      email:             a.email,
-      roles:             a.roles,
-      accessToken:       a.accessToken,
-      refreshToken:      a.refreshToken,
-      activeGroupId:     null,
-      activePlayerId:    null,
-      groupAdminIds:     const [],
+      userId: a.userId,
+      name: a.name,
+      email: a.email,
+      roles: a.roles,
+      accessToken: a.accessToken,
+      refreshToken: a.refreshToken,
+      activeGroupId: null,
+      activePlayerId: null,
+      groupAdminIds: const [],
       groupFinanceiroIds: const [],
-      keepLoggedIn:      a.keepLoggedIn,
+      keepLoggedIn: a.keepLoggedIn,
     );
     state = AccountState(accounts: list, activeAccountId: userId);
     await _persist();
@@ -153,7 +157,7 @@ class AccountStore extends StateNotifier<AccountState> {
     if (active == null) return;
     await upsertAccount(
       active.copyWith(
-        accessToken:  accessToken,
+        accessToken: accessToken,
         refreshToken: refreshToken,
       ),
     );
@@ -178,8 +182,8 @@ class AccountStore extends StateNotifier<AccountState> {
   /// Faz logout da conta ativa. Se houver outra, troca para ela.
   Future<void> logout() async {
     final activeId = state.activeAccountId;
-    final list     = state.accounts.where((a) => a.userId != activeId).toList();
-    final nextId   = list.isNotEmpty ? list.first.userId : null;
+    final list = state.accounts.where((a) => a.userId != activeId).toList();
+    final nextId = list.isNotEmpty ? list.first.userId : null;
 
     state = AccountState(accounts: list, activeAccountId: nextId);
     await _persist();

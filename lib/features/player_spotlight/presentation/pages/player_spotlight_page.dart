@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
+import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../domain/entities/spotlight_report.dart';
 import '../providers/spotlight_provider.dart';
@@ -33,7 +36,13 @@ class _PlayerSpotlightPageState extends ConsumerState<PlayerSpotlightPage> {
     final groupId = account?.activeGroupId;
 
     if (groupId == null || groupId.isEmpty) {
-      return const Scaffold(body: _NoGroupState());
+      return Scaffold(
+        appBar: AppBar(
+          leading: const BackButton(),
+          title: const Text('Destaques'),
+        ),
+        body: const _NoGroupState(),
+      );
     }
 
     final async = ref.watch(spotlightProvider(groupId));
@@ -46,15 +55,14 @@ class _PlayerSpotlightPageState extends ConsumerState<PlayerSpotlightPage> {
           slivers: [
             SliverToBoxAdapter(child: _buildHeader(async)),
             async.when(
-              loading: () =>
-                  const SliverToBoxAdapter(child: _SkeletonLoader()),
+              loading: () => const SliverToBoxAdapter(child: _SkeletonLoader()),
               error: (e, _) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('Erro ao carregar spotlight: $e'),
-                        backgroundColor: Colors.red,
+                        backgroundColor: AppColors.prototypeDanger,
                       ),
                     );
                   }
@@ -70,7 +78,10 @@ class _PlayerSpotlightPageState extends ConsumerState<PlayerSpotlightPage> {
                 return SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                    child: _SpotlightContent(report: report),
+                    child: _SpotlightContent(
+                      report: report,
+                      groupId: groupId,
+                    ),
                   ),
                 );
               },
@@ -82,7 +93,6 @@ class _PlayerSpotlightPageState extends ConsumerState<PlayerSpotlightPage> {
   }
 
   Widget _buildHeader(AsyncValue<PlayerSpotlightReport> async) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final report = async.valueOrNull;
     final playerCount = report?.players.length ?? 0;
 
@@ -100,7 +110,11 @@ class _PlayerSpotlightPageState extends ConsumerState<PlayerSpotlightPage> {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A)],
+          colors: [
+            AppColors.lightText,
+            AppColors.darkCard,
+            AppColors.lightText
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -111,16 +125,31 @@ class _PlayerSpotlightPageState extends ConsumerState<PlayerSpotlightPage> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
           child: Row(
             children: [
+              IconButton(
+                tooltip: 'Voltar',
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/app');
+                  }
+                },
+                constraints:
+                    const BoxConstraints.tightFor(width: 48, height: 48),
+                icon: const Icon(Icons.arrow_back_rounded,
+                    color: AppColors.onDark),
+              ),
+              const SizedBox(width: 4),
               Container(
                 width: 52,
                 height: 52,
                 decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(25),
+                  color: AppColors.onDark.withAlpha(25),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withAlpha(50)),
+                  border: Border.all(color: AppColors.onDark.withAlpha(50)),
                 ),
                 child: const Icon(Icons.star_rounded,
-                    size: 26, color: Color(0xFFFBBF24)),
+                    size: 26, color: AppColors.warning),
               ),
               const SizedBox(width: 14),
               Column(
@@ -129,7 +158,7 @@ class _PlayerSpotlightPageState extends ConsumerState<PlayerSpotlightPage> {
                   const Text(
                     'Destaques',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppColors.onDark,
                       fontSize: 22,
                       fontWeight: FontWeight.w900,
                       letterSpacing: -0.5,
@@ -139,7 +168,7 @@ class _PlayerSpotlightPageState extends ConsumerState<PlayerSpotlightPage> {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      color: Colors.white.withAlpha(128),
+                      color: AppColors.onDark.withAlpha(128),
                       fontSize: 12,
                     ),
                   ),
@@ -157,7 +186,8 @@ class _PlayerSpotlightPageState extends ConsumerState<PlayerSpotlightPage> {
 
 class _SpotlightContent extends StatelessWidget {
   final PlayerSpotlightReport report;
-  const _SpotlightContent({required this.report});
+  final String groupId;
+  const _SpotlightContent({required this.report, required this.groupId});
 
   @override
   Widget build(BuildContext context) {
@@ -175,8 +205,8 @@ class _SpotlightContent extends StatelessWidget {
           const SizedBox(height: 10),
           if (report.topScorer != null)
             _SpotlightCard(
-              icon: Icons.sports_soccer_rounded,
-              iconColor: const Color(0xFF22C55E),
+              iconKind: _SpotlightIconKind.goal,
+              iconColor: AppColors.accent,
               title: 'Artilheiro',
               player: report.topScorer!,
               statLabel: 'gols',
@@ -186,13 +216,14 @@ class _SpotlightContent extends StatelessWidget {
                   '${report.topScorer!.assists} assist.',
                 '${report.topScorer!.matchCount} jogos',
               ],
+              groupId: groupId,
               isDark: isDark,
             ),
           if (report.topAssist != null) ...[
             const SizedBox(height: 12),
             _SpotlightCard(
-              icon: Icons.assistant_rounded,
-              iconColor: const Color(0xFF3B82F6),
+              iconKind: _SpotlightIconKind.assist,
+              iconColor: AppColors.info,
               title: 'Garçom',
               player: report.topAssist!,
               statLabel: 'assist.',
@@ -202,14 +233,15 @@ class _SpotlightContent extends StatelessWidget {
                   '${report.topAssist!.goals} gols',
                 '${report.topAssist!.matchCount} jogos',
               ],
+              groupId: groupId,
               isDark: isDark,
             ),
           ],
           if (report.topMvp != null) ...[
             const SizedBox(height: 12),
             _SpotlightCard(
-              icon: Icons.emoji_events_rounded,
-              iconColor: const Color(0xFFFBBF24),
+              iconKind: _SpotlightIconKind.mvp,
+              iconColor: AppColors.warning,
               title: 'MVP da temporada',
               player: report.topMvp!,
               statLabel: 'MVPs',
@@ -217,14 +249,15 @@ class _SpotlightContent extends StatelessWidget {
               secondaryStats: [
                 '${report.topMvp!.matchCount} jogos',
               ],
+              groupId: groupId,
               isDark: isDark,
             ),
           ],
           if (report.bestWinRate != null) ...[
             const SizedBox(height: 12),
             _SpotlightCard(
-              icon: Icons.trending_up_rounded,
-              iconColor: const Color(0xFF8B5CF6),
+              fallbackIcon: Icons.trending_up_rounded,
+              iconColor: AppColors.info,
               title: 'Melhor aproveitamento',
               player: report.bestWinRate!,
               statLabel: 'win rate',
@@ -232,6 +265,7 @@ class _SpotlightContent extends StatelessWidget {
               secondaryStats: [
                 '${report.bestWinRate!.matchCount} jogos',
               ],
+              groupId: groupId,
               isDark: isDark,
             ),
           ],
@@ -242,43 +276,78 @@ class _SpotlightContent extends StatelessWidget {
         if (report.players.isNotEmpty) ...[
           _sectionLabel(isDark, 'Todos os jogadores'),
           const SizedBox(height: 10),
-          _PlayersTable(players: report.players, isDark: isDark),
+          _PlayersTable(
+            players: report.players,
+            groupId: groupId,
+            isDark: isDark,
+          ),
         ],
       ],
     );
   }
 
   Widget _sectionLabel(bool isDark, String text) => Text(
-    text,
-    style: TextStyle(
-      fontSize: 13,
-      fontWeight: FontWeight.w700,
-      letterSpacing: 0.5,
-      color: isDark ? AppColors.slate400 : AppColors.slate500,
-    ),
-  );
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.5,
+          color: isDark ? AppColors.slate400 : AppColors.slate500,
+        ),
+      );
 }
 
 // ── Spotlight card ────────────────────────────────────────────────────────────
 
+enum _SpotlightIconKind { goal, assist, mvp }
+
+class _ConfiguredSpotlightIcon extends ConsumerWidget {
+  final String groupId;
+  final _SpotlightIconKind kind;
+  final Color color;
+
+  const _ConfiguredSpotlightIcon({
+    required this.groupId,
+    required this.kind,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(groupSettingsProvider(groupId)).valueOrNull;
+    final icons = GroupIcons.from(settings);
+    final value = switch (kind) {
+      _SpotlightIconKind.goal => icons.goal,
+      _SpotlightIconKind.assist => icons.assist,
+      _SpotlightIconKind.mvp => icons.mvp,
+    };
+
+    return Center(child: renderGroupIcon(value, size: 22, color: color));
+  }
+}
+
 class _SpotlightCard extends StatelessWidget {
-  final IconData          icon;
-  final Color             iconColor;
-  final String            title;
-  final SpotlightPlayer   player;
-  final String            statLabel;
-  final String            statValue;
-  final List<String>      secondaryStats;
-  final bool              isDark;
+  final _SpotlightIconKind? iconKind;
+  final IconData? fallbackIcon;
+  final Color iconColor;
+  final String title;
+  final SpotlightPlayer player;
+  final String statLabel;
+  final String statValue;
+  final List<String> secondaryStats;
+  final String groupId;
+  final bool isDark;
 
   const _SpotlightCard({
-    required this.icon,
+    this.iconKind,
+    this.fallbackIcon,
     required this.iconColor,
     required this.title,
     required this.player,
     required this.statLabel,
     required this.statValue,
     required this.secondaryStats,
+    required this.groupId,
     required this.isDark,
   });
 
@@ -286,7 +355,7 @@ class _SpotlightCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate800 : Colors.white,
+        color: isDark ? AppColors.slate800 : AppColors.onDark,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -309,7 +378,13 @@ class _SpotlightCard extends StatelessWidget {
                     color: iconColor.withAlpha(30),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(icon, size: 22, color: iconColor),
+                  child: iconKind != null
+                      ? _ConfiguredSpotlightIcon(
+                          groupId: groupId,
+                          kind: iconKind!,
+                          color: iconColor,
+                        )
+                      : Icon(fallbackIcon, size: 22, color: iconColor),
                 ),
                 const SizedBox(width: 14),
                 // Title + player name
@@ -323,24 +398,23 @@ class _SpotlightCard extends StatelessWidget {
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.8,
-                          color: isDark
-                              ? AppColors.slate400
-                              : AppColors.slate500,
+                          color:
+                              isDark ? AppColors.slate400 : AppColors.slate500,
                         ),
                       ),
                       const SizedBox(height: 3),
-                      Text(
-                        player.playerName,
+                      ConfiguredPlayerName(
+                        groupId: groupId,
+                        name: player.playerName,
+                        isGoalkeeper: player.isGoalkeeper,
+                        iconSize: 15,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.3,
-                          color: isDark
-                              ? Colors.white
-                              : AppColors.slate900,
+                          color: isDark ? AppColors.onDark : AppColors.slate900,
                         ),
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                       if (secondaryStats.isNotEmpty)
                         Padding(
@@ -377,9 +451,7 @@ class _SpotlightCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 10,
                         letterSpacing: 0.5,
-                        color: isDark
-                            ? AppColors.slate500
-                            : AppColors.slate400,
+                        color: isDark ? AppColors.slate500 : AppColors.slate400,
                       ),
                     ),
                   ],
@@ -397,9 +469,14 @@ class _SpotlightCard extends StatelessWidget {
 
 class _PlayersTable extends StatelessWidget {
   final List<SpotlightPlayer> players;
-  final bool                  isDark;
+  final String groupId;
+  final bool isDark;
 
-  const _PlayersTable({required this.players, required this.isDark});
+  const _PlayersTable({
+    required this.players,
+    required this.groupId,
+    required this.isDark,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -412,7 +489,7 @@ class _PlayersTable extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate800 : Colors.white,
+        color: isDark ? AppColors.slate800 : AppColors.onDark,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -446,13 +523,11 @@ class _PlayersTable extends StatelessWidget {
                   ),
                   SizedBox(
                     width: 44,
-                    child: Center(
-                        child: Text('GOLS', style: head)),
+                    child: Center(child: Text('GOLS', style: head)),
                   ),
                   SizedBox(
                     width: 50,
-                    child: Center(
-                        child: Text('ASSIST.', style: head)),
+                    child: Center(child: Text('ASSIST.', style: head)),
                   ),
                   SizedBox(
                     width: 44,
@@ -460,8 +535,7 @@ class _PlayersTable extends StatelessWidget {
                   ),
                   SizedBox(
                     width: 70,
-                    child: Center(
-                        child: Text('WIN RATE', style: head)),
+                    child: Center(child: Text('WIN RATE', style: head)),
                   ),
                 ],
               ),
@@ -469,8 +543,8 @@ class _PlayersTable extends StatelessWidget {
             // Rows
             ...players.asMap().entries.map((e) {
               final idx = e.key;
-              final p   = e.value;
-              final wr  = _normalizeWR(p.winRate);
+              final p = e.value;
+              final wr = _normalizeWR(p.winRate);
               final divColor = isDark ? AppColors.slate700 : AppColors.slate100;
 
               return Column(
@@ -502,14 +576,16 @@ class _PlayersTable extends StatelessWidget {
                         width: 170,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(vertical: 10),
-                          child: Text(
-                            p.playerName,
-                            overflow: TextOverflow.ellipsis,
+                          child: ConfiguredPlayerName(
+                            groupId: groupId,
+                            name: p.playerName,
+                            isGoalkeeper: p.isGoalkeeper,
+                            iconSize: 13,
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                               color: isDark
-                                  ? Colors.white
+                                  ? AppColors.onDark
                                   : AppColors.slate900,
                             ),
                           ),
@@ -541,15 +617,15 @@ class _PlayersTable extends StatelessWidget {
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF22C55E),
+                                    color: AppColors.accent,
                                     fontFeatures: const [
                                       FontFeature.tabularFigures()
                                     ],
                                   ),
                                 )
                               : Text('—',
-                                  style: TextStyle(
-                                      fontSize: 11, color: divColor)),
+                                  style:
+                                      TextStyle(fontSize: 11, color: divColor)),
                         ),
                       ),
                       SizedBox(
@@ -561,15 +637,15 @@ class _PlayersTable extends StatelessWidget {
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF3B82F6),
+                                    color: AppColors.info,
                                     fontFeatures: const [
                                       FontFeature.tabularFigures()
                                     ],
                                   ),
                                 )
                               : Text('—',
-                                  style: TextStyle(
-                                      fontSize: 11, color: divColor)),
+                                  style:
+                                      TextStyle(fontSize: 11, color: divColor)),
                         ),
                       ),
                       SizedBox(
@@ -581,15 +657,15 @@ class _PlayersTable extends StatelessWidget {
                                   style: const TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
-                                    color: Color(0xFFFBBF24),
+                                    color: AppColors.warning,
                                     fontFeatures: [
                                       FontFeature.tabularFigures()
                                     ],
                                   ),
                                 )
                               : Text('—',
-                                  style: TextStyle(
-                                      fontSize: 11, color: divColor)),
+                                  style:
+                                      TextStyle(fontSize: 11, color: divColor)),
                         ),
                       ),
                       SizedBox(
@@ -621,9 +697,9 @@ class _PlayersTable extends StatelessWidget {
 }
 
 Color _wrColor(double v) {
-  if (v >= 60) return const Color(0xFF16A34A);
-  if (v >= 45) return const Color(0xFFD97706);
-  return const Color(0xFFDC2626);
+  if (v >= 60) return AppColors.primaryPressed;
+  if (v >= 45) return AppColors.warningLight;
+  return AppColors.prototypeDanger;
 }
 
 // ── Skeleton / Empty / Error / No-group ───────────────────────────────────────
@@ -637,7 +713,7 @@ class _SkeletonLoader extends StatefulWidget {
 class _SkeletonLoaderState extends State<_SkeletonLoader>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
-  late final Animation<double>   _anim;
+  late final Animation<double> _anim;
 
   @override
   void initState() {
@@ -646,8 +722,8 @@ class _SkeletonLoaderState extends State<_SkeletonLoader>
       vsync: this,
       duration: const Duration(milliseconds: 1100),
     )..repeat(reverse: true);
-    _anim = Tween<double>(begin: 0.4, end: 0.9).animate(
-        CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+    _anim = Tween<double>(begin: 0.4, end: 0.9)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
   }
 
   @override
@@ -659,7 +735,7 @@ class _SkeletonLoaderState extends State<_SkeletonLoader>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final base   = isDark ? AppColors.slate800 : AppColors.slate100;
+    final base = isDark ? AppColors.slate800 : AppColors.slate100;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -741,20 +817,21 @@ class _ErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(24),
-    child: Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF1F2),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFFFCDD2)),
-      ),
-      child: Text(
-        message,
-        style: const TextStyle(fontSize: 13, color: Color(0xFF9B1239)),
-      ),
-    ),
-  );
+        padding: const EdgeInsets.all(24),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.rose50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.rose200),
+          ),
+          child: Text(
+            message,
+            style:
+                const TextStyle(fontSize: 13, color: AppColors.prototypeDanger),
+          ),
+        ),
+      );
 }
 
 class _NoGroupState extends StatelessWidget {
@@ -762,19 +839,18 @@ class _NoGroupState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.star_outline_rounded,
-            size: 48, color: AppColors.slate500),
-        SizedBox(height: 12),
-        Text(
-          'Crie ou entre em um grupo',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-              color: AppColors.slate400, fontSize: 13),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.star_outline_rounded,
+                size: 48, color: AppColors.slate500),
+            SizedBox(height: 12),
+            Text(
+              'Crie ou entre em um grupo',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.slate400, fontSize: 13),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      );
 }

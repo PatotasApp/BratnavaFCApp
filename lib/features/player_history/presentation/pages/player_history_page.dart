@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/domain/entities/my_player.dart';
+import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../domain/entities/player_history_models.dart';
 import '../providers/player_history_provider.dart';
 
@@ -18,9 +21,12 @@ class PlayerHistoryPage extends ConsumerStatefulWidget {
   ConsumerState<PlayerHistoryPage> createState() => _PlayerHistoryPageState();
 }
 
+enum _HistoryResultFilter { all, wins, draws, losses }
+
 class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
   MyPlayer? _selectedPlayer;
   late int _selectedYear;
+  _HistoryResultFilter _resultFilter = _HistoryResultFilter.all;
 
   @override
   void initState() {
@@ -47,10 +53,19 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
     final groupId = account?.activeGroupId;
 
     if (groupId == null || groupId.isEmpty) {
-      return const Scaffold(body: _NoGroupState());
+      return Scaffold(
+        appBar: AppBar(
+          leading: const BackButton(),
+          title: const Text('Meu histórico'),
+        ),
+        body: const _NoGroupState(),
+      );
     }
 
     final playersAsync = ref.watch(myPlayersProvider);
+    final icons = GroupIcons.from(
+      ref.watch(groupSettingsProvider(groupId)).valueOrNull,
+    );
 
     return Scaffold(
       body: RefreshIndicator(
@@ -59,16 +74,16 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             // ── Header ──────────────────────────────────────────────
-            SliverToBoxAdapter(child: _buildHeader(context)),
+            SliverToBoxAdapter(child: _buildHeader(context, icons)),
 
             // ── Selectors ───────────────────────────────────────────
             SliverToBoxAdapter(
-              child: _buildSelectors(context, playersAsync, groupId),
+              child: _buildSelectors(context, playersAsync, groupId, icons),
             ),
 
             // ── History content ──────────────────────────────────────
             if (_selectedPlayer != null)
-              _buildHistorySliver(context, groupId)
+              _buildHistorySliver(context, groupId, icons)
             else
               SliverToBoxAdapter(
                 child: _buildPickPlayerPrompt(context),
@@ -81,11 +96,15 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
 
   // ── Dark gradient header ──────────────────────────────────────────────────
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, GroupIcons icons) {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A)],
+          colors: [
+            AppColors.lightText,
+            AppColors.darkCard,
+            AppColors.lightText
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -96,41 +115,70 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
           child: Row(
             children: [
+              IconButton(
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/app');
+                  }
+                },
+                tooltip: 'Voltar',
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.onDark.withAlpha(20),
+                  foregroundColor: AppColors.onDark,
+                  side: BorderSide(color: AppColors.onDark.withAlpha(40)),
+                ),
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+              const SizedBox(width: 4),
               Container(
-                width: 52,
-                height: 52,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(25),
+                  color: AppColors.onDark.withAlpha(25),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withAlpha(50)),
+                  border: Border.all(color: AppColors.onDark.withAlpha(50)),
                 ),
                 child: const Icon(Icons.history_rounded,
-                    size: 26, color: Colors.white),
+                    size: 26, color: AppColors.onDark),
               ),
               const SizedBox(width: 14),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Meu Histórico',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -0.5,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Meu Histórico',
+                      style: TextStyle(
+                        color: AppColors.onDark,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _selectedPlayer != null
-                        ? _selectedPlayer!.playerName
-                        : 'Selecione um jogador',
-                    style: TextStyle(
-                      color: Colors.white.withAlpha(160),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
+                    const SizedBox(height: 2),
+                    if (_selectedPlayer != null)
+                      PlayerNameWithIcon(
+                        name: _selectedPlayer!.playerName,
+                        icons: icons,
+                        isGoalkeeper: _selectedPlayer!.isGoalkeeper,
+                        iconSize: 10,
+                        style: TextStyle(
+                          color: AppColors.onDark.withAlpha(160),
+                          fontSize: 12,
+                        ),
+                      )
+                    else
+                      Text(
+                        'Selecione um jogador',
+                        style: TextStyle(
+                          color: AppColors.onDark.withAlpha(160),
+                          fontSize: 12,
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -145,6 +193,7 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
     BuildContext context,
     AsyncValue<List<MyPlayer>> playersAsync,
     String groupId,
+    GroupIcons icons,
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final currentYear = DateTime.now().year;
@@ -156,7 +205,12 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
         children: [
           // Player dropdown
           Expanded(
-            child: _buildPlayerDropdown(context, playersAsync, isDark),
+            child: _buildPlayerDropdown(
+              context,
+              playersAsync,
+              isDark,
+              icons,
+            ),
           ),
           const SizedBox(width: 10),
           // Year dropdown
@@ -170,11 +224,12 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
     BuildContext context,
     AsyncValue<List<MyPlayer>> playersAsync,
     bool isDark,
+    GroupIcons icons,
   ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate800 : Colors.white,
+        color: isDark ? AppColors.slate800 : AppColors.onDark,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -199,7 +254,8 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
           height: 40,
           child: Row(
             children: [
-              const Icon(Icons.error_outline, size: 16, color: Colors.red),
+              const Icon(Icons.error_outline,
+                  size: 16, color: AppColors.prototypeDanger),
               const SizedBox(width: 6),
               Text('Erro',
                   style: TextStyle(
@@ -234,7 +290,7 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
               value: _selectedPlayer,
               isExpanded: true,
               isDense: true,
-              dropdownColor: isDark ? AppColors.slate800 : Colors.white,
+              dropdownColor: isDark ? AppColors.slate800 : AppColors.onDark,
               hint: Text(
                 'Selecionar jogador',
                 style: TextStyle(
@@ -245,7 +301,7 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white : AppColors.slate900,
+                color: isDark ? AppColors.onDark : AppColors.slate900,
               ),
               icon: Icon(Icons.expand_more_rounded,
                   size: 18,
@@ -253,12 +309,15 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
               items: players
                   .map((p) => DropdownMenuItem<MyPlayer>(
                         value: p,
-                        child: Text(
-                          p.playerName,
-                          overflow: TextOverflow.ellipsis,
+                        child: PlayerNameWithIcon(
+                          name: p.playerName,
+                          icons: icons,
+                          isGoalkeeper: p.isGoalkeeper,
+                          iconSize: 11,
                           style: TextStyle(
                             fontSize: 13,
-                            color: isDark ? Colors.white : AppColors.slate900,
+                            color:
+                                isDark ? AppColors.onDark : AppColors.slate900,
                           ),
                         ),
                       ))
@@ -281,7 +340,7 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate800 : Colors.white,
+        color: isDark ? AppColors.slate800 : AppColors.onDark,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -291,11 +350,11 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
         child: DropdownButton<int>(
           value: _selectedYear,
           isDense: true,
-          dropdownColor: isDark ? AppColors.slate800 : Colors.white,
+          dropdownColor: isDark ? AppColors.slate800 : AppColors.onDark,
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: isDark ? Colors.white : AppColors.slate900,
+            color: isDark ? AppColors.onDark : AppColors.slate900,
           ),
           icon: Icon(Icons.expand_more_rounded,
               size: 18,
@@ -307,7 +366,7 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
                       '$y',
                       style: TextStyle(
                         fontSize: 13,
-                        color: isDark ? Colors.white : AppColors.slate900,
+                        color: isDark ? AppColors.onDark : AppColors.slate900,
                       ),
                     ),
                   ))
@@ -322,7 +381,11 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
 
   // ── History sliver ────────────────────────────────────────────────────────
 
-  Widget _buildHistorySliver(BuildContext context, String groupId) {
+  Widget _buildHistorySliver(
+    BuildContext context,
+    String groupId,
+    GroupIcons icons,
+  ) {
     final player = _selectedPlayer!;
     final args = (
       groupId: groupId,
@@ -339,7 +402,7 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('Erro ao carregar histórico: $e'),
-                backgroundColor: Colors.red,
+                backgroundColor: AppColors.prototypeDanger,
               ),
             );
           }
@@ -353,15 +416,34 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
           return const SliverToBoxAdapter(child: _EmptyState());
         }
         final summary = PlayerHistorySummary.from(items);
+        final filteredItems = switch (_resultFilter) {
+          _HistoryResultFilter.all => items,
+          _HistoryResultFilter.wins =>
+            items.where((item) => item.isWin).toList(),
+          _HistoryResultFilter.draws =>
+            items.where((item) => item.isDraw).toList(),
+          _HistoryResultFilter.losses =>
+            items.where((item) => item.isLoss).toList(),
+        };
         return SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SummaryCard(summary: summary),
+                _SummaryCard(summary: summary, icons: icons),
                 const SizedBox(height: 16),
-                _MatchList(items: items),
+                _HistoryResultFilters(
+                  selected: _resultFilter,
+                  summary: summary,
+                  onSelected: (filter) =>
+                      setState(() => _resultFilter = filter),
+                ),
+                const SizedBox(height: 12),
+                if (filteredItems.isEmpty)
+                  const _FilteredMatchesEmptyState()
+                else
+                  _MatchList(items: filteredItems, icons: icons),
               ],
             ),
           ),
@@ -399,7 +481,12 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
 
 class _SummaryCard extends StatelessWidget {
   final PlayerHistorySummary summary;
-  const _SummaryCard({required this.summary});
+  final GroupIcons icons;
+
+  const _SummaryCard({
+    required this.summary,
+    required this.icons,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -407,7 +494,7 @@ class _SummaryCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate800 : Colors.white,
+        color: isDark ? AppColors.slate800 : AppColors.onDark,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -419,10 +506,8 @@ class _SummaryCard extends StatelessWidget {
         children: [
           Container(
             height: 3,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF22C55E), Color(0xFF3B82F6)],
-              ),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.warningLight : AppColors.accent,
             ),
           ),
           Padding(
@@ -453,7 +538,7 @@ class _SummaryCard extends StatelessWidget {
                     _statPill(
                       value: '${summary.wins}',
                       label: 'Vitórias',
-                      color: const Color(0xFF16A34A),
+                      color: AppColors.primaryPressed,
                       isDark: isDark,
                     ),
                     _statPill(
@@ -465,7 +550,7 @@ class _SummaryCard extends StatelessWidget {
                     _statPill(
                       value: '${summary.losses}',
                       label: 'Derrotas',
-                      color: const Color(0xFFDC2626),
+                      color: AppColors.prototypeDanger,
                       isDark: isDark,
                     ),
                   ],
@@ -483,19 +568,26 @@ class _SummaryCard extends StatelessWidget {
                     _statPill(
                       value: '${summary.totalGoals}',
                       label: 'Gols',
-                      color: const Color(0xFF22C55E),
+                      icon: icons.goal,
+                      color: AppColors.accent,
+                      valueColor:
+                          isDark ? AppColors.slate100 : AppColors.slate900,
                       isDark: isDark,
                     ),
                     _statPill(
                       value: '${summary.totalAssists}',
                       label: 'Assist.',
-                      color: const Color(0xFF3B82F6),
+                      icon: icons.assist,
+                      color: AppColors.info,
+                      valueColor:
+                          isDark ? AppColors.slate100 : AppColors.slate900,
                       isDark: isDark,
                     ),
                     _statPill(
                       value: '${summary.totalMvps}',
                       label: 'MVPs',
-                      color: const Color(0xFFFBBF24),
+                      icon: icons.mvp,
+                      color: AppColors.warning,
                       isDark: isDark,
                     ),
                   ],
@@ -511,17 +603,23 @@ class _SummaryCard extends StatelessWidget {
   Widget _statPill({
     required String value,
     required String label,
+    String? icon,
     required Color color,
+    Color? valueColor,
     required bool isDark,
   }) =>
       Column(
         children: [
+          if (icon != null) ...[
+            renderGroupIcon(icon, size: 14, color: color),
+            const SizedBox(height: 3),
+          ],
           Text(
             value,
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w900,
-              color: color,
+              color: valueColor ?? color,
               fontFeatures: const [FontFeature.tabularFigures()],
               height: 1,
             ),
@@ -541,17 +639,194 @@ class _SummaryCard extends StatelessWidget {
 
 // ── Match list ────────────────────────────────────────────────────────────────
 
-class _MatchList extends StatelessWidget {
-  final List<MatchHistoryItem> items;
-  const _MatchList({required this.items});
+class _HistoryResultFilters extends StatelessWidget {
+  final _HistoryResultFilter selected;
+  final PlayerHistorySummary summary;
+  final ValueChanged<_HistoryResultFilter> onSelected;
+
+  const _HistoryResultFilters({
+    required this.selected,
+    required this.summary,
+    required this.onSelected,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    return Row(
+      children: [
+        Expanded(
+          child: _ResultFilterChip(
+            label: 'Todas',
+            count: summary.totalMatches,
+            color: isDark ? AppColors.slate300 : AppColors.slate600,
+            selected: selected == _HistoryResultFilter.all,
+            onTap: () => onSelected(_HistoryResultFilter.all),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: _ResultFilterChip(
+            label: 'Vitórias',
+            count: summary.wins,
+            color: AppColors.primaryPressed,
+            selected: selected == _HistoryResultFilter.wins,
+            onTap: () => onSelected(_HistoryResultFilter.wins),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: _ResultFilterChip(
+            label: 'Empates',
+            count: summary.draws,
+            color: isDark ? AppColors.slate300 : AppColors.slate600,
+            selected: selected == _HistoryResultFilter.draws,
+            onTap: () => onSelected(_HistoryResultFilter.draws),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: _ResultFilterChip(
+            label: 'Derrotas',
+            count: summary.losses,
+            color: AppColors.prototypeDanger,
+            selected: selected == _HistoryResultFilter.losses,
+            onTap: () => onSelected(_HistoryResultFilter.losses),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ResultFilterChip extends StatelessWidget {
+  final String label;
+  final int count;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ResultFilterChip({
+    required this.label,
+    required this.count,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: AppColors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected
+                ? color.withAlpha(isDark ? 42 : 24)
+                : (isDark ? AppColors.slate800 : AppColors.onDark),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected
+                  ? color
+                  : (isDark ? AppColors.slate700 : AppColors.slate200),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected
+                      ? color
+                      : (isDark ? AppColors.slate300 : AppColors.slate600),
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 3),
+              Text(
+                '$count',
+                style: TextStyle(
+                  color: selected
+                      ? color
+                      : (isDark ? AppColors.slate400 : AppColors.slate500),
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FilteredMatchesEmptyState extends StatelessWidget {
+  const _FilteredMatchesEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.slate800 : AppColors.onDark,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? AppColors.slate700 : AppColors.slate200,
+        ),
+      ),
+      child: Text(
+        'Nenhuma partida encontrada para este filtro.',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 13,
+          color: isDark ? AppColors.slate400 : AppColors.slate500,
+        ),
+      ),
+    );
+  }
+}
+
+class _MatchList extends StatelessWidget {
+  final List<MatchHistoryItem> items;
+  final GroupIcons icons;
+
+  const _MatchList({
+    required this.items,
+    required this.icons,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final rows = <Widget>[];
+    String? currentMonth;
+
+    for (final item in items) {
+      final date = AppDateUtils.parseOrNow(item.date);
+      final month = DateFormat('MMMM yyyy', 'pt_BR').format(date);
+
+      if (month != currentMonth) {
+        currentMonth = month;
+        rows.add(_MonthHeader(label: month, isDark: isDark));
+      }
+
+      rows.add(_MatchRow(item: item, isDark: isDark, icons: icons));
+    }
+
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate800 : Colors.white,
+        color: isDark ? AppColors.slate800 : AppColors.onDark,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -586,7 +861,7 @@ class _MatchList extends StatelessWidget {
             height: 1,
             color: isDark ? AppColors.slate700 : AppColors.slate100,
           ),
-          ...items.map((item) => _MatchRow(item: item, isDark: isDark)),
+          ...rows,
         ],
       ),
     );
@@ -595,14 +870,49 @@ class _MatchList extends StatelessWidget {
 
 // ── Match row ─────────────────────────────────────────────────────────────────
 
+class _MonthHeader extends StatelessWidget {
+  final String label;
+  final bool isDark;
+
+  const _MonthHeader({required this.label, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final title = label.isEmpty
+        ? label
+        : '${label[0].toUpperCase()}${label.substring(1)}';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 11, 16, 8),
+      color: isDark ? AppColors.slate900 : AppColors.slate50,
+      child: Text(
+        title,
+        style: TextStyle(
+          color: isDark ? AppColors.slate300 : AppColors.slate600,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: .5,
+        ),
+      ),
+    );
+  }
+}
+
 class _MatchRow extends StatelessWidget {
   final MatchHistoryItem item;
   final bool isDark;
-  const _MatchRow({required this.item, required this.isDark});
+  final GroupIcons icons;
+
+  const _MatchRow({
+    required this.item,
+    required this.isDark,
+    required this.icons,
+  });
 
   Color get _resultColor {
-    if (item.isWin) return const Color(0xFF16A34A);
-    if (item.isLoss) return const Color(0xFFDC2626);
+    if (item.isWin) return AppColors.primaryPressed;
+    if (item.isLoss) return AppColors.prototypeDanger;
     return isDark ? AppColors.slate500 : AppColors.slate400;
   }
 
@@ -612,15 +922,9 @@ class _MatchRow extends StatelessWidget {
     return 'E';
   }
 
-  String get _resultFull {
-    if (item.isWin) return 'Vitória';
-    if (item.isLoss) return 'Derrota';
-    return 'Empate';
-  }
-
   Color get _resultBg {
-    if (item.isWin) return const Color(0xFFDCFCE7);
-    if (item.isLoss) return const Color(0xFFFFF1F2);
+    if (item.isWin) return AppColors.green100;
+    if (item.isLoss) return AppColors.rose50;
     return isDark ? AppColors.slate700 : AppColors.slate100;
   }
 
@@ -668,31 +972,18 @@ class _MatchRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
 
-          // Date + place + result label
+          // Date + place
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Text(
-                      _formatDate(item.date),
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white : AppColors.slate900,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _resultFull,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: _resultColor,
-                      ),
-                    ),
-                  ],
+                Text(
+                  _formatDate(item.date),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? AppColors.onDark : AppColors.slate900,
+                  ),
                 ),
                 if (item.place != null && item.place!.isNotEmpty)
                   Padding(
@@ -729,21 +1020,21 @@ class _MatchRow extends StatelessWidget {
                     children: [
                       if (item.goals > 0)
                         _miniStat(
-                          icon: Icons.sports_soccer_rounded,
+                          icon: icons.goal,
                           value: '${item.goals}',
-                          color: const Color(0xFF22C55E),
+                          color: AppColors.accent,
                         ),
                       if (item.assists > 0)
                         _miniStat(
-                          icon: Icons.assistant_rounded,
+                          icon: icons.assist,
                           value: '${item.assists}',
-                          color: const Color(0xFF3B82F6),
+                          color: AppColors.info,
                         ),
                       if (item.isMvp)
                         _miniStat(
-                          icon: Icons.emoji_events_rounded,
+                          icon: icons.mvp,
                           value: 'MVP',
-                          color: const Color(0xFFFBBF24),
+                          color: AppColors.warning,
                         ),
                     ],
                   ),
@@ -756,17 +1047,24 @@ class _MatchRow extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                '${item.teamAScore} × ${item.teamBScore}',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: isDark ? Colors.white : AppColors.slate900,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _scoreBox(item.teamAScore, _hexColor(item.teamAColor)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    child: Text(
+                      '×',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? AppColors.slate400 : AppColors.slate500,
+                      ),
+                    ),
+                  ),
+                  _scoreBox(item.teamBScore, _hexColor(item.teamBColor)),
+                ],
               ),
-              const SizedBox(height: 3),
-              _teamColorDots(context),
             ],
           ),
         ],
@@ -775,58 +1073,56 @@ class _MatchRow extends StatelessWidget {
   }
 
   Widget _miniStat({
-    required IconData icon,
+    required String icon,
     required String value,
     required Color color,
   }) =>
       Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 11, color: color),
+          renderGroupIcon(icon, size: 11, color: color),
           const SizedBox(width: 3),
           Text(
             value,
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: color,
+              color: isDark ? AppColors.slate100 : AppColors.slate900,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ],
       );
 
-  Widget _teamColorDots(BuildContext context) {
-    Color? colorA = _hexColor(item.teamAColor);
-    Color? colorB = _hexColor(item.teamBColor);
+  Widget _scoreBox(int score, Color? teamColor) {
+    final background =
+        teamColor ?? (isDark ? AppColors.slate700 : AppColors.slate100);
+    final foreground = background.computeLuminance() > .48
+        ? AppColors.slate900
+        : AppColors.onDark;
 
-    if (colorA == null && colorB == null) return const SizedBox.shrink();
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (colorA != null)
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: colorA,
-              border: Border.all(color: Colors.white.withAlpha(80), width: 1),
-            ),
-          ),
-        if (colorA != null && colorB != null) const SizedBox(width: 3),
-        if (colorB != null)
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: colorB,
-              border: Border.all(color: Colors.white.withAlpha(80), width: 1),
-            ),
-          ),
-      ],
+    return Container(
+      width: 32,
+      height: 28,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: background.computeLuminance() > .72
+              ? AppColors.slate400
+              : background.withAlpha(220),
+        ),
+      ),
+      child: Text(
+        '$score',
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w800,
+          color: foreground,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
     );
   }
 }
@@ -971,13 +1267,14 @@ class _ErrorState extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFF1F2),
+            color: AppColors.rose50,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFFFCDD2)),
+            border: Border.all(color: AppColors.rose200),
           ),
           child: Text(
             message,
-            style: const TextStyle(fontSize: 13, color: Color(0xFF9B1239)),
+            style:
+                const TextStyle(fontSize: 13, color: AppColors.prototypeDanger),
           ),
         ),
       );

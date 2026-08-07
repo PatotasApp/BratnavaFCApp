@@ -4,10 +4,10 @@ import '../../data/datasources/calendar_remote_datasource.dart';
 import '../../domain/entities/calendar_event.dart';
 
 class CategoryManagerSheet extends StatefulWidget {
-  final String                   groupId;
+  final String groupId;
   final CalendarRemoteDataSource datasource;
-  final List<CalendarCategory>   categories;
-  final VoidCallback             onChanged;
+  final List<CalendarCategory> categories;
+  final VoidCallback onChanged;
 
   const CategoryManagerSheet({
     super.key,
@@ -25,14 +25,14 @@ class CategoryManagerSheet extends StatefulWidget {
     required VoidCallback onChanged,
   }) {
     return showModalBottomSheet(
-      context:            context,
+      context: context,
       isScrollControlled: true,
-      backgroundColor:    Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => CategoryManagerSheet(
-        groupId:    groupId,
+        groupId: groupId,
         datasource: datasource,
         categories: categories,
-        onChanged:  onChanged,
+        onChanged: onChanged,
       ),
     );
   }
@@ -44,7 +44,7 @@ class CategoryManagerSheet extends StatefulWidget {
 class _CategoryManagerSheetState extends State<CategoryManagerSheet> {
   late List<CalendarCategory> _cats;
   bool _adding = false;
-  final _nameCtrl  = TextEditingController();
+  final _nameCtrl = TextEditingController();
   final _colorCtrl = TextEditingController();
 
   @override
@@ -65,10 +65,16 @@ class _CategoryManagerSheetState extends State<CategoryManagerSheet> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Excluir categoria'),
-        content: Text('Excluir "${cat.name}"? Os eventos desta categoria não serão excluídos.'),
+        content: Text(
+            'Excluir "${cat.name}"? Os eventos desta categoria não serão excluídos.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
-          TextButton(onPressed: () => Navigator.pop(context, true),  child: const Text('Excluir', style: TextStyle(color: Colors.red))),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Excluir',
+                  style: TextStyle(color: AppColors.prototypeDanger))),
         ],
       ),
     );
@@ -87,14 +93,15 @@ class _CategoryManagerSheetState extends State<CategoryManagerSheet> {
   }
 
   Future<void> _add() async {
-    final name  = _nameCtrl.text.trim();
+    final name = _nameCtrl.text.trim();
     final color = _colorCtrl.text.trim();
     if (name.isEmpty) return;
     setState(() => _adding = true);
     try {
       await widget.datasource.createCategory(widget.groupId, {
-        'name':  name,
-        if (color.isNotEmpty) 'color': color.startsWith('#') ? color : '#$color',
+        'name': name,
+        if (color.isNotEmpty)
+          'color': color.startsWith('#') ? color : '#$color',
       });
       _nameCtrl.clear();
       _colorCtrl.clear();
@@ -103,7 +110,7 @@ class _CategoryManagerSheetState extends State<CategoryManagerSheet> {
       final updated = await widget.datasource.fetchCategories(widget.groupId);
       if (mounted) {
         setState(() {
-          _cats   = updated.where((c) => !c.isSystem).toList();
+          _cats = updated.where((c) => !c.isSystem).toList();
           _adding = false;
         });
       }
@@ -123,11 +130,11 @@ class _CategoryManagerSheetState extends State<CategoryManagerSheet> {
 
     return DraggableScrollableSheet(
       initialChildSize: 0.65,
-      minChildSize:     0.4,
-      maxChildSize:     0.9,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
       builder: (_, scrollCtrl) => Container(
         decoration: BoxDecoration(
-          color:        isDark ? AppColors.slate900 : Colors.white,
+          color: isDark ? AppColors.slate900 : AppColors.onDark,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
@@ -136,9 +143,10 @@ class _CategoryManagerSheetState extends State<CategoryManagerSheet> {
             Center(
               child: Container(
                 margin: const EdgeInsets.only(top: 12, bottom: 4),
-                width: 36, height: 4,
+                width: 36,
+                height: 4,
                 decoration: BoxDecoration(
-                  color:        isDark ? AppColors.slate700 : AppColors.slate200,
+                  color: isDark ? AppColors.slate700 : AppColors.slate200,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -151,9 +159,9 @@ class _CategoryManagerSheetState extends State<CategoryManagerSheet> {
                     child: Text(
                       'Gerenciar categorias',
                       style: TextStyle(
-                        fontSize:   18,
+                        fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: isDark ? Colors.white : AppColors.slate900,
+                        color: isDark ? AppColors.onDark : AppColors.slate900,
                       ),
                     ),
                   ),
@@ -179,7 +187,8 @@ class _CategoryManagerSheetState extends State<CategoryManagerSheet> {
                       controller: _nameCtrl,
                       style: TextStyle(
                           fontSize: 13,
-                          color: isDark ? AppColors.slate200 : AppColors.slate800),
+                          color:
+                              isDark ? AppColors.slate200 : AppColors.slate800),
                       decoration: _inputDecor('Nome', isDark),
                     ),
                   ),
@@ -191,28 +200,33 @@ class _CategoryManagerSheetState extends State<CategoryManagerSheet> {
                       controller: _colorCtrl,
                       style: TextStyle(
                           fontSize: 13,
-                          color: isDark ? AppColors.slate200 : AppColors.slate800),
+                          color:
+                              isDark ? AppColors.slate200 : AppColors.slate800),
                       decoration: _inputDecor('#hex', isDark),
                     ),
                   ),
                   const SizedBox(width: 8),
                   // Botão adicionar
                   SizedBox(
-                    width: 42, height: 42,
+                    width: 42,
+                    height: 42,
                     child: FilledButton(
                       onPressed: _adding ? null : _add,
                       style: FilledButton.styleFrom(
-                        backgroundColor: isDark ? Colors.white : AppColors.slate900,
-                        foregroundColor: isDark ? AppColors.slate900 : Colors.white,
+                        backgroundColor:
+                            isDark ? AppColors.onDark : AppColors.slate900,
+                        foregroundColor:
+                            isDark ? AppColors.slate900 : AppColors.onDark,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                         padding: EdgeInsets.zero,
                       ),
                       child: _adding
                           ? const SizedBox(
-                              width: 14, height: 14,
+                              width: 14,
+                              height: 14,
                               child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white))
+                                  strokeWidth: 2, color: AppColors.onDark))
                           : const Icon(Icons.add, size: 18),
                     ),
                   ),
@@ -228,7 +242,8 @@ class _CategoryManagerSheetState extends State<CategoryManagerSheet> {
                       child: Text(
                         'Nenhuma categoria personalizada.',
                         style: TextStyle(
-                          color: isDark ? AppColors.slate500 : AppColors.slate400,
+                          color:
+                              isDark ? AppColors.slate500 : AppColors.slate400,
                           fontSize: 13,
                         ),
                       ),
@@ -237,8 +252,10 @@ class _CategoryManagerSheetState extends State<CategoryManagerSheet> {
                       controller: scrollCtrl,
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       itemCount: _cats.length,
-                      separatorBuilder: (_, __) =>
-                          Divider(height: 1, color: isDark ? AppColors.slate800 : AppColors.slate100),
+                      separatorBuilder: (_, __) => Divider(
+                          height: 1,
+                          color:
+                              isDark ? AppColors.slate800 : AppColors.slate100),
                       itemBuilder: (_, i) {
                         final cat = _cats[i];
                         Color? dotColor;
@@ -251,7 +268,8 @@ class _CategoryManagerSheetState extends State<CategoryManagerSheet> {
 
                         return ListTile(
                           leading: Container(
-                            width: 28, height: 28,
+                            width: 28,
+                            height: 28,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: dotColor ?? AppColors.slate200,
@@ -262,18 +280,23 @@ class _CategoryManagerSheetState extends State<CategoryManagerSheet> {
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
-                              color: isDark ? Colors.white : AppColors.slate800,
+                              color: isDark
+                                  ? AppColors.onDark
+                                  : AppColors.slate800,
                             ),
                           ),
                           subtitle: cat.color != null
                               ? Text(cat.color!,
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: isDark ? AppColors.slate500 : AppColors.slate400,
+                                    color: isDark
+                                        ? AppColors.slate500
+                                        : AppColors.slate400,
                                   ))
                               : null,
                           trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline_rounded, size: 20),
+                            icon: const Icon(Icons.delete_outline_rounded,
+                                size: 20),
                             color: AppColors.rose500,
                             onPressed: () => _delete(cat),
                           ),
@@ -288,20 +311,27 @@ class _CategoryManagerSheetState extends State<CategoryManagerSheet> {
   }
 
   InputDecoration _inputDecor(String hint, bool isDark) => InputDecoration(
-    hintText:    hint,
-    hintStyle:   TextStyle(color: isDark ? AppColors.slate600 : AppColors.slate400, fontSize: 13),
-    filled:      true,
-    fillColor:   isDark ? AppColors.slate800 : AppColors.slate50,
-    border:      OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide:   BorderSide(color: isDark ? AppColors.slate700 : AppColors.slate200)),
-    enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide:   BorderSide(color: isDark ? AppColors.slate700 : AppColors.slate200)),
-    focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide:   BorderSide(color: isDark ? AppColors.slate400 : AppColors.slate500, width: 1.5)),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-    isDense: true,
-  );
+        hintText: hint,
+        hintStyle: TextStyle(
+            color: isDark ? AppColors.slate600 : AppColors.slate400,
+            fontSize: 13),
+        filled: true,
+        fillColor: isDark ? AppColors.slate800 : AppColors.slate50,
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+                color: isDark ? AppColors.slate700 : AppColors.slate200)),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+                color: isDark ? AppColors.slate700 : AppColors.slate200)),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+                color: isDark ? AppColors.slate400 : AppColors.slate500,
+                width: 1.5)),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        isDense: true,
+      );
 }

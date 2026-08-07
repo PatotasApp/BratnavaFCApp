@@ -19,13 +19,13 @@ class AppTextField extends StatefulWidget {
     this.hint,
     this.controller,
     this.validator,
-    this.keyboardType      = TextInputType.text,
-    this.obscureText       = false,
-    this.textInputAction   = TextInputAction.next,
+    this.keyboardType = TextInputType.text,
+    this.obscureText = false,
+    this.textInputAction = TextInputAction.next,
     this.focusNode,
     this.onEditingComplete,
     this.onChanged,
-    this.enabled           = true,
+    this.enabled = true,
   });
 
   @override
@@ -48,18 +48,18 @@ class _AppTextFieldState extends State<AppTextField> {
         ),
         const SizedBox(height: 6),
         TextFormField(
-          controller:        widget.controller,
-          validator:         widget.validator,
-          keyboardType:      widget.keyboardType,
-          obscureText:       widget.obscureText ? _obscured : false,
-          textInputAction:   widget.textInputAction,
-          focusNode:         widget.focusNode,
+          controller: widget.controller,
+          validator: widget.validator,
+          keyboardType: widget.keyboardType,
+          obscureText: widget.obscureText ? _obscured : false,
+          textInputAction: widget.textInputAction,
+          focusNode: widget.focusNode,
           onEditingComplete: widget.onEditingComplete,
-          onChanged:         widget.onChanged,
-          enabled:           widget.enabled,
+          onChanged: widget.onChanged,
+          enabled: widget.enabled,
           style: TextStyle(
             fontSize: 14,
-            color:    Theme.of(context).colorScheme.onSurface,
+            color: Theme.of(context).colorScheme.onSurface,
           ),
           decoration: InputDecoration(
             hintText: widget.hint,
@@ -69,8 +69,7 @@ class _AppTextFieldState extends State<AppTextField> {
                       _obscured ? Icons.visibility_off : Icons.visibility,
                       size: 18,
                     ),
-                    onPressed: () =>
-                        setState(() => _obscured = !_obscured),
+                    onPressed: () => setState(() => _obscured = !_obscured),
                   )
                 : null,
           ),

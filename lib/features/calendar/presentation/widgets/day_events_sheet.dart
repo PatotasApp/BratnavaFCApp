@@ -5,11 +5,11 @@ import 'calendar_utils.dart';
 
 /// Bottom sheet mostrado ao tocar em um dia na visão mensal.
 class DayEventsSheet extends StatelessWidget {
-  final DateTime            day;
+  final DateTime day;
   final List<CalendarEvent> events;
-  final bool                isAdmin;
+  final bool isAdmin;
   final void Function(CalendarEvent) onEventTap;
-  final void Function(String date)   onNewEvent;
+  final void Function(String date) onNewEvent;
 
   const DayEventsSheet({
     super.key,
@@ -29,12 +29,15 @@ class DayEventsSheet extends StatelessWidget {
     required void Function(String) onNewEvent,
   }) {
     return showModalBottomSheet(
-      context:       context,
+      context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => DayEventsSheet(
-        day: day, events: events, isAdmin: isAdmin,
-        onEventTap: onEventTap, onNewEvent: onNewEvent,
+        day: day,
+        events: events,
+        isAdmin: isAdmin,
+        onEventTap: onEventTap,
+        onNewEvent: onNewEvent,
       ),
     );
   }
@@ -42,19 +45,41 @@ class DayEventsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final ds     = toDateStr(day);
+    final ds = toDateStr(day);
 
-    const months    = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
-    const weekdays  = ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
-    final title     = '${weekdays[day.weekday - 1]}, ${day.day} ${months[day.month - 1]}';
+    const months = [
+      'jan',
+      'fev',
+      'mar',
+      'abr',
+      'mai',
+      'jun',
+      'jul',
+      'ago',
+      'set',
+      'out',
+      'nov',
+      'dez'
+    ];
+    const weekdays = [
+      'Segunda',
+      'Terça',
+      'Quarta',
+      'Quinta',
+      'Sexta',
+      'Sábado',
+      'Domingo'
+    ];
+    final title =
+        '${weekdays[day.weekday - 1]}, ${day.day} ${months[day.month - 1]}';
 
     return DraggableScrollableSheet(
       initialChildSize: events.isEmpty ? 0.35 : 0.55,
-      minChildSize:     0.25,
-      maxChildSize:     0.9,
+      minChildSize: 0.25,
+      maxChildSize: 0.9,
       builder: (_, scrollCtrl) => Container(
         decoration: BoxDecoration(
-          color:        isDark ? AppColors.slate900 : Colors.white,
+          color: isDark ? AppColors.slate900 : AppColors.onDark,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
@@ -63,9 +88,10 @@ class DayEventsSheet extends StatelessWidget {
             Center(
               child: Container(
                 margin: const EdgeInsets.only(top: 12, bottom: 4),
-                width: 36, height: 4,
+                width: 36,
+                height: 4,
                 decoration: BoxDecoration(
-                  color:        isDark ? AppColors.slate700 : AppColors.slate200,
+                  color: isDark ? AppColors.slate700 : AppColors.slate200,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -80,9 +106,9 @@ class DayEventsSheet extends StatelessWidget {
                     child: Text(
                       title,
                       style: TextStyle(
-                        fontSize:   16,
+                        fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: isDark ? Colors.white : AppColors.slate900,
+                        color: isDark ? AppColors.onDark : AppColors.slate900,
                       ),
                     ),
                   ),
@@ -95,7 +121,8 @@ class DayEventsSheet extends StatelessWidget {
                       icon: const Icon(Icons.add, size: 16),
                       label: const Text('Novo'),
                       style: TextButton.styleFrom(
-                        foregroundColor: isDark ? Colors.white : AppColors.slate900,
+                        foregroundColor:
+                            isDark ? AppColors.onDark : AppColors.slate900,
                       ),
                     ),
                   IconButton(
@@ -119,14 +146,18 @@ class DayEventsSheet extends StatelessWidget {
                           Icon(
                             Icons.calendar_today_outlined,
                             size: 36,
-                            color: isDark ? AppColors.slate700 : AppColors.slate200,
+                            color: isDark
+                                ? AppColors.slate700
+                                : AppColors.slate200,
                           ),
                           const SizedBox(height: 10),
                           Text(
                             'Nenhum evento neste dia.',
                             style: TextStyle(
                               fontSize: 13,
-                              color: isDark ? AppColors.slate500 : AppColors.slate400,
+                              color: isDark
+                                  ? AppColors.slate500
+                                  : AppColors.slate400,
                             ),
                           ),
                         ],
@@ -139,7 +170,7 @@ class DayEventsSheet extends StatelessWidget {
                       separatorBuilder: (_, __) => const SizedBox(height: 8),
                       itemBuilder: (_, i) {
                         final ev = events[i];
-                        final c  = eventColors(ev);
+                        final c = eventColors(ev);
                         final ic = eventIcon(ev);
 
                         return GestureDetector(
@@ -151,9 +182,9 @@ class DayEventsSheet extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 14, vertical: 10),
                             decoration: BoxDecoration(
-                              color:        c.bg,
+                              color: c.bg,
                               borderRadius: BorderRadius.circular(12),
-                              border:       Border.all(color: c.border),
+                              border: Border.all(color: c.border),
                             ),
                             child: Row(
                               children: [
@@ -161,14 +192,15 @@ class DayEventsSheet extends StatelessWidget {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         ev.title,
                                         style: TextStyle(
-                                          fontSize:   13,
+                                          fontSize: 13,
                                           fontWeight: FontWeight.w600,
-                                          color:      c.fg,
+                                          color: c.fg,
                                         ),
                                       ),
                                       if (!ev.timeTBD && ev.time != null)
@@ -184,8 +216,11 @@ class DayEventsSheet extends StatelessWidget {
                                     ],
                                   ),
                                 ),
-                                Icon(Icons.chevron_right_rounded, size: 16,
-                                    color: isDark ? AppColors.slate600 : AppColors.slate400),
+                                Icon(Icons.chevron_right_rounded,
+                                    size: 16,
+                                    color: isDark
+                                        ? AppColors.slate600
+                                        : AppColors.slate400),
                               ],
                             ),
                           ),

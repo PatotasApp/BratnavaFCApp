@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../domain/entities/group_invite.dart';
 
@@ -6,8 +6,13 @@ class GroupInvitesDatasource {
   final Dio _dio;
   const GroupInvitesDatasource(this._dio);
 
-  dynamic _unwrap(dynamic data) =>
-      (data is Map) ? (data.containsKey('data') ? data['data'] : data.containsKey('Data') ? data['Data'] : data) : data;
+  dynamic _unwrap(dynamic data) => (data is Map)
+      ? (data.containsKey('data')
+          ? data['data']
+          : data.containsKey('Data')
+              ? data['Data']
+              : data)
+      : data;
 
   Future<List<GroupInvite>> getMyInvites() async {
     final res = await _dio.get(ApiConstants.myGroupInvites);

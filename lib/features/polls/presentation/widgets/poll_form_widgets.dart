@@ -4,7 +4,22 @@ library;
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 
-const kPollIcons = ['🥩','🍺','🎂','🎉','⚽','🏆','🎵','🍔','🎯','🌟','🤝','🚀','📅','🎊'];
+const kPollIcons = [
+  '🥩',
+  '🍺',
+  '🎂',
+  '🎉',
+  '⚽',
+  '🏆',
+  '🎵',
+  '🍔',
+  '🎯',
+  '🌟',
+  '🤝',
+  '🚀',
+  '📅',
+  '🎊'
+];
 
 // ── PollSectionCard ────────────────────────────────────────────────────────────
 
@@ -15,14 +30,15 @@ class PollSectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: isDark ? AppColors.slate800 : AppColors.slate50,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
-    ),
-    child: child,
-  );
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.slate800 : AppColors.slate50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: isDark ? AppColors.slate700 : AppColors.slate200),
+        ),
+        child: child,
+      );
 }
 
 // ── PollDateField ──────────────────────────────────────────────────────────────
@@ -31,15 +47,22 @@ class PollDateField extends StatelessWidget {
   final String label;
   final TextEditingController controller;
   final bool isDark;
-  const PollDateField({super.key, required this.label, required this.controller, required this.isDark});
+  const PollDateField(
+      {super.key,
+      required this.label,
+      required this.controller,
+      required this.isDark});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
-          color: isDark ? AppColors.slate300 : AppColors.slate600)),
+        Text(label,
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isDark ? AppColors.slate300 : AppColors.slate600)),
         const SizedBox(height: 4),
         TextFormField(
           controller: controller,
@@ -58,7 +81,7 @@ class PollDateField extends StatelessWidget {
             );
             if (picked != null) {
               controller.text =
-                '${picked.year.toString().padLeft(4,'0')}-${picked.month.toString().padLeft(2,'0')}-${picked.day.toString().padLeft(2,'0')}';
+                  '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
             }
           },
         ),
@@ -73,15 +96,22 @@ class PollTimeField extends StatelessWidget {
   final String label;
   final TextEditingController controller;
   final bool isDark;
-  const PollTimeField({super.key, required this.label, required this.controller, required this.isDark});
+  const PollTimeField(
+      {super.key,
+      required this.label,
+      required this.controller,
+      required this.isDark});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
-          color: isDark ? AppColors.slate300 : AppColors.slate600)),
+        Text(label,
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isDark ? AppColors.slate300 : AppColors.slate600)),
         const SizedBox(height: 4),
         TextFormField(
           controller: controller,
@@ -98,7 +128,7 @@ class PollTimeField extends StatelessWidget {
             );
             if (picked != null) {
               controller.text =
-                '${picked.hour.toString().padLeft(2,'0')}:${picked.minute.toString().padLeft(2,'0')}';
+                  '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
             }
           },
         ),
@@ -113,15 +143,22 @@ class PollIconPicker extends StatelessWidget {
   final String selected;
   final ValueChanged<String> onSelect;
   final bool isDark;
-  const PollIconPicker({super.key, required this.selected, required this.onSelect, required this.isDark});
+  const PollIconPicker(
+      {super.key,
+      required this.selected,
+      required this.onSelect,
+      required this.isDark});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Ícone (opcional)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
-          color: isDark ? AppColors.slate300 : AppColors.slate600)),
+        Text('Ícone (opcional)',
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isDark ? AppColors.slate300 : AppColors.slate600)),
         const SizedBox(height: 6),
         Wrap(
           spacing: 6,
@@ -131,16 +168,17 @@ class PollIconPicker extends StatelessWidget {
             return GestureDetector(
               onTap: () => onSelect(active ? '' : ic),
               child: Container(
-                width: 38, height: 38,
+                width: 38,
+                height: 38,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: active ? AppColors.slate900 : Colors.transparent,
+                    color: active ? AppColors.slate900 : AppColors.transparent,
                     width: 2,
                   ),
                   color: active
-                    ? (isDark ? AppColors.slate700 : AppColors.slate100)
-                    : Colors.transparent,
+                      ? (isDark ? AppColors.slate700 : AppColors.slate100)
+                      : AppColors.transparent,
                 ),
                 alignment: Alignment.center,
                 child: Text(ic, style: const TextStyle(fontSize: 20)),
@@ -170,9 +208,9 @@ class PollCostPicker extends StatelessWidget {
   });
 
   static const _options = [
-    ('',           'Sem custo'),
+    ('', 'Sem custo'),
     ('individual', 'Por pessoa'),
-    ('group',      'Grupo (rateio)'),
+    ('group', 'Grupo (rateio)'),
   ];
 
   @override
@@ -180,8 +218,11 @@ class PollCostPicker extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Custo (opcional)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
-          color: isDark ? AppColors.slate300 : AppColors.slate600)),
+        Text('Custo (opcional)',
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isDark ? AppColors.slate300 : AppColors.slate600)),
         const SizedBox(height: 6),
         Row(
           children: _options.map((opt) {
@@ -194,15 +235,24 @@ class PollCostPicker extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     decoration: BoxDecoration(
-                      color: active ? AppColors.slate900 : Colors.transparent,
+                      color:
+                          active ? AppColors.slate900 : AppColors.transparent,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: active ? AppColors.slate900 : AppColors.slate200),
+                      border: Border.all(
+                          color:
+                              active ? AppColors.slate900 : AppColors.slate200),
                     ),
                     alignment: Alignment.center,
-                    child: Text(opt.$2, style: TextStyle(
-                      fontSize: 11, fontWeight: FontWeight.w500,
-                      color: active ? Colors.white : (isDark ? AppColors.slate300 : AppColors.slate600),
-                    )),
+                    child: Text(opt.$2,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: active
+                              ? AppColors.onDark
+                              : (isDark
+                                  ? AppColors.slate300
+                                  : AppColors.slate600),
+                        )),
                   ),
                 ),
               ),
@@ -217,7 +267,9 @@ class PollCostPicker extends StatelessWidget {
             decoration: InputDecoration(
               isDense: true,
               contentPadding: const EdgeInsets.all(10),
-              hintText: selected == 'individual' ? 'R\$ por pessoa' : 'R\$ total do grupo',
+              hintText: selected == 'individual'
+                  ? 'R\$ por pessoa'
+                  : 'R\$ total do grupo',
             ),
           ),
         ],

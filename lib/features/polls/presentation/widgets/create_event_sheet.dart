@@ -105,7 +105,7 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
       minChildSize: 0.5,
       builder: (_, controller) => Container(
         decoration: BoxDecoration(
-          color: isDark ? AppColors.slate900 : Colors.white,
+          color: isDark ? AppColors.slate900 : AppColors.onDark,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
@@ -128,7 +128,7 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
                         color: AppColors.slate900,
                         borderRadius: BorderRadius.circular(10)),
                     child: const Icon(Icons.calendar_today_outlined,
-                        color: Colors.white, size: 18)),
+                        color: AppColors.onDark, size: 18)),
                 const SizedBox(width: 10),
                 const Text('Novo Evento',
                     style:
@@ -267,7 +267,7 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
                               width: 16,
                               height: 16,
                               child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white))
+                                  strokeWidth: 2, color: AppColors.onDark))
                           : const Text('Criar Evento'),
                     ),
                   ),

@@ -35,12 +35,14 @@ class TeamColorRemoteDataSource {
   }
 
   Future<void> activateColor(String groupId, String colorId) async {
-    final res = await _dio.post(ApiConstants.teamColorActivate(groupId, colorId));
+    final res =
+        await _dio.post(ApiConstants.teamColorActivate(groupId, colorId));
     _throwIfError(res.data);
   }
 
   Future<void> deactivateColor(String groupId, String colorId) async {
-    final res = await _dio.post(ApiConstants.teamColorDeactivate(groupId, colorId));
+    final res =
+        await _dio.post(ApiConstants.teamColorDeactivate(groupId, colorId));
     _throwIfError(res.data);
   }
 

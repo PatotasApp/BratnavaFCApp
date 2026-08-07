@@ -53,7 +53,16 @@ class MatchRemoteDataSource {
 
   // ── Partida atual / lista de partidas ────────────────────────────────────
 
-  /// Retorna {id, status, stepKey, placeName, playedAt} da partida ativa ou null se 404.
+  /// Partida ativa via `/current`.
+  ///
+  /// Sem chamadores desde a migração para `upcoming` + loaders por etapa: apesar
+  /// do nome "stub", este endpoint devolve o `MatchDetailsDto` inteiro — era a
+  /// requisição mais lenta da abertura do app, e tudo que líamos dela (id,
+  /// stepKey, placeName) já vem no header do `upcoming`.
+  ///
+  /// Mantido apenas para não quebrar integrações externas. Prefira
+  /// [fetchUpcomingMatches] seguido do loader da etapa.
+  @Deprecated('Use fetchUpcomingMatches + o loader da etapa correspondente.')
   Future<Map<String, dynamic>?> fetchCurrentMatchStub(String groupId) async {
     final res = await _dio.get(ApiConstants.currentMatch(groupId));
     return _unwrapMap(res.data);

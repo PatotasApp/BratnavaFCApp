@@ -7,19 +7,27 @@ import '../../domain/entities/match_models.dart';
 
 IconData _absenceIcon(int type) {
   switch (type) {
-    case 1:  return Icons.flight_outlined;
-    case 2:  return Icons.local_hospital_outlined;
-    case 3:  return Icons.favorite_border;
-    default: return Icons.more_horiz_outlined;
+    case 1:
+      return Icons.flight_outlined;
+    case 2:
+      return Icons.local_hospital_outlined;
+    case 3:
+      return Icons.favorite_border;
+    default:
+      return Icons.more_horiz_outlined;
   }
 }
 
 String _absenceLabel(int type) {
   switch (type) {
-    case 1:  return 'Viagem';
-    case 2:  return 'Departamento Médico';
-    case 3:  return 'Pessoal';
-    default: return 'Outros';
+    case 1:
+      return 'Viagem';
+    case 2:
+      return 'Departamento Médico';
+    case 3:
+      return 'Pessoal';
+    default:
+      return 'Outros';
   }
 }
 
@@ -43,8 +51,8 @@ class PlayerListTile extends StatelessWidget {
     super.key,
     required this.player,
     this.isCurrentUser = false,
-    this.isAdmin       = false,
-    this.loading       = false,
+    this.isAdmin = false,
+    this.loading = false,
     this.onRemove,
     this.onAccept,
     this.highlightColor,
@@ -55,11 +63,11 @@ class PlayerListTile extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 3),
       decoration: BoxDecoration(
-        color:        highlightColor ?? Colors.transparent,
+        color: highlightColor ?? AppColors.transparent,
         borderRadius: BorderRadius.circular(8),
       ),
       child: ListTile(
-        dense:        true,
+        dense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
         leading: AvatarWidget(name: player.playerName, size: 36),
         title: Row(
@@ -67,19 +75,22 @@ class PlayerListTile extends StatelessWidget {
             Flexible(
               child: Text(
                 player.playerName,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                style:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
             if (player.isGoalkeeper) ...[
               const SizedBox(width: 6),
-              const Icon(Icons.sports_soccer, size: 14, color: AppColors.slate400),
+              const Icon(Icons.sports_soccer,
+                  size: 14, color: AppColors.slate400),
             ],
             if (player.inviteResponse == InviteResponse.declined &&
                 player.absenceType != null) ...[
               const SizedBox(width: 6),
               Tooltip(
-                message: player.absenceDescription ?? _absenceLabel(player.absenceType!),
+                message: player.absenceDescription ??
+                    _absenceLabel(player.absenceType!),
                 child: Icon(
                   _absenceIcon(player.absenceType!),
                   size: 14,
@@ -99,7 +110,7 @@ class PlayerListTile extends StatelessWidget {
                 ),
                 child: const Text(
                   'Convidado',
-                  style: TextStyle(fontSize: 10, color: AppColors.orange700),
+                  style: TextStyle(fontSize: 10, color: AppColors.warningLight),
                 ),
               ),
             ],
@@ -113,7 +124,7 @@ class PlayerListTile extends StatelessWidget {
                 ),
                 child: const Text(
                   'Você',
-                  style: TextStyle(fontSize: 10, color: AppColors.blue600),
+                  style: TextStyle(fontSize: 10, color: AppColors.infoLight),
                 ),
               ),
             ],
@@ -121,7 +132,8 @@ class PlayerListTile extends StatelessWidget {
         ),
         trailing: loading
             ? const SizedBox(
-                width: 20, height: 20,
+                width: 20,
+                height: 20,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : Row(
@@ -129,21 +141,25 @@ class PlayerListTile extends StatelessWidget {
                 children: [
                   if (onAccept != null)
                     IconButton(
-                      icon: const Icon(Icons.check_circle_outline, color: AppColors.emerald500),
+                      icon: const Icon(Icons.check_circle_outline,
+                          color: AppColors.emerald500),
                       onPressed: onAccept,
                       tooltip: 'Aceitar',
                       iconSize: 22,
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                      constraints:
+                          const BoxConstraints(minWidth: 36, minHeight: 36),
                     ),
                   if (onRemove != null && isAdmin)
                     IconButton(
-                      icon: const Icon(Icons.cancel_outlined, color: AppColors.rose500),
+                      icon: const Icon(Icons.cancel_outlined,
+                          color: AppColors.rose500),
                       onPressed: onRemove,
                       tooltip: 'Remover',
                       iconSize: 22,
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                      constraints:
+                          const BoxConstraints(minWidth: 36, minHeight: 36),
                     ),
                 ],
               ),

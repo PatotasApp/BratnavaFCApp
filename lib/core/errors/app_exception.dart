@@ -27,7 +27,8 @@ class ValidationException extends AppException {
 }
 
 /// Extrai mensagem legível de um DioException ou Exception simples.
-String extractDioError(dynamic e, [String fallback = 'Ocorreu um erro inesperado.']) {
+String extractDioError(dynamic e,
+    [String fallback = 'Ocorreu um erro inesperado.']) {
   // Plain Exception(msg) thrown by _throwIfError soft-error helpers
   if (e is Exception) {
     final s = e.toString();

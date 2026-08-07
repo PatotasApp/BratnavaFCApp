@@ -1,16 +1,20 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/api/api_constants.dart';
+import '../../../../core/api/api_response.dart';
 import '../../../../core/errors/app_exception.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
+import '../../../../shared/presentation/widgets/prototype_ui.dart';
 
 extension _FirstOrNullExt<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
@@ -33,7 +37,7 @@ class _PlayerDto {
   // mensalista ratings
   final int? attackRating;
   final int? defenseRating;
-  final int? overallRating;   // displayed as "Físico"
+  final int? overallRating; // displayed as "Físico"
 
   const _PlayerDto({
     required this.id,
@@ -70,16 +74,28 @@ class _PlayerDto {
         isGuest: j['isGuest'] as bool? ?? false,
         status: j['status'] as int? ?? 1,
         guestStarRating: j['guestStarRating'] as int?,
-        attackRating:  j['attackRating']  as int?,
+        attackRating: j['attackRating'] as int?,
         defenseRating: j['defenseRating'] as int?,
         overallRating: j['overallRating'] as int?,
       );
 }
 
+/// GUIDs chegam com caixa e chaves diferentes conforme o endpoint que os
+/// devolve, então comparar as strings cruas faz o papel sumir sem aviso.
+String _normId(String? id) =>
+    (id ?? '').trim().toLowerCase().replaceAll(RegExp(r'[{}]'), '');
+
 class _GroupDto {
   final String id;
   final String name;
   final List<String> adminIds;
+
+  /// Vem no mesmo payload que `adminIds` — é assim que o site monta a lista de
+  /// financeiros da patota. Eu tinha buscado isso num GET
+  /// `/api/Groups/{id}/financeiros` que não existe: aquela rota só aceita POST
+  /// e DELETE, então a chamada falhava calada e ninguém nunca ganhava o selo.
+  final List<String> financeiroIds;
+
   final List<_PlayerDto> players;
   final String createdByUserId;
 
@@ -87,6 +103,7 @@ class _GroupDto {
     required this.id,
     required this.name,
     required this.adminIds,
+    required this.financeiroIds,
     required this.players,
     required this.createdByUserId,
   });
@@ -95,6 +112,8 @@ class _GroupDto {
         id: j['id'] as String? ?? '',
         name: j['name'] as String? ?? '',
         adminIds: List<String>.from(j['adminIds'] as List? ?? const []),
+        financeiroIds:
+            List<String>.from(j['financeiroIds'] as List? ?? const []),
         players: ((j['players'] as List?) ?? const [])
             .map((e) => _PlayerDto.fromJson(e as Map<String, dynamic>))
             .toList(),
@@ -230,10 +249,9 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     return result.where((g) => g['groupId'] == activeGroupId).toList();
   }
 
-  _MyPlayerItem? get _myPlayerInExpanded =>
-      _expandedGroupId == null
-          ? null
-          : _myPlayers.where((p) => p.groupId == _expandedGroupId).firstOrNull;
+  _MyPlayerItem? get _myPlayerInExpanded => _expandedGroupId == null
+      ? null
+      : _myPlayers.where((p) => p.groupId == _expandedGroupId).firstOrNull;
 
   String get _activePlayerId => _myPlayerInExpanded?.playerId ?? '';
 
@@ -243,15 +261,34 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     return account.isGroupAdmin(groupId);
   }
 
-  bool _isGroupFinanceiro(String groupId) {
+  bool _canSeePaymentStatus(String groupId) {
     final account = ref.read(accountStoreProvider).activeAccount;
     if (account == null) return false;
-    return account.isGroupFinanceiro(groupId);
+
+    // Exclusivo do financeiro da patota. Pendência de pagamento é dado sensível
+    // e quem cuida disso é o financeiro — administrar a patota (marcar partida,
+    // montar time, editar jogador) não dá acesso a quem está devendo.
+    // Admin global também não entra: o papel é operacional, não financeiro.
+    if (account.isGroupFinanceiro(groupId)) return true;
+
+    // A conta guarda o papel a partir de `refreshMyGroupRoles`, que depende de
+    // uma chamada extra ter dado certo. O payload da patota traz a lista
+    // autoritativa de financeiros e já está carregado aqui — se o meu userId
+    // está nela, eu sou financeiro, independentemente daquela chamada.
+    final group = _group;
+    if (group == null || !_sameId(group.id, groupId)) return false;
+    return group.financeiroIds.any((id) => _sameId(id, account.userId));
+  }
+
+  static bool _sameId(String a, String b) {
+    final na = _normId(a);
+    return na.isNotEmpty && na == _normId(b);
   }
 
   Future<void> _loadPaymentData(String groupId) async {
-    // Only financeiros/admins see payment badges
-    if (!_isGroupFinanceiro(groupId)) {
+    // Quem não é financeiro nem chega a baixar os dados — evita trafegar a grade
+    // de pagamentos da patota inteira para quem não pode vê-la.
+    if (!_canSeePaymentStatus(groupId)) {
       if (mounted) setState(() => _paymentMap = {});
       return;
     }
@@ -262,12 +299,24 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     try {
       final results = await Future.wait([
         _dio.get(ApiConstants.monthlyGrid(groupId, year)),
-        _dio.get(ApiConstants.extraCharges(groupId)),
+        // Sem paginação explícita o backend devolve só a primeira página no
+        // tamanho padrão, e cobranças ficam de fora da contagem. O site pede
+        // 100 de uma vez; seguimos igual.
+        _dio.get(
+          ApiConstants.extraCharges(groupId),
+          queryParameters: {'year': year, 'page': 1, 'pageSize': 100},
+        ),
       ]);
 
-      final gridRaw   = _unwrap(results[0].data);
-      final extrasRaw = _unwrap(results[1].data) as List? ?? [];
-      final grid      = gridRaw is Map<String, dynamic> ? gridRaw : <String, dynamic>{};
+      final gridRaw = _unwrap(results[0].data);
+      // `extra-charges` responde um PagedResult (`{page, pageSize, total,
+      // items}`), não uma lista. O `as List?` que estava aqui não devolvia
+      // null nesse caso: estourava, e o catch lá embaixo zerava o mapa
+      // inteiro — por isso nem "Em dia" aparecia, apesar da grade mensal ter
+      // vindo certa. `unwrapList` já sabe desembrulhar as duas formas.
+      final extrasRaw = unwrapList(results[1].data);
+      final grid =
+          gridRaw is Map<String, dynamic> ? gridRaw : <String, dynamic>{};
 
       final hasMonthlyFee = (grid['monthlyFee'] as num? ?? 0) > 0;
       final map = <String, _PaymentBadge>{};
@@ -275,7 +324,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       // ── monthly grid rows ──
       for (final row in (grid['players'] as List? ?? [])) {
         final r = row as Map<String, dynamic>;
-        final playerId   = r['playerId'] as String? ?? '';
+        final playerId = r['playerId'] as String? ?? '';
         final joinedYear = r['joinedYear'] as int? ?? 0;
         final joinedMonth = r['joinedMonth'] as int? ?? 1;
 
@@ -302,7 +351,10 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
           final pid = p['playerId'] as String? ?? '';
           final existing = map[pid];
           if (existing != null) {
-            map[pid] = (pendingMonths: existing.pendingMonths, pendingExtras: existing.pendingExtras + 1);
+            map[pid] = (
+              pendingMonths: existing.pendingMonths,
+              pendingExtras: existing.pendingExtras + 1
+            );
           } else {
             map[pid] = (pendingMonths: 0, pendingExtras: 1);
           }
@@ -311,8 +363,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
 
       if (mounted) setState(() => _paymentMap = map);
     } catch (_) {
-      // silencioso — badges simplesmente não aparecem
-      if (mounted) setState(() => _paymentMap = {});
+      // Silencioso, e sem zerar: uma falha de rede não deve apagar badges que
+      // já estavam corretos na tela. Se nunca carregou, o mapa já está vazio.
     }
   }
 
@@ -361,9 +413,10 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     setState(() => _mineLoading = true);
     try {
       final res = await _dio.get(ApiConstants.playersMe);
-      final raw = _unwrap(res.data);
       setState(() {
-        _myPlayers = (raw as List? ?? const [])
+        // `unwrapList` em vez de `as List?`: o cast estoura se a rota passar a
+        // paginar, e o erro só apareceria como tela vazia.
+        _myPlayers = unwrapList(res.data)
             .map((e) => _MyPlayerItem.fromJson(e as Map<String, dynamic>))
             .toList();
       });
@@ -379,11 +432,10 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     if (account == null) return;
     try {
       final res = await _dio.get(ApiConstants.groupsByAdmin(account.userId));
-      final raw = _unwrap(res.data);
       final playerGroupIds = _myPlayers.map((p) => p.groupId).toSet();
       if (mounted) {
         setState(() {
-          _adminOnlyGroups = (raw as List? ?? [])
+          _adminOnlyGroups = unwrapList(res.data)
               .map((e) => e as Map<String, dynamic>)
               .where((g) => !playerGroupIds.contains(g['id'] as String? ?? ''))
               .map((g) => {
@@ -408,15 +460,34 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       final res = await _dio.get(ApiConstants.groupById(groupId));
       final raw = _unwrap(res.data);
       setState(() => _group = _GroupDto.fromJson(raw as Map<String, dynamic>));
-      // Load payment badges in parallel (silently)
+      // Os papéis já vieram no payload acima. Só os badges de pagamento ainda
+      // precisam de uma segunda chamada, que roda sem bloquear a tela.
       _loadPaymentData(groupId);
     } catch (e) {
       setState(() {
-        _groupError = extractDioError(e, 'Não foi possível carregar os dados da patota.');
+        _groupError =
+            extractDioError(e, 'Não foi possível carregar os dados da patota.');
       });
     } finally {
       if (mounted) setState(() => _groupLoading = false);
     }
+  }
+
+  /// Papel de cada usuário na patota. Financeiro tem precedência sobre admin
+  /// porque é o papel mais específico — quem acumula os dois aparece como
+  /// Financeiro, igual ao protótipo (Maria é "Financeiro", não "Admin").
+  /// Chaveado por userId normalizado — ver [_normId].
+  Map<String, String> _roleLabels() {
+    final labels = <String, String>{};
+    for (final id in _group?.adminIds ?? const <String>[]) {
+      final key = _normId(id);
+      if (key.isNotEmpty) labels[key] = 'Admin';
+    }
+    for (final id in _group?.financeiroIds ?? const <String>[]) {
+      final key = _normId(id);
+      if (key.isNotEmpty) labels[key] = 'Financeiro';
+    }
+    return labels;
   }
 
   void _toggleGroup(String groupId) {
@@ -454,7 +525,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => _CreateGroupSheet(
         onSubmit: (name) async {
           await _dio.post(ApiConstants.groups, data: {
@@ -466,7 +537,9 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
 
           await _loadMine();
           await _loadAdminGroups();
-          await ref.read(authNotifierProvider.notifier).refreshGroupMembership();
+          await ref
+              .read(authNotifierProvider.notifier)
+              .refreshGroupMembership();
           ref.invalidate(myPlayersProvider);
           // Abre automaticamente se agora há exatamente uma patota
           if (_myGroups.length == 1) {
@@ -477,27 +550,35 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     );
   }
 
+  /// Cria um convidado — jogador sem conta no sistema.
+  ///
+  /// Extraído da folha para poder ser chamado também de dentro da folha de
+  /// convite, que agora oferece "Usuário" e "Convidado" no mesmo lugar.
+  Future<void> _createGuest(
+      String groupId, String name, bool isGoalkeeper, int? starRating) async {
+    await _dio.post(
+      ApiConstants.playersCreate,
+      data: {
+        'name': name,
+        'groupId': groupId,
+        'skillPoints': 0,
+        'isGoalkeeper': isGoalkeeper,
+        'isGuest': true,
+        'status': 1,
+        if (starRating != null) 'guestStarRating': starRating,
+      },
+    );
+    _reloadGroup();
+  }
+
   void _showAddGuest(String groupId) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => _AddGuestSheet(
-        onSubmit: (name, isGoalkeeper, starRating) async {
-          await _dio.post(
-            ApiConstants.playersCreate,
-            data: {
-              'name': name,
-              'groupId': groupId,
-              'skillPoints': 0,
-              'isGoalkeeper': isGoalkeeper,
-              'isGuest': true,
-              'status': 1,
-              if (starRating != null) 'guestStarRating': starRating,
-            },
-          );
-          _reloadGroup();
-        },
+        onSubmit: (name, isGoalkeeper, starRating) =>
+            _createGuest(groupId, name, isGoalkeeper, starRating),
       ),
     );
   }
@@ -506,28 +587,37 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => _InviteSheet(
         dio: _dio,
         groupId: groupId,
         existingUserIds: _existingUserIds,
         guestPlayers: _guestPlayers,
         onInvited: () async => _reloadGroup(),
+        onAddGuest: (name, isGoalkeeper, starRating) =>
+            _createGuest(groupId, name, isGoalkeeper, starRating),
       ),
     );
   }
 
-  void _showEditPlayer(_PlayerDto player) {
+  /// Abre o editor na seção correspondente à aba de origem.
+  ///
+  /// As duas abas levavam à mesma folha completa, o que fazia a lista de
+  /// avaliações abrir campos de cadastro e vice-versa — o contexto de onde se
+  /// clicou já diz o que a pessoa quer mexer.
+  void _showEditPlayer(_PlayerDto player,
+      {_EditSection section = _EditSection.player}) {
     final isAdminHere =
         _expandedGroupId != null ? _isGroupAdmin(_expandedGroupId!) : false;
 
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => _EditPlayerSheet(
         player: player,
         isAdmin: isAdminHere,
+        section: section,
         onSaved: (dto) async {
           await _dio.put(ApiConstants.playerOps(player.id), data: dto);
           _reloadGroup();
@@ -555,61 +645,37 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // Garante rebuild quando activeGroupId muda (troca de patota na topbar)
     ref.watch(accountStoreProvider);
+    final activeGroupName = _group?.name ??
+        (_myGroups.isNotEmpty ? _myGroups.first['groupName'] : null);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+    return SafeArea(
+      bottom: false,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_mineLoading)
-            _buildLoadingHeader()
-          else if (_myGroups.isEmpty)
-            _buildEmptyHeader(isDark)
-          else if (_myGroups.length == 1)
-            _buildSingleGroup(isDark)
-          else
-            _buildAccordion(isDark),
-          if (!_mineLoading && _myGroups.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _buildNewGroupFooter(isDark),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNewGroupFooter(bool isDark) {
-    return GestureDetector(
-      onTap: _showCreateGroup,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.12)
-                : Colors.black.withValues(alpha: 0.1),
+          _GroupsHeader(
+            groupName: activeGroupName,
+            onSettings:
+                _myGroups.isEmpty ? null : () => context.push('/app/settings'),
           ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.add,
-              size: 18,
-              color: isDark ? Colors.white54 : const Color(0xFF64748B),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              'Criar nova patota',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: isDark ? Colors.white54 : const Color(0xFF64748B),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_mineLoading)
+                    _buildLoadingHeader()
+                  else if (_myGroups.isEmpty)
+                    _buildEmptyHeader(isDark)
+                  else if (_myGroups.length == 1)
+                    _buildSingleGroup(isDark)
+                  else
+                    _buildAccordion(isDark),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -621,12 +687,13 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
           SizedBox(
             width: 18,
             height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+            child: CircularProgressIndicator(
+                strokeWidth: 2, color: AppColors.onDark70),
           ),
           SizedBox(width: 12),
           Text(
             'Carregando patotas...',
-            style: TextStyle(fontSize: 14, color: Colors.white70),
+            style: TextStyle(fontSize: 14, color: AppColors.onDark70),
           ),
         ],
       ),
@@ -638,11 +705,11 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.group_outlined, size: 36, color: Colors.white38),
+          const Icon(Icons.group_outlined, size: 36, color: AppColors.onDark38),
           const SizedBox(height: 12),
           const Text(
             'Você não faz parte de nenhuma patota.',
-            style: TextStyle(fontSize: 14, color: Colors.white60),
+            style: TextStyle(fontSize: 14, color: AppColors.onDark60),
           ),
           const SizedBox(height: 16),
           _DarkBtn(
@@ -663,7 +730,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     final isAdminHere = _isGroupAdmin(groupId);
     final account = ref.watch(accountStoreProvider).activeAccount;
     final isCreator = _group?.createdByUserId == account?.userId;
-    final icons = GroupIcons.from(ref.watch(groupSettingsProvider(groupId)).valueOrNull);
+    final icons =
+        GroupIcons.from(ref.watch(groupSettingsProvider(groupId)).valueOrNull);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -673,26 +741,35 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Protótipo: eyebrow "PATOTA ATIVA", nome grande e o avatar do
+              // grupo à DIREITA. Antes o avatar vinha à esquerda e faltava o
+              // rótulo, então a faixa não se lia como "esta é a patota ativa".
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _GroupAvatar(
-                    letter: groupName.isEmpty ? 'G' : groupName.characters.first,
-                    size: 48,
-                    radius: 16,
-                  ),
-                  const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        const Text(
+                          'PATOTA ATIVA',
+                          style: TextStyle(
+                            fontSize: 11,
+                            height: 1.25,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: .77,
+                            color: AppColors.primaryHover,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
                         Text(
                           groupName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 20,
+                            fontSize: 22,
                             fontWeight: FontWeight.w900,
-                            color: Colors.white,
+                            color: AppColors.onDark,
                             height: 1.2,
                           ),
                         ),
@@ -705,19 +782,28 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                                   : '',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 13, color: Colors.white60),
+                          style: const TextStyle(
+                              fontSize: 11, color: AppColors.darkTextSecondary),
                         ),
                       ],
                     ),
                   ),
+                  const SizedBox(width: 12),
                   if (_groupLoading)
                     const SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white70,
+                        color: AppColors.onDark70,
                       ),
+                    )
+                  else
+                    _GroupAvatar(
+                      letter:
+                          groupName.isEmpty ? 'G' : groupName.characters.first,
+                      size: 50,
+                      radius: 16,
                     ),
                 ],
               ),
@@ -730,6 +816,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                   activePlayerId: _activePlayerId,
                   onAddGuest: () => _showAddGuest(groupId),
                   onInvite: () => _showInvite(groupId),
+                  onCreateGroup: _showCreateGroup,
                   onLeave: _showLeaveConfirm,
                 ),
               ],
@@ -739,18 +826,18 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
         const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+            color: isDark ? AppColors.darkCard : AppColors.onDark,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.07),
+                  ? AppColors.onDark.withValues(alpha: 0.08)
+                  : AppColors.darkApp.withValues(alpha: 0.07),
             ),
             boxShadow: isDark
                 ? null
                 : [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.06),
+                      color: AppColors.darkApp.withValues(alpha: 0.06),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -767,12 +854,15 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
             activePlayerId: _activePlayerId,
             isAdminHere: isAdminHere,
             isFinanceiroHere: _expandedGroupId != null
-                ? _isGroupFinanceiro(_expandedGroupId!)
+                ? _canSeePaymentStatus(_expandedGroupId!)
                 : false,
             paymentMap: _paymentMap,
             icons: icons,
             isDark: isDark,
             onEditPlayer: _showEditPlayer,
+            onEditRatings: (p) =>
+                _showEditPlayer(p, section: _EditSection.ratings),
+            roleLabels: _roleLabels(),
           ),
         ),
       ],
@@ -782,7 +872,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
   Widget _buildAccordion(bool isDark) {
     final account = ref.watch(accountStoreProvider).activeAccount;
     final expandedIcons = _expandedGroupId != null
-        ? GroupIcons.from(ref.watch(groupSettingsProvider(_expandedGroupId!)).valueOrNull)
+        ? GroupIcons.from(
+            ref.watch(groupSettingsProvider(_expandedGroupId!)).valueOrNull)
         : GroupIcons.defaults;
 
     return Column(
@@ -796,14 +887,15 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
+                  color: AppColors.onDark.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                  border: Border.all(
+                      color: AppColors.onDark.withValues(alpha: 0.2)),
                 ),
                 child: const Icon(
                   Icons.group_outlined,
                   size: 22,
-                  color: Colors.white,
+                  color: AppColors.onDark,
                 ),
               ),
               const SizedBox(width: 16),
@@ -818,12 +910,13 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w900,
-                        color: Colors.white,
+                        color: AppColors.onDark,
                       ),
                     ),
                     Text(
                       '${_myGroups.length} patotas',
-                      style: const TextStyle(fontSize: 13, color: Colors.white60),
+                      style: const TextStyle(
+                          fontSize: 13, color: AppColors.onDark60),
                     ),
                   ],
                 ),
@@ -865,17 +958,72 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                       inactivePlayers: _inactivePlayers,
                       activePlayerId: _activePlayerId,
                       isAdminHere: isAdminHere,
-                      isFinanceiroHere: _isGroupFinanceiro(groupId),
+                      isFinanceiroHere: _canSeePaymentStatus(groupId),
                       paymentMap: _paymentMap,
                       icons: expandedIcons,
                       isDark: isDark,
                       onEditPlayer: _showEditPlayer,
+                      onEditRatings: (p) =>
+                          _showEditPlayer(p, section: _EditSection.ratings),
+                      roleLabels: _roleLabels(),
                     )
                   : null,
             ),
           );
         }),
       ],
+    );
+  }
+}
+
+class _GroupsHeader extends StatelessWidget {
+  final String? groupName;
+  final VoidCallback? onSettings;
+
+  const _GroupsHeader({
+    required this.groupName,
+    required this.onSettings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      height: 72,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Minha patota', style: theme.textTheme.titleLarge),
+                const SizedBox(height: 2),
+                Text(
+                  groupName?.isNotEmpty == true
+                      ? groupName!
+                      : 'Organize seus jogadores',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: onSettings,
+            tooltip: 'Configurações da patota',
+            icon: const Icon(Icons.settings_outlined),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -891,6 +1039,7 @@ class _HeaderButtons extends StatelessWidget {
   final String activePlayerId;
   final VoidCallback onAddGuest;
   final VoidCallback onInvite;
+  final VoidCallback onCreateGroup;
   final VoidCallback onLeave;
 
   const _HeaderButtons({
@@ -900,6 +1049,7 @@ class _HeaderButtons extends StatelessWidget {
     required this.activePlayerId,
     required this.onAddGuest,
     required this.onInvite,
+    required this.onCreateGroup,
     required this.onLeave,
   });
 
@@ -915,20 +1065,29 @@ class _HeaderButtons extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
-        if (isAdminHere) ...[
-          _DarkBtn(
-            label: 'Convidado',
-            icon: Icons.add,
-            style: _DarkBtnStyle.ghost,
-            onTap: onAddGuest,
-          ),
+        // Um botão "Convidar" só — a folha de convite já decide entre usuário
+        // e convidado. Antes eram dois botões separados.
+        //
+        // Restrito a admin, de propósito. O protótipo mostra este botão para
+        // todo mundo, mas lá não existem papéis: é mock. Trazer gente para a
+        // patota é decisão de admin, então esta divergência com o protótipo é
+        // intencional e não deve ser "corrigida".
+        if (isAdminHere)
           _DarkBtn(
             label: 'Convidar',
             icon: Icons.person_add_alt_1_outlined,
             style: _DarkBtnStyle.solid,
             onTap: onInvite,
           ),
-        ],
+        // No protótipo "Convidar" e "Nova patota" têm o mesmo peso visual:
+        // fundo claro sobre o card escuro. O `ghost` deixava este quase
+        // invisível — só um contorno translúcido sobre fundo escuro.
+        _DarkBtn(
+          label: 'Nova patota',
+          icon: Icons.add,
+          style: _DarkBtnStyle.solid,
+          onTap: onCreateGroup,
+        ),
         if (showLeave || showCreatorLeave)
           _DarkBtn(
             label: 'Sair',
@@ -964,24 +1123,24 @@ class _DarkBtn extends StatelessWidget {
 
     switch (style) {
       case _DarkBtnStyle.ghost:
-        bg = Colors.white.withValues(alpha: 0.10);
-        borderColor = Colors.white.withValues(alpha: 0.20);
-        textColor = Colors.white;
+        bg = AppColors.onDark.withValues(alpha: 0.10);
+        borderColor = AppColors.onDark.withValues(alpha: 0.20);
+        textColor = AppColors.onDark;
         break;
       case _DarkBtnStyle.solid:
-        bg = Colors.white;
-        borderColor = Colors.transparent;
-        textColor = const Color(0xFF0F172A);
+        bg = AppColors.onDark;
+        borderColor = AppColors.transparent;
+        textColor = AppColors.lightText;
         break;
       case _DarkBtnStyle.danger:
-        bg = const Color(0xFFEF4444).withValues(alpha: 0.20);
-        borderColor = const Color(0xFFF87171).withValues(alpha: 0.35);
-        textColor = const Color(0xFFFCA5A5);
+        bg = AppColors.prototypeDanger.withValues(alpha: 0.20);
+        borderColor = AppColors.prototypeDanger.withValues(alpha: 0.35);
+        textColor = AppColors.rose200;
         break;
     }
 
     return Material(
-      color: Colors.transparent,
+      color: AppColors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
@@ -1047,8 +1206,8 @@ class _AccordionItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final borderColor = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.black.withValues(alpha: 0.06);
+        ? AppColors.onDark.withValues(alpha: 0.08)
+        : AppColors.darkApp.withValues(alpha: 0.06);
 
     final showLeave =
         !isAdminHere && myPlayer != null && !myPlayer!.isGuest && isExpanded;
@@ -1056,13 +1215,13 @@ class _AccordionItem extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        color: isDark ? AppColors.darkCard : AppColors.onDark,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: borderColor),
         boxShadow: isExpanded && !isDark
             ? [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
+                  color: AppColors.darkApp.withValues(alpha: 0.08),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -1081,7 +1240,9 @@ class _AccordionItem extends StatelessWidget {
                   Row(
                     children: [
                       _MiniGroupAvatar(
-                        letter: groupName.isEmpty ? 'G' : groupName.characters.first,
+                        letter: groupName.isEmpty
+                            ? 'G'
+                            : groupName.characters.first,
                         isExpanded: isExpanded,
                         isDark: isDark,
                       ),
@@ -1097,7 +1258,9 @@ class _AccordionItem extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                color: isDark
+                                    ? AppColors.onDark
+                                    : AppColors.lightText,
                               ),
                             ),
                             if (isAdminHere)
@@ -1106,8 +1269,8 @@ class _AccordionItem extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: isDark
-                                      ? const Color(0xFF64748B)
-                                      : const Color(0xFF94A3B8),
+                                      ? AppColors.lightTextSecondary
+                                      : AppColors.lightTextMuted,
                                 ),
                               ),
                           ],
@@ -1120,8 +1283,8 @@ class _AccordionItem extends StatelessWidget {
                           Icons.keyboard_arrow_down,
                           size: 20,
                           color: isDark
-                              ? const Color(0xFF64748B)
-                              : const Color(0xFF94A3B8),
+                              ? AppColors.lightTextSecondary
+                              : AppColors.lightTextMuted,
                         ),
                       ),
                     ],
@@ -1192,12 +1355,12 @@ class _MiniGroupAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = isExpanded
-        ? (isDark ? Colors.white : const Color(0xFF0F172A))
-        : (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9));
+        ? (isDark ? AppColors.onDark : AppColors.lightText)
+        : (isDark ? AppColors.darkBorder : AppColors.lightSeparator);
 
     final fg = isExpanded
-        ? (isDark ? const Color(0xFF0F172A) : Colors.white)
-        : (isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569));
+        ? (isDark ? AppColors.lightText : AppColors.onDark)
+        : (isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary);
 
     return Container(
       width: 36,
@@ -1244,24 +1407,26 @@ class _SmallBtn extends StatelessWidget {
 
     switch (variant) {
       case _SmallBtnVariant.primary:
-        bg = const Color(0xFF0F172A);
-        textColor = Colors.white;
-        borderColor = Colors.transparent;
+        bg = AppColors.lightText;
+        textColor = AppColors.onDark;
+        borderColor = AppColors.transparent;
         break;
       case _SmallBtnVariant.secondary:
-        bg = isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9);
-        textColor = isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569);
-        borderColor = isDark ? const Color(0xFF475569) : const Color(0xFFE2E8F0);
+        bg = isDark ? AppColors.darkBorder : AppColors.lightSeparator;
+        textColor =
+            isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+        borderColor =
+            isDark ? AppColors.lightTextSecondary : AppColors.lightBorder;
         break;
       case _SmallBtnVariant.danger:
-        bg = Colors.transparent;
-        textColor = const Color(0xFFE11D48);
-        borderColor = const Color(0xFFFDA4AF);
+        bg = AppColors.transparent;
+        textColor = AppColors.prototypeDanger;
+        borderColor = AppColors.rose200;
         break;
     }
 
     return Material(
-      color: Colors.transparent,
+      color: AppColors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
@@ -1312,6 +1477,12 @@ class _GroupContent extends StatefulWidget {
   final bool isDark;
   final void Function(_PlayerDto) onEditPlayer;
 
+  /// Mesma folha, seção de avaliações — a aba de origem decide.
+  final void Function(_PlayerDto) onEditRatings;
+
+  /// userId -> rótulo do papel ("Admin" / "Financeiro").
+  final Map<String, String> roleLabels;
+
   const _GroupContent({
     required this.group,
     required this.groupLoading,
@@ -1326,6 +1497,8 @@ class _GroupContent extends StatefulWidget {
     this.icons = GroupIcons.defaults,
     required this.isDark,
     required this.onEditPlayer,
+    required this.onEditRatings,
+    this.roleLabels = const {},
   });
 
   @override
@@ -1334,39 +1507,44 @@ class _GroupContent extends StatefulWidget {
 
 class _GroupContentState extends State<_GroupContent> {
   int _tab = 0; // 0 = Jogadores, 1 = Avaliações
+  int _playerFilter = 0; // 0 = Mensalistas, 1 = Convidados, 2 = Inativos
 
   @override
   Widget build(BuildContext context) {
-    final group          = widget.group;
-    final groupLoading   = widget.groupLoading;
-    final groupError     = widget.groupError;
-    final activePlayers  = widget.activePlayers;
-    final guestPlayers   = widget.guestPlayers;
-    final inactivePlayers= widget.inactivePlayers;
+    final group = widget.group;
+    final groupLoading = widget.groupLoading;
+    final groupError = widget.groupError;
+    final activePlayers = widget.activePlayers;
+    final guestPlayers = widget.guestPlayers;
+    final inactivePlayers = widget.inactivePlayers;
     final activePlayerId = widget.activePlayerId;
-    final isAdminHere    = widget.isAdminHere;
+    final isAdminHere = widget.isAdminHere;
     final isFinanceiroHere = widget.isFinanceiroHere;
-    final paymentMap     = widget.paymentMap;
-    final icons          = widget.icons;
-    final isDark         = widget.isDark;
-    final onEditPlayer   = widget.onEditPlayer;
+    final paymentMap = widget.paymentMap;
+    final icons = widget.icons;
+    final isDark = widget.isDark;
+    final onEditPlayer = widget.onEditPlayer;
+    final onEditRatings = widget.onEditRatings;
+    final roleLabels = widget.roleLabels;
 
     if (groupError != null) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFFFFF1F2),
+          color: AppColors.rose50,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFFECACA)),
+          border: Border.all(color: AppColors.rose200),
         ),
         child: Row(
           children: [
-            const Icon(Icons.error_outline, size: 15, color: Color(0xFFBE123C)),
+            const Icon(Icons.error_outline,
+                size: 15, color: AppColors.prototypeDanger),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 groupError,
-                style: const TextStyle(fontSize: 13, color: Color(0xFFBE123C)),
+                style: const TextStyle(
+                    fontSize: 13, color: AppColors.prototypeDanger),
               ),
             ),
           ],
@@ -1394,7 +1572,9 @@ class _GroupContentState extends State<_GroupContent> {
 
     if (group == null) return const SizedBox.shrink();
 
-    if (activePlayers.isEmpty && guestPlayers.isEmpty && inactivePlayers.isEmpty) {
+    if (activePlayers.isEmpty &&
+        guestPlayers.isEmpty &&
+        inactivePlayers.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 40),
         child: Column(
@@ -1402,14 +1582,17 @@ class _GroupContentState extends State<_GroupContent> {
             Icon(
               Icons.group_outlined,
               size: 32,
-              color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.2),
+              color: (isDark ? AppColors.onDark : AppColors.darkApp)
+                  .withValues(alpha: 0.2),
             ),
             const SizedBox(height: 8),
             Text(
               'Nenhum jogador nesta patota.',
               style: TextStyle(
                 fontSize: 14,
-                color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                color: isDark
+                    ? AppColors.lightTextSecondary
+                    : AppColors.lightTextMuted,
               ),
             ),
           ],
@@ -1423,95 +1606,240 @@ class _GroupContentState extends State<_GroupContent> {
         // ── Tab bar (admin only) ─────────────────────────────────────
         if (isAdminHere) ...[
           _GroupTabBar(
-            tab:    _tab,
+            tab: _tab,
             isDark: isDark,
-            onTab:  (t) => setState(() => _tab = t),
+            onTab: (t) => setState(() => _tab = t),
           ),
           const SizedBox(height: 16),
         ],
 
         // ── Tab content ──────────────────────────────────────────────
         if (_tab == 0 || !isAdminHere) ...[
-          if (activePlayers.isEmpty)
-            Text(
-              'Nenhum mensalista ativo.',
-              style: TextStyle(
-                fontSize: 14,
-                fontStyle: FontStyle.italic,
-                color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
-              ),
-            )
-          else
-            _PlayerSection(
-              label: 'Mensalistas',
-              count: activePlayers.length,
-              iconData: Icons.check,
-              badgeBg: const Color(0xFF10B981),
-              badgeTextColor: const Color(0xFF065F46),
-              badgeLabelBg: const Color(0xFFD1FAE5),
-              players: activePlayers,
-              activePlayerId: activePlayerId,
-              isAdminHere: isAdminHere,
-              isFinanceiroHere: isFinanceiroHere,
-              paymentMap: paymentMap,
-              icons: icons,
-              dim: false,
-              isDark: isDark,
-              onEdit: onEditPlayer,
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _PlayerFilterChip(
+                  label: 'Mensalistas',
+                  count: activePlayers.length,
+                  selected: _playerFilter == 0,
+                  onTap: () => setState(() => _playerFilter = 0),
+                ),
+                const SizedBox(width: 7),
+                _PlayerFilterChip(
+                  label: 'Convidados',
+                  count: guestPlayers.length,
+                  selected: _playerFilter == 1,
+                  onTap: () => setState(() => _playerFilter = 1),
+                ),
+                const SizedBox(width: 7),
+                _PlayerFilterChip(
+                  label: 'Inativos',
+                  count: inactivePlayers.length,
+                  selected: _playerFilter == 2,
+                  onTap: () => setState(() => _playerFilter = 2),
+                ),
+              ],
             ),
-          if (guestPlayers.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            _PlayerSection(
-              label: 'Convidados',
-              count: guestPlayers.length,
-              iconData: Icons.person_add_alt_1_outlined,
-              badgeBg: const Color(0xFFF59E0B),
-              badgeTextColor: const Color(0xFF92400E),
-              badgeLabelBg: const Color(0xFFFEF3C7),
-              players: guestPlayers,
-              activePlayerId: activePlayerId,
-              isAdminHere: isAdminHere,
-              isFinanceiroHere: isFinanceiroHere,
-              paymentMap: paymentMap,
-              icons: icons,
-              dim: false,
-              isDark: isDark,
-              onEdit: onEditPlayer,
-            ),
-          ],
-          if (inactivePlayers.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            _PlayerSection(
-              label: 'Inativos',
-              count: inactivePlayers.length,
-              iconData: Icons.close,
-              badgeBg: const Color(0xFF94A3B8),
-              badgeTextColor: isDark
-                  ? const Color(0xFFCBD5E1)
-                  : const Color(0xFF64748B),
-              badgeLabelBg:
-                  isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
-              players: inactivePlayers,
-              activePlayerId: activePlayerId,
-              isAdminHere: isAdminHere,
-              isFinanceiroHere: isFinanceiroHere,
-              paymentMap: paymentMap,
-              icons: icons,
-              dim: true,
-              isDark: isDark,
-              onEdit: onEditPlayer,
-            ),
-          ],
+          ),
+          const SizedBox(height: 12),
+          _FilteredPlayerSection(
+            filter: _playerFilter,
+            activePlayers: activePlayers,
+            guestPlayers: guestPlayers,
+            inactivePlayers: inactivePlayers,
+            activePlayerId: activePlayerId,
+            isAdminHere: isAdminHere,
+            isFinanceiroHere: isFinanceiroHere,
+            paymentMap: paymentMap,
+            icons: icons,
+            isDark: isDark,
+            onEdit: onEditPlayer,
+            roleLabels: roleLabels,
+          ),
         ] else ...[
           _RatingsTab(
             players: [...activePlayers, ...guestPlayers],
             activePlayerId: activePlayerId,
             isAdminHere: isAdminHere,
             isDark: isDark,
-            onEdit: onEditPlayer,
+            onEdit: onEditRatings,
           ),
         ],
       ],
+    );
+  }
+}
+
+class _PlayerFilterChip extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _PlayerFilterChip({
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: selected
+          ? theme.colorScheme.primary
+          : theme.colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        // `button.proto-chip`: 44 de altura, padding lateral 10, fonte 12/650.
+        // A versão anterior usava labelLarge (14px) com padding 14, ficava larga
+        // demais e o terceiro chip ("Inativos") saía da tela.
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Center(
+              child: Text(
+                '$label · $count',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: selected
+                      ? theme.colorScheme.onPrimary
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FilteredPlayerSection extends StatelessWidget {
+  final int filter;
+  final List<_PlayerDto> activePlayers;
+  final List<_PlayerDto> guestPlayers;
+  final List<_PlayerDto> inactivePlayers;
+  final String activePlayerId;
+  final bool isAdminHere;
+  final bool isFinanceiroHere;
+  final Map<String, _PaymentBadge> paymentMap;
+  final GroupIcons icons;
+  final bool isDark;
+  final void Function(_PlayerDto) onEdit;
+  final Map<String, String> roleLabels;
+
+  const _FilteredPlayerSection({
+    required this.filter,
+    required this.activePlayers,
+    required this.guestPlayers,
+    required this.inactivePlayers,
+    required this.activePlayerId,
+    required this.isAdminHere,
+    required this.isFinanceiroHere,
+    required this.paymentMap,
+    required this.icons,
+    required this.isDark,
+    required this.onEdit,
+    this.roleLabels = const {},
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final players = switch (filter) {
+      1 => guestPlayers,
+      2 => inactivePlayers,
+      _ => activePlayers,
+    };
+    final label = switch (filter) {
+      1 => 'Convidados',
+      2 => 'Inativos',
+      _ => 'Mensalistas',
+    };
+
+    if (players.isEmpty) {
+      // `.proto-empty` do protótipo: borda tracejada, ícone, título e uma linha
+      // dizendo o que fazer. Antes era só uma frase solta no meio do card.
+      final theme = Theme.of(context);
+      final muted = theme.colorScheme.onSurfaceVariant;
+      return Container(
+        constraints: const BoxConstraints(minHeight: 150),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: AppColors.borderDashedOf(theme.brightness),
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              switch (filter) {
+                1 => Icons.person_add_alt_1_outlined,
+                2 => Icons.person_off_outlined,
+                _ => Icons.groups_outlined,
+              },
+              size: 28,
+              color: muted,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Nenhum jogador em $label',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              switch (filter) {
+                1 =>
+                  'Convidados aparecem aqui depois de adicionados a uma partida.',
+                2 => 'Jogadores que saíram da patota ficam listados aqui.',
+                _ => 'Use Convidar para trazer alguém para a patota.',
+              },
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 11, color: muted),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return _PlayerSection(
+      label: label,
+      count: players.length,
+      badgeTextColor: switch (filter) {
+        1 => AppColors.warningLight,
+        2 =>
+          isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+        _ =>
+          AppColors.accentTextOf(isDark ? Brightness.dark : Brightness.light),
+      },
+      badgeLabelBg: switch (filter) {
+        1 => AppColors.amber50,
+        2 => isDark ? AppColors.darkBorder : AppColors.lightSeparator,
+        _ => AppColors.accentBgOf(isDark ? Brightness.dark : Brightness.light),
+      },
+      roleLabels: roleLabels,
+      players: players,
+      activePlayerId: activePlayerId,
+      isAdminHere: isAdminHere,
+      isFinanceiroHere: isFinanceiroHere,
+      paymentMap: paymentMap,
+      icons: icons,
+      dim: filter == 2,
+      isDark: isDark,
+      onEdit: onEdit,
     );
   }
 }
@@ -1521,8 +1849,8 @@ class _GroupContentState extends State<_GroupContent> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _GroupTabBar extends StatelessWidget {
-  final int          tab;
-  final bool         isDark;
+  final int tab;
+  final bool isDark;
   final void Function(int) onTab;
 
   const _GroupTabBar({
@@ -1536,24 +1864,24 @@ class _GroupTabBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+        color: isDark ? AppColors.lightText : AppColors.lightSeparator,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
           _GroupTab(
-            label:  'Jogadores',
-            icon:   Icons.group_outlined,
+            label: 'Jogadores',
+            icon: Icons.group_outlined,
             active: tab == 0,
             isDark: isDark,
-            onTap:  () => onTab(0),
+            onTap: () => onTab(0),
           ),
           _GroupTab(
-            label:  'Avaliações',
-            icon:   Icons.star_rounded,
+            label: 'Avaliações',
+            icon: Icons.star_rounded,
             active: tab == 1,
             isDark: isDark,
-            onTap:  () => onTab(1),
+            onTap: () => onTab(1),
           ),
         ],
       ),
@@ -1562,10 +1890,10 @@ class _GroupTabBar extends StatelessWidget {
 }
 
 class _GroupTab extends StatelessWidget {
-  final String   label;
+  final String label;
   final IconData icon;
-  final bool     active;
-  final bool     isDark;
+  final bool active;
+  final bool isDark;
   final VoidCallback onTap;
 
   const _GroupTab({
@@ -1586,13 +1914,13 @@ class _GroupTab extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
             color: active
-                ? (isDark ? const Color(0xFF334155) : Colors.white)
-                : Colors.transparent,
+                ? (isDark ? AppColors.darkBorder : AppColors.onDark)
+                : AppColors.transparent,
             borderRadius: BorderRadius.circular(8),
             boxShadow: active && !isDark
                 ? [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
+                      color: AppColors.darkApp.withValues(alpha: 0.08),
                       blurRadius: 4,
                       offset: const Offset(0, 1),
                     ),
@@ -1604,24 +1932,24 @@ class _GroupTab extends StatelessWidget {
             children: [
               Icon(
                 icon,
-                size:  15,
+                size: 15,
                 color: active
-                    ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                    ? (isDark ? AppColors.onDark : AppColors.lightText)
                     : (isDark
-                        ? const Color(0xFF64748B)
-                        : const Color(0xFF94A3B8)),
+                        ? AppColors.lightTextSecondary
+                        : AppColors.lightTextMuted),
               ),
               const SizedBox(width: 6),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize:   13,
+                  fontSize: 13,
                   fontWeight: active ? FontWeight.w600 : FontWeight.w500,
                   color: active
-                      ? (isDark ? Colors.white : const Color(0xFF0F172A))
+                      ? (isDark ? AppColors.onDark : AppColors.lightText)
                       : (isDark
-                          ? const Color(0xFF64748B)
-                          : const Color(0xFF94A3B8)),
+                          ? AppColors.lightTextSecondary
+                          : AppColors.lightTextMuted),
                 ),
               ),
             ],
@@ -1637,10 +1965,10 @@ class _GroupTab extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _RatingsTab extends StatefulWidget {
-  final List<_PlayerDto>          players;
-  final String                    activePlayerId;
-  final bool                      isAdminHere;
-  final bool                      isDark;
+  final List<_PlayerDto> players;
+  final String activePlayerId;
+  final bool isAdminHere;
+  final bool isDark;
   final void Function(_PlayerDto) onEdit;
 
   const _RatingsTab({
@@ -1661,24 +1989,28 @@ class _RatingsTabState extends State<_RatingsTab> {
 
   double? _sortValue(_PlayerDto p) {
     switch (_sortBy) {
-      case 1:  return p.attackRating?.toDouble();
-      case 2:  return p.defenseRating?.toDouble();
-      case 3:  return p.overallRating?.toDouble();
-      default: return p.computedOverall;
+      case 1:
+        return p.attackRating?.toDouble();
+      case 2:
+        return p.defenseRating?.toDouble();
+      case 3:
+        return p.overallRating?.toDouble();
+      default:
+        return p.computedOverall;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark      = widget.isDark;
+    final isDark = widget.isDark;
     final mensalistas = widget.players.where((p) => !p.isGuest).toList();
-    final guests      = widget.players.where((p) =>  p.isGuest).toList();
+    final guests = widget.players.where((p) => p.isGuest).toList();
 
     mensalistas.sort((a, b) {
       final va = _sortValue(a);
       final vb = _sortValue(b);
       if (va == null && vb == null) return a.name.compareTo(b.name);
-      if (va == null) return  1;
+      if (va == null) return 1;
       if (vb == null) return -1;
       return vb.compareTo(va);
     });
@@ -1694,495 +2026,207 @@ class _RatingsTabState extends State<_RatingsTab> {
         padding: const EdgeInsets.symmetric(vertical: 40),
         child: Column(
           children: [
-            Icon(Icons.bar_chart_rounded, size: 36,
-                color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+            Icon(Icons.bar_chart_rounded,
+                size: 36,
+                color: isDark
+                    ? AppColors.lightTextSecondary
+                    : AppColors.lightTextMuted),
             const SizedBox(height: 8),
             Text('Nenhum jogador ainda.',
-                style: TextStyle(fontSize: 14,
-                    color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8))),
+                style: TextStyle(
+                    fontSize: 14,
+                    color: isDark
+                        ? AppColors.lightTextSecondary
+                        : AppColors.lightTextMuted)),
           ],
         ),
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // ── Sort filter bar ──────────────────────────────────────────
-        if (mensalistas.isNotEmpty) ...[
-          _RatingsSortBar(
-            sortBy: _sortBy,
-            isDark: isDark,
-            onSort: (s) => setState(() => _sortBy = s),
-          ),
-          const SizedBox(height: 12),
-        ],
-
-        // ── Mensalistas ──────────────────────────────────────────────
-        if (mensalistas.isNotEmpty) ...[
-          _RatingSectionHeader(
-            icon:      Icons.sports_soccer_rounded,
-            iconColor: const Color(0xFF3B82F6),
-            label:     'MENSALISTAS',
-            count:     mensalistas.length,
-            countBg:   isDark ? const Color(0xFF1E3A5F) : const Color(0xFFEFF6FF),
-            countFg:   const Color(0xFF1D4ED8),
-            isDark:    isDark,
-          ),
-          const SizedBox(height: 8),
-          ...mensalistas.asMap().entries.map((e) => _RatingRow(
-            rank:        e.key + 1,
-            player:      e.value,
-            sortBy:      _sortBy,
-            isMe:        e.value.id == widget.activePlayerId,
-            isAdminHere: widget.isAdminHere,
-            isDark:      isDark,
-            onEdit:      widget.onEdit,
-          )),
-        ],
-
-        // ── Convidados ───────────────────────────────────────────────
-        if (guests.isNotEmpty) ...[
-          if (mensalistas.isNotEmpty) const SizedBox(height: 20),
-          _RatingSectionHeader(
-            icon:      Icons.star_rounded,
-            iconColor: const Color(0xFFF59E0B),
-            label:     'CONVIDADOS',
-            count:     guests.length,
-            countBg:   isDark ? const Color(0xFF3D2B00) : const Color(0xFFFEF3C7),
-            countFg:   const Color(0xFF92400E),
-            isDark:    isDark,
-          ),
-          const SizedBox(height: 8),
-          ...guests.asMap().entries.map((e) => _StarRow(
-            rank:        e.key + 1,
-            player:      e.value,
-            isMe:        e.value.id == widget.activePlayerId,
-            isAdminHere: widget.isAdminHere,
-            isDark:      isDark,
-            onEdit:      widget.onEdit,
-          )),
-        ],
-      ],
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Ratings Sort Bar
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _RatingsSortBar extends StatelessWidget {
-  final int  sortBy;
-  final bool isDark;
-  final void Function(int) onSort;
-
-  const _RatingsSortBar({
-    required this.sortBy,
-    required this.isDark,
-    required this.onSort,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const tabs = [
-      ('⭐', 'Overall'),
-      ('⚔️', 'Ataque'),
-      ('🛡️', 'Defesa'),
-      ('💪', 'Físico'),
-    ];
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: List.generate(tabs.length, (i) {
-          final active = sortBy == i;
-          return Padding(
-            padding: EdgeInsets.only(right: i < tabs.length - 1 ? 6 : 0),
-            child: GestureDetector(
-              onTap: () => onSort(i),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: active
-                      ? (isDark ? const Color(0xFF334155) : const Color(0xFF0F172A))
-                      : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
-                  borderRadius: BorderRadius.circular(100),
-                  border: Border.all(
-                    color: active
-                        ? Colors.transparent
-                        : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(tabs[i].$1, style: const TextStyle(fontSize: 12)),
-                    const SizedBox(width: 4),
-                    Text(
-                      tabs[i].$2,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: active
-                            ? Colors.white
-                            : (isDark
-                                ? const Color(0xFF94A3B8)
-                                : const Color(0xFF64748B)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
-}
-
-class _RatingSectionHeader extends StatelessWidget {
-  final IconData icon;
-  final Color    iconColor;
-  final String   label;
-  final int      count;
-  final Color    countBg;
-  final Color    countFg;
-  final bool     isDark;
-
-  const _RatingSectionHeader({
-    required this.icon,
-    required this.iconColor,
-    required this.label,
-    required this.count,
-    required this.countBg,
-    required this.countFg,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 20, height: 20,
-          decoration: BoxDecoration(
-            color: iconColor.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Icon(icon, size: 12, color: iconColor),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8,
-            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: countBg, borderRadius: BorderRadius.circular(100),
-          ),
-          child: Text('$count',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: countFg)),
-        ),
-      ],
-    );
-  }
-}
-
-// ── Row for mensalistas: shows attack / defense / physical ratings ─────────────
-
-class _RatingRow extends StatelessWidget {
-  final int            rank;
-  final _PlayerDto     player;
-  final int            sortBy;   // 0=Overall 1=Ataque 2=Defesa 3=Físico
-  final bool           isMe;
-  final bool           isAdminHere;
-  final bool           isDark;
-  final void Function(_PlayerDto) onEdit;
-
-  const _RatingRow({
-    required this.rank,
-    required this.player,
-    required this.sortBy,
-    required this.isMe,
-    required this.isAdminHere,
-    required this.isDark,
-    required this.onEdit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final overall = player.computedOverall;
-    final atk     = player.attackRating;
-    final def     = player.defenseRating;
-    final phys    = player.overallRating;
-    final hasAny  = overall != null;
-
-    Color rankBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
-    Color rankFg = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-    if (hasAny) {
-      if (rank == 1)      { rankBg = const Color(0xFFFBBF24); rankFg = const Color(0xFF78350F); }
-      else if (rank == 2) { rankBg = const Color(0xFFCBD5E1); rankFg = const Color(0xFF334155); }
-      else if (rank == 3) { rankBg = const Color(0xFFFDBA74); rankFg = const Color(0xFF7C2D12); }
-    }
+    // Protótipo: um card só, com título, contagem e as linhas separadas por
+    // fio. As seções MENSALISTAS/CONVIDADOS com numeração de ranking saíram —
+    // lá isso é uma lista de avaliações, não um pódio.
+    final todos = [...mensalistas, ...guests];
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: const EdgeInsets.all(PrototypeLayout.cardPadding),
       decoration: BoxDecoration(
-        color: isMe
-            ? (isDark ? const Color(0xFF0C2A20) : const Color(0xFFECFDF5))
-            : (isDark ? const Color(0xFF0F172A) : Colors.white),
-        borderRadius: BorderRadius.circular(12),
+        color: isDark ? AppColors.slate900 : AppColors.lightCard,
+        borderRadius: BorderRadius.circular(PrototypeLayout.cardRadius),
         border: Border.all(
-          color: isMe
-              ? const Color(0xFF6EE7B7)
-              : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0)),
-          width: isMe ? 1.5 : 1,
-        ),
+            color: isDark ? AppColors.slate700 : AppColors.lightBorder),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 28, height: 28,
-                decoration: BoxDecoration(color: rankBg, borderRadius: BorderRadius.circular(8)),
-                alignment: Alignment.center,
-                child: Text(
-                  hasAny ? '$rank' : '—',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: rankFg),
+          PrototypeSectionTitle(
+            title: 'Avaliações dos jogadores',
+            count: '${todos.length}',
+          ),
+          const SizedBox(height: 10),
+          for (var i = 0; i < todos.length; i++) ...[
+            if (i > 0)
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: isDark ? AppColors.slate800 : AppColors.lightBorder,
+              ),
+            _RatingListRow(
+              player: todos[i],
+              isDark: isDark,
+              onTap: widget.isAdminHere ? () => widget.onEdit(todos[i]) : null,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Linha da lista de avaliações
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// `.proto-list-row` com a média à direita numa pastilha do accent.
+///
+/// O subtítulo lista os três atributos crus ("Geral 9 · Ataque 9 · Defesa 8")
+/// e a pastilha traz a média. `overallRating` é o "Geral" — no site ele aparece
+/// rotulado como "Físico", mas é o mesmo campo.
+class _RatingListRow extends StatelessWidget {
+  final _PlayerDto player;
+  final bool isDark;
+  final VoidCallback? onTap;
+
+  const _RatingListRow({
+    required this.player,
+    required this.isDark,
+    this.onTap,
+  });
+
+  static String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    if (parts.length == 1) return parts.first[0].toUpperCase();
+    return (parts.first[0] + parts.last[0]).toUpperCase();
+  }
+
+  /// Só entram os atributos definidos — "Geral 9 · Ataque —" seria ruído.
+  String get _attrs {
+    final parts = <String>[
+      if (player.overallRating != null) 'Geral ${player.overallRating}',
+      if (player.attackRating != null) 'Ataque ${player.attackRating}',
+      if (player.defenseRating != null) 'Defesa ${player.defenseRating}',
+    ];
+    return parts.isEmpty ? 'Sem avaliação' : parts.join(' · ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final avg = player.computedOverall;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(PrototypeLayout.listRowRadius),
+      child: Container(
+        constraints:
+            const BoxConstraints(minHeight: PrototypeLayout.listRowMinHeight),
+        padding: PrototypeLayout.listRowPadding,
+        child: Row(
+          children: [
+            Container(
+              width: PrototypeLayout.avatarSize,
+              height: PrototypeLayout.avatarSize,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.accentBgOf(theme.brightness),
+                borderRadius:
+                    BorderRadius.circular(PrototypeLayout.avatarRadius),
+              ),
+              child: Text(
+                _initials(player.name),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.accentTextOf(theme.brightness),
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  player.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white : const Color(0xFF0F172A),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              if (hasAny)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    overall.toStringAsFixed(1),
+            ),
+            const SizedBox(width: PrototypeLayout.rowGap),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    player.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w700,
-                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? AppColors.onDark : AppColors.lightText,
                     ),
                   ),
-                )
-              else
-                Text(
-                  'Sem avaliação',
+                  const SizedBox(height: 3),
+                  Text(
+                    _attrs,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.35,
+                      color: isDark
+                          ? AppColors.slate400
+                          : AppColors.lightTextMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (avg != null) ...[
+              const SizedBox(width: 8),
+              Container(
+                height: 28,
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.accentOf(theme.brightness),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  avg.toStringAsFixed(1).replaceAll('.', ','),
                   style: TextStyle(
-                    fontSize: 11, fontStyle: FontStyle.italic,
-                    color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.onAccentOf(theme.brightness),
                   ),
                 ),
-              if (isAdminHere) ...[
-                const SizedBox(width: 8),
-                InkWell(
-                  onTap: () => onEdit(player),
-                  borderRadius: BorderRadius.circular(8),
-                  child: SizedBox(
-                    width: 24, height: 24,
-                    child: Icon(Icons.edit_outlined, size: 13,
-                        color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
-                  ),
-                ),
-              ],
+              ),
             ],
-          ),
-          if (hasAny) ...[
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                const SizedBox(width: 38), // indent under rank badge
-                _RatingChip(
-                  emoji: '⚔️', value: atk,
-                  activeSort: sortBy == 1,
-                  color: const Color(0xFFEF4444), isDark: isDark,
-                ),
-                const SizedBox(width: 6),
-                _RatingChip(
-                  emoji: '🛡️', value: def,
-                  activeSort: sortBy == 2,
-                  color: const Color(0xFF3B82F6), isDark: isDark,
-                ),
-                const SizedBox(width: 6),
-                _RatingChip(
-                  emoji: '💪', value: phys,
-                  activeSort: sortBy == 3,
-                  color: const Color(0xFFF59E0B), isDark: isDark,
-                ),
-              ],
-            ),
+            if (onTap != null) ...[
+              const SizedBox(width: 6),
+              Icon(Icons.chevron_right_rounded,
+                  size: 20,
+                  color:
+                      isDark ? AppColors.slate500 : AppColors.lightTextMuted),
+            ],
           ],
-        ],
-      ),
-    );
-  }
-}
-
-class _RatingChip extends StatelessWidget {
-  final String emoji;
-  final int?   value;
-  final bool   activeSort;
-  final Color  color;
-  final bool   isDark;
-
-  const _RatingChip({
-    required this.emoji,
-    required this.value,
-    required this.activeSort,
-    required this.color,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: activeSort
-            ? color.withValues(alpha: 0.15)
-            : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC)),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: activeSort
-              ? color.withValues(alpha: 0.35)
-              : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
         ),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 11)),
-          const SizedBox(width: 3),
-          Text(
-            value != null ? '$value' : '—',
-            style: TextStyle(
-              fontSize: 12, fontWeight: FontWeight.w600,
-              color: activeSort
-                  ? color
-                  : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
 
-// ── Row for guests: shows star rating ────────────────────────────────────────
-
-class _StarRow extends StatelessWidget {
-  final int            rank;
-  final _PlayerDto     player;
-  final bool           isMe;
-  final bool           isAdminHere;
-  final bool           isDark;
-  final void Function(_PlayerDto) onEdit;
-
-  const _StarRow({
-    required this.rank,
-    required this.player,
-    required this.isMe,
-    required this.isAdminHere,
-    required this.isDark,
-    required this.onEdit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final rating    = player.guestStarRating;
-    final hasRating = rating != null;
-
-    Color rankBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
-    Color rankFg = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-    if (hasRating) {
-      if (rank == 1) { rankBg = const Color(0xFFFBBF24); rankFg = const Color(0xFF78350F); }
-      else if (rank == 2) { rankBg = const Color(0xFFCBD5E1); rankFg = const Color(0xFF334155); }
-      else if (rank == 3) { rankBg = const Color(0xFFFDBA74); rankFg = const Color(0xFF7C2D12); }
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: isMe
-            ? (isDark ? const Color(0xFF0C2A20) : const Color(0xFFECFDF5))
-            : (isDark ? const Color(0xFF0F172A) : Colors.white),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isMe ? const Color(0xFF6EE7B7)
-              : (isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0)),
-          width: isMe ? 1.5 : 1,
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 28, height: 28,
-            decoration: BoxDecoration(color: rankBg, borderRadius: BorderRadius.circular(8)),
-            alignment: Alignment.center,
-            child: Text(hasRating ? '$rank' : '—',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: rankFg)),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(player.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white : const Color(0xFF0F172A))),
-          ),
-          const SizedBox(width: 8),
-          if (hasRating)
-            Row(mainAxisSize: MainAxisSize.min, children: List.generate(5, (i) => Text('★',
-                style: TextStyle(fontSize: 14, color: i < rating
-                    ? const Color(0xFFFBBF24)
-                    : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0))))))
-          else
-            Text('Sem avaliação', style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic,
-                color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1))),
-          if (isAdminHere) ...[
-            const SizedBox(width: 8),
-            InkWell(
-              onTap: () => onEdit(player),
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(width: 24, height: 24,
-                  child: Icon(Icons.edit_outlined, size: 13,
-                      color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8))),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// A barra de ordenação, os cabeçalhos MENSALISTAS/CONVIDADOS, a linha com
+// ranking numerado e o chip por atributo saíram com a repaginação da aba
+// Avaliações: o protótipo mostra uma lista única, sem pódio e sem filtro.
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _PlayerSection extends StatelessWidget {
   final String label;
   final int count;
-  final IconData iconData;
-  final Color badgeBg;
   final Color badgeTextColor;
   final Color badgeLabelBg;
   final List<_PlayerDto> players;
@@ -2195,11 +2239,12 @@ class _PlayerSection extends StatelessWidget {
   final bool isDark;
   final void Function(_PlayerDto) onEdit;
 
+  /// Ação à direita do título — `action="Adicionar"` no protótipo.
+  final Map<String, String> roleLabels;
+
   const _PlayerSection({
     required this.label,
     required this.count,
-    required this.iconData,
-    required this.badgeBg,
     required this.badgeTextColor,
     required this.badgeLabelBg,
     required this.players,
@@ -2211,6 +2256,7 @@ class _PlayerSection extends StatelessWidget {
     required this.dim,
     required this.isDark,
     required this.onEdit,
+    this.roleLabels = const {},
   });
 
   int _columnsForWidth(double width) {
@@ -2218,7 +2264,7 @@ class _PlayerSection extends StatelessWidget {
     if (width >= 900) return 3;
     if (width >= 560) return 2;
     return 1;
-    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2232,39 +2278,37 @@ class _PlayerSection extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // `Proto.SectionTitle`: título em caixa normal (14px/750) com o
+            // contador colado nele, e a ação alinhada à direita. A versão
+            // anterior usava CAIXA ALTA com ícone colorido e o contador jogado
+            // na outra ponta — parecia um cabeçalho de tabela, não uma seção.
             Row(
               children: [
-                Container(
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    color: badgeBg,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(iconData, size: 11, color: Colors.white),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
+                Flexible(
                   child: Text(
-                    label.toUpperCase(),
+                    label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.8,
-                      color: isDark
-                          ? const Color(0xFF94A3B8)
-                          : const Color(0xFF475569),
+                      fontSize: 14,
+                      height: 1.3,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? AppColors.onDark : AppColors.lightText,
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                   decoration: BoxDecoration(
                     color: badgeLabelBg,
-                    borderRadius: BorderRadius.circular(100),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: isDark
+                          ? AppColors.darkInputBorder
+                          : AppColors.lightInputBorder,
+                    ),
                   ),
                   child: Text(
                     '$count',
@@ -2275,6 +2319,7 @@ class _PlayerSection extends StatelessWidget {
                     ),
                   ),
                 ),
+                const Spacer(),
               ],
             ),
             const SizedBox(height: 10),
@@ -2290,6 +2335,7 @@ class _PlayerSection extends StatelessWidget {
                         activePlayerId: activePlayerId,
                         isAdminHere: isAdminHere,
                         pmt: isFinanceiroHere ? paymentMap[p.id] : null,
+                        roleLabel: roleLabels[_normId(p.userId)],
                         icons: icons,
                         dim: dim,
                         isDark: isDark,
@@ -2310,7 +2356,11 @@ class _PlayerCard extends StatelessWidget {
   final _PlayerDto player;
   final String activePlayerId;
   final bool isAdminHere;
-  final _PaymentBadge? pmt;   // null = not a financeiro or no data
+  final _PaymentBadge? pmt; // null = sem permissão ou sem dados
+
+  /// "Admin" / "Financeiro" — nulo para jogador comum. O protótipo mostra o
+  /// papel como chip ao lado do nome; antes só existia o selo "Você".
+  final String? roleLabel;
   final GroupIcons icons;
   final bool dim;
   final bool isDark;
@@ -2324,6 +2374,7 @@ class _PlayerCard extends StatelessWidget {
     required this.isDark,
     required this.onEdit,
     this.pmt,
+    this.roleLabel,
     this.icons = GroupIcons.defaults,
   });
 
@@ -2338,36 +2389,41 @@ class _PlayerCard extends StatelessWidget {
     Color avatarBg;
     Color avatarFg;
 
+    // O protótipo usa um avatar só (`--accent-bg` / `--accent-text`) e marca o
+    // usuário atual com o badge "Você", não trocando a cor. O verde daqui não
+    // existe na paleta e brigava com o laranja do resto da tela.
+    final brightness = isDark ? Brightness.dark : Brightness.light;
     if (isMe) {
-      avatarBg = const Color(0xFF059669);
-      avatarFg = Colors.white;
+      avatarBg = AppColors.accentBgOf(brightness);
+      avatarFg = AppColors.accentTextOf(brightness);
     } else if (player.isGuest) {
-      avatarBg = const Color(0xFFFEF3C7);
-      avatarFg = const Color(0xFFD97706);
+      avatarBg = AppColors.amber50;
+      avatarFg = AppColors.warningLight;
     } else {
-      avatarBg = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-      avatarFg = isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569);
+      avatarBg = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+      avatarFg =
+          isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
     }
 
     final borderColor = isMe
-        ? const Color(0xFF6EE7B7)
+        ? AppColors.accentOf(brightness)
         : (isDark
-            ? Colors.white.withValues(alpha: 0.08)
-            : const Color(0xFFE2E8F0));
+            ? AppColors.onDark.withValues(alpha: 0.08)
+            : AppColors.lightBorder);
 
     return Opacity(
       opacity: dim ? 0.5 : 1.0,
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF0F172A) : Colors.white,
+          color: isDark ? AppColors.lightText : AppColors.onDark,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: borderColor, width: isMe ? 1.5 : 1),
           boxShadow: isDark
               ? null
               : [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
+                    color: AppColors.darkApp.withValues(alpha: 0.04),
                     blurRadius: 4,
                     offset: const Offset(0, 1),
                   ),
@@ -2400,44 +2456,93 @@ class _PlayerCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Protótipo: `.proto-player-name-with-icon` — o ícone de
+                      // goleiro/jogador cola no nome. O `Expanded` de antes
+                      // esticava o texto e jogava o ícone na outra ponta da
+                      // linha, longe de quem ele qualifica.
                       Row(
                         children: [
-                          Expanded(
+                          Flexible(
                             child: Text(
                               player.name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 14,
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w700,
                                 color: isDark
-                                    ? Colors.white
-                                    : const Color(0xFF0F172A),
+                                    ? AppColors.onDark
+                                    : AppColors.lightText,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 4),
+                          const SizedBox(width: 5),
                           renderGroupIcon(
-                            player.isGoalkeeper ? icons.goalkeeper : icons.player,
-                            size: 13,
+                            player.isGoalkeeper
+                                ? icons.goalkeeper
+                                : icons.player,
+                            size: 14,
                             color: isDark
-                                ? const Color(0xFF64748B)
-                                : const Color(0xFF94A3B8),
+                                ? AppColors.darkTextSecondary
+                                : AppColors.lightTextSecondary,
                           ),
+                          if (roleLabel != null) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppColors.neutralBackground
+                                    : AppColors.neutralBackgroundLight,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                roleLabel!,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark
+                                      ? AppColors.darkTextSecondary
+                                      : AppColors.lightTextSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
-                      if (player.userName != null && player.userName!.isNotEmpty)
-                        Text(
-                          '@${player.userName}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isDark
-                                ? const Color(0xFF64748B)
-                                : const Color(0xFF94A3B8),
-                          ),
+                      // `.proto-group-player-details`: handle, status
+                      // financeiro e estrelas convivem na MESMA linha do
+                      // subtítulo, com quebra quando não cabe.
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            if (player.userName != null &&
+                                player.userName!.isNotEmpty)
+                              Text(
+                                '@${player.userName}',
+                                // #94A3B8 sobre branco dava 2.56:1 — reprovado
+                                // em contraste e praticamente ilegível. Os
+                                // tokens do protótipo dão 5.6:1 e 5.8:1.
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? AppColors.darkTextMuted
+                                      : AppColors.lightTextMuted,
+                                ),
+                              ),
+                            if (pmt != null) _PaymentBadgeWidget(pmt: pmt!),
+                            if (player.isGuest &&
+                                player.guestStarRating != null &&
+                                isAdminHere)
+                              _StarDisplay(value: player.guestStarRating!),
+                          ],
                         ),
+                      ),
                     ],
                   ),
                 ),
@@ -2452,15 +2557,18 @@ class _PlayerCard extends StatelessWidget {
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
+                          // `Proto.Badge tone="accent"` no protótipo.
+                          color: AppColors.accentBgOf(
+                              isDark ? Brightness.dark : Brightness.light),
                           borderRadius: BorderRadius.circular(100),
                         ),
-                        child: const Text(
+                        child: Text(
                           'Você',
                           style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 11,
+                            color: AppColors.accentTextOf(
+                                isDark ? Brightness.dark : Brightness.light),
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
@@ -2476,8 +2584,8 @@ class _PlayerCard extends StatelessWidget {
                             Icons.edit_outlined,
                             size: 13,
                             color: isDark
-                                ? const Color(0xFF64748B)
-                                : const Color(0xFF94A3B8),
+                                ? AppColors.lightTextSecondary
+                                : AppColors.lightTextMuted,
                           ),
                         ),
                       ),
@@ -2486,18 +2594,6 @@ class _PlayerCard extends StatelessWidget {
                 ),
               ],
             ),
-            // ── star rating (guest + admin) ──
-            if (player.isGuest &&
-                player.guestStarRating != null &&
-                isAdminHere) ...[
-              const SizedBox(height: 8),
-              _StarDisplay(value: player.guestStarRating!),
-            ],
-            // ── payment badge (financeiro only) ──
-            if (pmt != null) ...[
-              const SizedBox(height: 8),
-              _PaymentBadgeWidget(pmt: pmt!),
-            ],
           ],
         ),
       ),
@@ -2516,21 +2612,21 @@ class _PaymentBadgeWidget extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: const Color(0xFFECFDF5),
+          color: AppColors.emerald50,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFBBF7D0)),
+          border: Border.all(color: AppColors.green200),
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle_outline, size: 11, color: Color(0xFF10B981)),
+            Icon(Icons.check_circle_outline, size: 11, color: AppColors.accent),
             SizedBox(width: 4),
             Text(
               'Em dia',
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF065F46),
+                color: AppColors.primaryPressed,
               ),
             ),
           ],
@@ -2540,21 +2636,22 @@ class _PaymentBadgeWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF1F2),
+        color: AppColors.rose50,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFFECACA)),
+        border: Border.all(color: AppColors.rose200),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline, size: 11, color: Color(0xFFBE123C)),
+          const Icon(Icons.error_outline,
+              size: 11, color: AppColors.prototypeDanger),
           const SizedBox(width: 4),
           Text(
             '$total pendência${total != 1 ? 's' : ''}',
             style: const TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: Color(0xFFBE123C),
+              color: AppColors.prototypeDanger,
             ),
           ),
         ],
@@ -2577,8 +2674,7 @@ class _StarDisplay extends StatelessWidget {
           '★',
           style: TextStyle(
             fontSize: 13,
-            color:
-                i < value ? const Color(0xFFFBBF24) : const Color(0xFFE2E8F0),
+            color: i < value ? AppColors.warning : AppColors.lightBorder,
           ),
         ),
       ),
@@ -2604,14 +2700,18 @@ class _GradientCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A)],
+          colors: [
+            AppColors.lightText,
+            AppColors.darkCard,
+            AppColors.lightText
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
+            color: AppColors.darkApp.withValues(alpha: 0.25),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -2631,7 +2731,7 @@ class _DotPatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.06)
+      ..color = AppColors.onDark.withValues(alpha: 0.06)
       ..style = PaintingStyle.fill;
 
     const spacing = 24.0;
@@ -2663,9 +2763,9 @@ class _GroupAvatar extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
+        color: AppColors.onDark.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+        border: Border.all(color: AppColors.onDark.withValues(alpha: 0.2)),
       ),
       alignment: Alignment.center,
       child: Text(
@@ -2673,7 +2773,7 @@ class _GroupAvatar extends StatelessWidget {
         style: TextStyle(
           fontSize: size * 0.35,
           fontWeight: FontWeight.w900,
-          color: Colors.white,
+          color: AppColors.onDark,
         ),
       ),
     );
@@ -2702,7 +2802,7 @@ class _ModalSheet extends StatelessWidget {
           maxHeight: MediaQuery.of(context).size.height * 0.92,
         ),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          color: isDark ? AppColors.darkCard : AppColors.onDark,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: SafeArea(
@@ -2717,8 +2817,8 @@ class _ModalSheet extends StatelessWidget {
                 height: 4,
                 decoration: BoxDecoration(
                   color: isDark
-                      ? Colors.white.withValues(alpha: 0.2)
-                      : Colors.black.withValues(alpha: 0.15),
+                      ? AppColors.onDark.withValues(alpha: 0.2)
+                      : AppColors.darkApp.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -2745,7 +2845,7 @@ class _SheetHeader extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.isDark,
-    this.iconColor = Colors.white,
+    this.iconColor = AppColors.onDark,
   });
 
   @override
@@ -2756,8 +2856,8 @@ class _SheetHeader extends StatelessWidget {
         border: Border(
           bottom: BorderSide(
             color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.06),
+                ? AppColors.onDark.withValues(alpha: 0.08)
+                : AppColors.darkApp.withValues(alpha: 0.06),
           ),
         ),
       ),
@@ -2782,7 +2882,7 @@ class _SheetHeader extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    color: isDark ? AppColors.onDark : AppColors.lightText,
                   ),
                 ),
                 Text(
@@ -2792,8 +2892,8 @@ class _SheetHeader extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     color: isDark
-                        ? const Color(0xFF94A3B8)
-                        : const Color(0xFF64748B),
+                        ? AppColors.lightPlaceholder
+                        : AppColors.lightTextSecondary,
                   ),
                 ),
               ],
@@ -2818,7 +2918,7 @@ class _FieldLabel extends StatelessWidget {
       style: TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w600,
-        color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF374151),
+        color: isDark ? AppColors.lightBorder : AppColors.darkBorder,
       ),
     );
   }
@@ -2847,32 +2947,33 @@ class _AppInput extends StatelessWidget {
       onSubmitted: onSubmitted,
       maxLines: 1,
       style: TextStyle(
-        color: isDark ? Colors.white : const Color(0xFF0F172A),
+        color: isDark ? AppColors.onDark : AppColors.lightText,
       ),
       decoration: InputDecoration(
         hintText: hint,
         filled: true,
-        fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        fillColor: isDark ? AppColors.lightText : AppColors.lightSubtle,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
             color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : const Color(0xFFE2E8F0),
+                ? AppColors.onDark.withValues(alpha: 0.08)
+                : AppColors.lightBorder,
           ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
             color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : const Color(0xFFE2E8F0),
+                ? AppColors.onDark.withValues(alpha: 0.08)
+                : AppColors.lightBorder,
           ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF2563EB)),
+          borderSide: const BorderSide(color: AppColors.infoLight),
         ),
       ),
     );
@@ -2897,15 +2998,17 @@ class _PrimaryBtn extends StatelessWidget {
       child: ElevatedButton(
         onPressed: loading ? null : onTap,
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF0F172A),
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          backgroundColor: AppColors.lightText,
+          foregroundColor: AppColors.onDark,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
         child: loading
             ? const SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: AppColors.onDark),
               )
             : Text(
                 label,
@@ -2961,7 +3064,7 @@ class _StarRatingWidget extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 24,
                   color:
-                      selected ? const Color(0xFFFBBF24) : const Color(0xFFCBD5E1),
+                      selected ? AppColors.warning : AppColors.lightTextMuted,
                 ),
               ),
             ),
@@ -2976,13 +3079,20 @@ class _StarRatingWidget extends StatelessWidget {
 // Rating Slider (mensalistas: 0–10 per category)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Bloco de um atributo, como no protótipo: caixa de ícone na cor do atributo,
+/// rótulo e descrição, stepper −/+ à direita e o slider abaixo entre 0 e 10.
+///
+/// Antes era uma linha compacta com o número num chip. O stepper foi somado
+/// porque acertar um valor exato arrastando um slider de 10 divisões num
+/// celular é impreciso — o toque cobre mais de uma divisão.
 class _RatingSlider extends StatelessWidget {
-  final String   label;
-  final String   icon;
-  final Color    color;
-  final int?     value;
-  final bool     disabled;
-  final bool     isDark;
+  final String label;
+  final String icon;
+  final String? description;
+  final Color color;
+  final int? value;
+  final bool disabled;
+  final bool isDark;
   final ValueChanged<int> onChanged;
 
   const _RatingSlider({
@@ -2993,71 +3103,287 @@ class _RatingSlider extends StatelessWidget {
     required this.disabled,
     required this.isDark,
     required this.onChanged,
+    this.description,
   });
 
   @override
   Widget build(BuildContext context) {
     final displayValue = value ?? 0;
+    final surface = isDark ? AppColors.slate800 : AppColors.lightSubtle;
+    final border = isDark ? AppColors.slate700 : AppColors.lightBorder;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Text(icon, style: const TextStyle(fontSize: 16)),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF374151),
-              ),
-            ),
-            const Spacer(),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 120),
-              child: Container(
-                key: ValueKey(displayValue),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: value != null
-                      ? color.withValues(alpha: 0.12)
-                      : (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
-                  borderRadius: BorderRadius.circular(100),
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: color.withValues(alpha: 0.35)),
                 ),
-                child: Text(
-                  value != null ? '$displayValue' : '—',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: value != null
-                        ? color
-                        : (isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
-                  ),
+                child: Text(icon, style: const TextStyle(fontSize: 15)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? AppColors.onDark : AppColors.lightText,
+                      ),
+                    ),
+                    if (description != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        description!,
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.35,
+                          color: isDark
+                              ? AppColors.slate400
+                              : AppColors.lightTextMuted,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
+              const SizedBox(width: 8),
+              _Stepper(
+                value: value,
+                color: color,
+                isDark: isDark,
+                disabled: disabled,
+                onChanged: onChanged,
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: color,
+              inactiveTrackColor:
+                  isDark ? AppColors.slate700 : AppColors.slate200,
+              thumbColor: color,
+              overlayColor: color.withValues(alpha: 0.12),
+              trackHeight: 5,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
             ),
-          ],
-        ),
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            activeTrackColor:   color,
-            inactiveTrackColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-            thumbColor:         color,
-            overlayColor:       color.withValues(alpha: 0.12),
-            trackHeight:        4,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+            child: Slider(
+              value: displayValue.toDouble(),
+              min: 0,
+              max: 10,
+              divisions: 10,
+              label: '$displayValue',
+              onChanged: disabled ? null : (v) => onChanged(v.round()),
+            ),
           ),
-          child: Slider(
-            value: displayValue.toDouble(),
-            min:   0,
-            max:   10,
-            divisions: 10,
-            onChanged: disabled ? null : (v) => onChanged(v.round()),
+          // Réguas 0 e 10, como no protótipo — sem elas a escala do slider
+          // fica implícita.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('0', style: _scaleStyle),
+                Text('10', style: _scaleStyle),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  TextStyle get _scaleStyle => TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+        color: isDark ? AppColors.slate500 : AppColors.lightTextMuted,
+      );
+}
+
+/// Stepper −/+ com o valor no meio, na cor do atributo.
+class _Stepper extends StatelessWidget {
+  final int? value;
+  final Color color;
+  final bool isDark;
+  final bool disabled;
+  final ValueChanged<int> onChanged;
+
+  const _Stepper({
+    required this.value,
+    required this.color,
+    required this.isDark,
+    required this.disabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final v = value ?? 0;
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.slate900 : AppColors.lightCard,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+            color: isDark ? AppColors.slate700 : AppColors.lightBorder),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _StepBtn(
+            icon: Icons.remove,
+            // Vai até 0, não até null: limpar é papel do "Limpar avaliações".
+            onTap: disabled || v <= 0 ? null : () => onChanged(v - 1),
+            isDark: isDark,
+          ),
+          SizedBox(
+            width: 26,
+            child: Text(
+              value != null ? '$v' : '—',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: value != null
+                    ? color
+                    : (isDark ? AppColors.slate500 : AppColors.lightTextMuted),
+              ),
+            ),
+          ),
+          _StepBtn(
+            icon: Icons.add,
+            onTap: disabled || v >= 10 ? null : () => onChanged(v + 1),
+            isDark: isDark,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  final bool isDark;
+
+  const _StepBtn(
+      {required this.icon, required this.onTap, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        width: 32,
+        height: 34,
+        child: Icon(
+          icon,
+          size: 16,
+          color: onTap == null
+              ? (isDark ? AppColors.slate700 : AppColors.slate300)
+              : (isDark ? AppColors.slate300 : AppColors.lightTextSecondary),
+        ),
+      ),
+    );
+  }
+}
+
+/// Cabeçalho da seção de avaliações: média atual e ação de limpar.
+class _RatingsHeader extends StatelessWidget {
+  final double? average;
+  final bool isDark;
+  final VoidCallback? onClear;
+
+  const _RatingsHeader({
+    required this.average,
+    required this.isDark,
+    this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final avg = average;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            avg == null
+                ? 'Sem avaliação'
+                : 'Média atual: ${avg.toStringAsFixed(1).replaceAll('.', ',')}',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: isDark ? AppColors.slate300 : AppColors.lightTextSecondary,
+            ),
           ),
         ),
+        if (onClear != null)
+          TextButton(
+            onPressed: onClear,
+            style: TextButton.styleFrom(
+              minimumSize: const Size(0, 36),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              foregroundColor: AppColors.dangerOf(
+                  isDark ? Brightness.dark : Brightness.light),
+            ),
+            child: const Text('Limpar avaliações',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+          ),
       ],
+    );
+  }
+}
+
+/// Nota de rodapé explicando para que servem as notas.
+class _RatingsFootnote extends StatelessWidget {
+  final bool isDark;
+
+  const _RatingsFootnote({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = isDark ? AppColors.slate400 : AppColors.lightTextMuted;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.slate800 : AppColors.lightSubtle,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+            color: isDark ? AppColors.slate700 : AppColors.lightBorder),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline_rounded, size: 15, color: fg),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'As notas ajudam os algoritmos a distribuir ataque, defesa e nível geral.',
+              style: TextStyle(fontSize: 11, height: 1.4, color: fg),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -3070,7 +3396,12 @@ class _AddGuestSheet extends StatefulWidget {
   final Future<void> Function(String name, bool isGoalkeeper, int? starRating)
       onSubmit;
 
-  const _AddGuestSheet({required this.onSubmit});
+  /// Renderizado dentro de outra folha (a de convite), sem a moldura e o
+  /// cabeçalho próprios. Evita duplicar o formulário de convidado em dois
+  /// lugares que inevitavelmente divergiriam.
+  final bool embedded;
+
+  const _AddGuestSheet({required this.onSubmit, this.embedded = false});
 
   @override
   State<_AddGuestSheet> createState() => _AddGuestSheetState();
@@ -3117,85 +3448,87 @@ class _AddGuestSheetState extends State<_AddGuestSheet> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return _ModalSheet(
-      isDark: isDark,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+    final body = SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!widget.embedded)
             _SheetHeader(
               icon: Icons.add,
-              iconBg: const Color(0xFFF59E0B),
+              iconBg: AppColors.warning,
               title: 'Adicionar convidado',
               subtitle: 'Sem conta no sistema',
               isDark: isDark,
             ),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _FieldLabel('Nome do convidado', isDark: isDark),
-                  const SizedBox(height: 6),
-                  _AppInput(
-                    controller: _nameCtrl,
-                    hint: 'Ex: Zé da Pelada',
-                    enabled: !_loading,
-                    isDark: isDark,
-                    onSubmitted: (_) => _submit(),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      _Toggle(
-                        value: _isGoalkeeper,
-                        onChanged: _loading
-                            ? null
-                            : (v) => setState(() => _isGoalkeeper = v),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Goleiro',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: isDark
-                              ? const Color(0xFFE2E8F0)
-                              : const Color(0xFF374151),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  _FieldLabel('Nível estimado (opcional)', isDark: isDark),
-                  const SizedBox(height: 8),
-                  _StarRatingWidget(
-                    value: _starRating,
-                    disabled: _loading,
-                    onChanged: (v) => setState(() => _starRating = v),
-                  ),
-                  if (_err != null) ...[
-                    const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _FieldLabel('Nome do convidado', isDark: isDark),
+                const SizedBox(height: 6),
+                _AppInput(
+                  controller: _nameCtrl,
+                  hint: 'Ex: Zé da Pelada',
+                  enabled: !_loading,
+                  isDark: isDark,
+                  onSubmitted: (_) => _submit(),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    _Toggle(
+                      value: _isGoalkeeper,
+                      onChanged: _loading
+                          ? null
+                          : (v) => setState(() => _isGoalkeeper = v),
+                    ),
+                    const SizedBox(width: 8),
                     Text(
-                      _err!,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFFEF4444),
+                      'Goleiro',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isDark
+                            ? AppColors.lightBorder
+                            : AppColors.darkBorder,
                       ),
                     ),
                   ],
-                  const SizedBox(height: 20),
-                  _PrimaryBtn(
-                    label: _loading ? 'Adicionando...' : 'Adicionar à patota',
-                    loading: _loading,
-                    onTap: _submit,
+                ),
+                const SizedBox(height: 16),
+                _FieldLabel('Nível estimado (opcional)', isDark: isDark),
+                const SizedBox(height: 8),
+                _StarRatingWidget(
+                  value: _starRating,
+                  disabled: _loading,
+                  onChanged: (v) => setState(() => _starRating = v),
+                ),
+                if (_err != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _err!,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.prototypeDanger,
+                    ),
                   ),
                 ],
-              ),
+                const SizedBox(height: 20),
+                _PrimaryBtn(
+                  label: _loading ? 'Adicionando...' : 'Adicionar à patota',
+                  loading: _loading,
+                  onTap: _submit,
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
+
+    // Embutido, quem desenha a moldura é a folha de convite.
+    if (widget.embedded) return body;
+    return _ModalSheet(isDark: isDark, child: body);
   }
 }
 
@@ -3203,10 +3536,20 @@ class _AddGuestSheetState extends State<_AddGuestSheet> {
 // Edit Player
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Qual parte do jogador a folha edita.
+///
+/// A aba Jogadores cuida do cadastro; a aba Avaliações, das notas. Antes as
+/// duas abriam a folha inteira, então quem clicava numa nota caía em campos de
+/// nome e status, e quem editava o cadastro via sliders de avaliação.
+enum _EditSection { player, ratings }
+
 class _EditPlayerSheet extends StatefulWidget {
   final _PlayerDto player;
   final bool isAdmin;
   final Future<void> Function(Map<String, dynamic>) onSaved;
+
+  final _EditSection section;
+
   /// Called when admin confirms removing the player from the group. Null = feature not available.
   final Future<void> Function()? onRemove;
 
@@ -3214,6 +3557,7 @@ class _EditPlayerSheet extends StatefulWidget {
     required this.player,
     required this.isAdmin,
     required this.onSaved,
+    this.section = _EditSection.player,
     this.onRemove,
   });
 
@@ -3232,22 +3576,44 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
   int? _overallRating;
   // guest rating
   int? _starRating;
-  bool _loading  = false;
+  bool _loading = false;
   bool _removing = false;
   bool _confirmRemove = false;
   String? _err;
 
+  bool get _hasAnyRating =>
+      _attackRating != null || _defenseRating != null || _overallRating != null;
+
+  /// Média dos atributos **definidos** — mesma regra do `computeOverall` do
+  /// site e do `computedOverall` do DTO. Dividir sempre por três puniria quem
+  /// só teve um atributo avaliado.
+  double? get _currentAverage {
+    final vals = [
+      if (_overallRating != null) _overallRating!,
+      if (_attackRating != null) _attackRating!,
+      if (_defenseRating != null) _defenseRating!,
+    ];
+    if (vals.isEmpty) return null;
+    return vals.reduce((a, b) => a + b) / vals.length;
+  }
+
+  void _clearRatings() => setState(() {
+        _attackRating = null;
+        _defenseRating = null;
+        _overallRating = null;
+      });
+
   @override
   void initState() {
     super.initState();
-    _nameCtrl      = TextEditingController(text: widget.player.name);
-    _isGuest       = widget.player.isGuest;
-    _isActive      = widget.player.status == 1;
-    _isGoalkeeper  = widget.player.isGoalkeeper;
-    _attackRating  = widget.player.attackRating;
+    _nameCtrl = TextEditingController(text: widget.player.name);
+    _isGuest = widget.player.isGuest;
+    _isActive = widget.player.status == 1;
+    _isGoalkeeper = widget.player.isGoalkeeper;
+    _attackRating = widget.player.attackRating;
     _defenseRating = widget.player.defenseRating;
     _overallRating = widget.player.overallRating;
-    _starRating    = widget.player.guestStarRating;
+    _starRating = widget.player.guestStarRating;
   }
 
   @override
@@ -3257,12 +3623,18 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
   }
 
   Future<void> _remove() async {
-    setState(() { _removing = true; _err = null; });
+    setState(() {
+      _removing = true;
+      _err = null;
+    });
     try {
       await widget.onRemove!();
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      setState(() { _err = _extractError(e); _confirmRemove = false; });
+      setState(() {
+        _err = _extractError(e);
+        _confirmRemove = false;
+      });
     } finally {
       if (mounted) setState(() => _removing = false);
     }
@@ -3288,14 +3660,17 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
       };
 
       if (widget.isAdmin) {
-        dto['status']  = _isActive ? 1 : 2;
+        dto['status'] = _isActive ? 1 : 2;
         dto['isGuest'] = _isGuest;
         if (_isGuest) {
           if (_starRating != null) dto['guestStarRating'] = _starRating;
         } else {
-          if (_attackRating  != null) dto['attackRating']  = _attackRating;
-          if (_defenseRating != null) dto['defenseRating'] = _defenseRating;
-          if (_overallRating != null) dto['overallRating'] = _overallRating;
+          // Enviados mesmo quando `null`. Omitir a chave faria o backend
+          // manter o valor antigo, e aí "Limpar avaliações" não limparia
+          // nada — a nota voltaria no próximo carregamento.
+          dto['attackRating'] = _attackRating;
+          dto['defenseRating'] = _defenseRating;
+          dto['overallRating'] = _overallRating;
         }
       }
 
@@ -3313,6 +3688,7 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isRatings = widget.section == _EditSection.ratings;
 
     return _ModalSheet(
       isDark: isDark,
@@ -3321,10 +3697,11 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _SheetHeader(
-              icon: Icons.edit_outlined,
-              iconBg: isDark ? Colors.white : const Color(0xFF0F172A),
-              iconColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-              title: 'Editar jogador',
+              icon:
+                  isRatings ? Icons.star_outline_rounded : Icons.edit_outlined,
+              iconBg: isDark ? AppColors.onDark : AppColors.lightText,
+              iconColor: isDark ? AppColors.lightText : AppColors.onDark,
+              title: isRatings ? 'Avaliar jogador' : 'Editar jogador',
               subtitle: widget.player.name,
               isDark: isDark,
             ),
@@ -3333,119 +3710,136 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _FieldLabel('Nome', isDark: isDark),
-                  const SizedBox(height: 6),
-                  _AppInput(
-                    controller: _nameCtrl,
-                    enabled: !_loading,
-                    isDark: isDark,
-                    onSubmitted: (_) => _save(),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      _Toggle(
-                        value: _isGoalkeeper,
-                        onChanged: _loading
-                            ? null
-                            : (v) => setState(() => _isGoalkeeper = v),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Goleiro',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: isDark
-                              ? const Color(0xFFE2E8F0)
-                              : const Color(0xFF374151),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (widget.isAdmin) ...[
+                  if (!isRatings) ...[
+                    _FieldLabel('Nome', isDark: isDark),
+                    const SizedBox(height: 6),
+                    _AppInput(
+                      controller: _nameCtrl,
+                      enabled: !_loading,
+                      isDark: isDark,
+                      onSubmitted: (_) => _save(),
+                    ),
                     const SizedBox(height: 16),
                     Row(
                       children: [
                         _Toggle(
-                          value: _isActive,
+                          value: _isGoalkeeper,
                           onChanged: _loading
                               ? null
-                              : (v) => setState(() => _isActive = v),
+                              : (v) => setState(() => _isGoalkeeper = v),
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          'Ativo',
+                          'Goleiro',
                           style: TextStyle(
                             fontSize: 14,
                             color: isDark
-                                ? const Color(0xFFE2E8F0)
-                                : const Color(0xFF374151),
+                                ? AppColors.lightBorder
+                                : AppColors.darkBorder,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        _Toggle(
-                          value: _isGuest,
-                          onChanged: _loading
-                              ? null
-                              : (v) => setState(() => _isGuest = v),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Convidado',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: isDark
-                                ? const Color(0xFFE2E8F0)
-                                : const Color(0xFF374151),
-                          ),
-                        ),
-                      ],
-                    ),
-                    // Avaliação: ratings para mensalistas, estrelas para convidados
-                    if (!_isGuest) ...[
+                  ],
+                  if (widget.isAdmin) ...[
+                    if (!isRatings) ...[
                       const SizedBox(height: 16),
-                      _FieldLabel('Avaliações (1–10)', isDark: isDark),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Defina o nível do jogador em cada categoria',
-                        style: TextStyle(fontSize: 11,
-                            color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                      Row(
+                        children: [
+                          _Toggle(
+                            value: _isActive,
+                            onChanged: _loading
+                                ? null
+                                : (v) => setState(() => _isActive = v),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Ativo',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: isDark
+                                  ? AppColors.lightBorder
+                                  : AppColors.darkBorder,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          _Toggle(
+                            value: _isGuest,
+                            onChanged: _loading
+                                ? null
+                                : (v) => setState(() => _isGuest = v),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Convidado',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: isDark
+                                  ? AppColors.lightBorder
+                                  : AppColors.darkBorder,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    // Avaliação: ratings para mensalistas, estrelas para
+                    // convidados. Na seção de cadastro ela não aparece.
+                    if (isRatings && !_isGuest) ...[
+                      const SizedBox(height: 16),
+                      // Média atual + "Limpar avaliações", como no protótipo.
+                      _RatingsHeader(
+                        average: _currentAverage,
+                        isDark: isDark,
+                        onClear:
+                            _hasAnyRating && !_loading ? _clearRatings : null,
                       ),
                       const SizedBox(height: 12),
+                      // Ordem e rótulos do protótipo: Geral vem primeiro.
+                      // `overallRating` é o "Geral" — o site o rotula como
+                      // "Físico", mas é o mesmo campo, e a média de exibição
+                      // na lista já o trata como um dos três atributos.
                       _RatingSlider(
-                        label:    'Ataque',
-                        icon:     '⚔️',
-                        color:    const Color(0xFFEF4444),
-                        value:    _attackRating,
+                        label: 'Geral',
+                        icon: '⭐',
+                        description:
+                            'Visão geral do jogador e peso principal no equilíbrio.',
+                        color: AppColors.warning,
+                        value: _overallRating,
                         disabled: _loading,
-                        isDark:   isDark,
-                        onChanged: (v) => setState(() => _attackRating = v),
-                      ),
-                      const SizedBox(height: 8),
-                      _RatingSlider(
-                        label:    'Defesa',
-                        icon:     '🛡️',
-                        color:    const Color(0xFF3B82F6),
-                        value:    _defenseRating,
-                        disabled: _loading,
-                        isDark:   isDark,
-                        onChanged: (v) => setState(() => _defenseRating = v),
-                      ),
-                      const SizedBox(height: 8),
-                      _RatingSlider(
-                        label:    'Físico',
-                        icon:     '💪',
-                        color:    const Color(0xFFF59E0B),
-                        value:    _overallRating,
-                        disabled: _loading,
-                        isDark:   isDark,
+                        isDark: isDark,
                         onChanged: (v) => setState(() => _overallRating = v),
                       ),
-                    ] else ...[
+                      const SizedBox(height: 10),
+                      _RatingSlider(
+                        label: 'Ataque',
+                        icon: '⚔️',
+                        description:
+                            'Finalização, drible e posicionamento ofensivo.',
+                        color: AppColors.prototypeDanger,
+                        value: _attackRating,
+                        disabled: _loading,
+                        isDark: isDark,
+                        onChanged: (v) => setState(() => _attackRating = v),
+                      ),
+                      const SizedBox(height: 10),
+                      _RatingSlider(
+                        label: 'Defesa',
+                        icon: '🛡️',
+                        description:
+                            'Marcação, interceptação e posicionamento defensivo.',
+                        color: AppColors.info,
+                        value: _defenseRating,
+                        disabled: _loading,
+                        isDark: isDark,
+                        onChanged: (v) => setState(() => _defenseRating = v),
+                      ),
+                      const SizedBox(height: 12),
+                      _RatingsFootnote(isDark: isDark),
+                    ] else if (isRatings) ...[
                       const SizedBox(height: 16),
                       _FieldLabel('Nível estimado (estrelas)', isDark: isDark),
                       const SizedBox(height: 8),
@@ -3462,19 +3856,22 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
                       _err!,
                       style: const TextStyle(
                         fontSize: 13,
-                        color: Color(0xFFEF4444),
+                        color: AppColors.prototypeDanger,
                       ),
                     ),
                   ],
                   const SizedBox(height: 20),
                   _PrimaryBtn(
-                    label: _loading ? 'Salvando...' : 'Salvar',
+                    label: _loading
+                        ? 'Salvando...'
+                        : (isRatings ? 'Salvar avaliação' : 'Salvar'),
                     loading: _loading || _removing,
                     onTap: _save,
                   ),
 
                   // ── Remover da patota (admin + não-guest + tem userId) ──
-                  if (widget.onRemove != null) ...[
+                  // Remover da patota é ação de cadastro, não de avaliação.
+                  if (widget.onRemove != null && !isRatings) ...[
                     const SizedBox(height: 10),
                     if (!_confirmRemove)
                       SizedBox(
@@ -3483,11 +3880,12 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
                           onPressed: (_loading || _removing)
                               ? null
                               : () => setState(() => _confirmRemove = true),
-                          icon: const Icon(Icons.person_remove_outlined, size: 15),
+                          icon: const Icon(Icons.person_remove_outlined,
+                              size: 15),
                           label: const Text('Remover da patota'),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(0xFFE11D48),
-                            side: const BorderSide(color: Color(0xFFFDA4AF)),
+                            foregroundColor: AppColors.prototypeDanger,
+                            side: const BorderSide(color: AppColors.rose200),
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12)),
                           ),
@@ -3498,13 +3896,13 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: isDark
-                              ? const Color(0xFF2D0A14)
-                              : const Color(0xFFFFF1F2),
+                              ? AppColors.dangerBackground
+                              : AppColors.rose50,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: isDark
-                                ? const Color(0xFF9F1239)
-                                : const Color(0xFFFECACA),
+                                ? AppColors.prototypeDanger
+                                : AppColors.rose200,
                           ),
                         ),
                         child: Column(
@@ -3513,7 +3911,7 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
                             Row(
                               children: [
                                 const Icon(Icons.warning_amber_rounded,
-                                    size: 14, color: Color(0xFFE11D48)),
+                                    size: 14, color: AppColors.prototypeDanger),
                                 const SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
@@ -3522,7 +3920,7 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
                                     'O histórico de partidas é preservado.',
                                     style: const TextStyle(
                                       fontSize: 12,
-                                      color: Color(0xFFBE123C),
+                                      color: AppColors.prototypeDanger,
                                     ),
                                   ),
                                 ),
@@ -3534,23 +3932,26 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
                                 child: OutlinedButton(
                                   onPressed: _removing
                                       ? null
-                                      : () => setState(() => _confirmRemove = false),
+                                      : () => setState(
+                                          () => _confirmRemove = false),
                                   style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 10),
                                     side: BorderSide(
                                         color: isDark
-                                            ? const Color(0xFF475569)
-                                            : const Color(0xFFCBD5E1)),
+                                            ? AppColors.lightTextSecondary
+                                            : AppColors.lightTextMuted),
                                     shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10)),
+                                        borderRadius:
+                                            BorderRadius.circular(10)),
                                   ),
                                   child: Text(
                                     'Cancelar',
                                     style: TextStyle(
                                       fontSize: 13,
                                       color: isDark
-                                          ? const Color(0xFF94A3B8)
-                                          : const Color(0xFF64748B),
+                                          ? AppColors.lightPlaceholder
+                                          : AppColors.lightTextSecondary,
                                     ),
                                   ),
                                 ),
@@ -3564,17 +3965,21 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
                                           width: 13,
                                           height: 13,
                                           child: CircularProgressIndicator(
-                                              strokeWidth: 2, color: Colors.white),
+                                              strokeWidth: 2,
+                                              color: AppColors.onDark),
                                         )
                                       : const Icon(Icons.person_remove_outlined,
                                           size: 13),
-                                  label: Text(_removing ? 'Removendo...' : 'Confirmar'),
+                                  label: Text(
+                                      _removing ? 'Removendo...' : 'Confirmar'),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFFE11D48),
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    backgroundColor: AppColors.prototypeDanger,
+                                    foregroundColor: AppColors.onDark,
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 10),
                                     shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10)),
+                                        borderRadius:
+                                            BorderRadius.circular(10)),
                                   ),
                                 ),
                               ),
@@ -3612,10 +4017,10 @@ class _PendingInviteItem {
 
   factory _PendingInviteItem.fromJson(Map<String, dynamic> j) =>
       _PendingInviteItem(
-        inviteId: j['id']                 as String? ?? '',
-        userId:   j['targetUserId']       as String? ?? '',
+        inviteId: j['id'] as String? ?? '',
+        userId: j['targetUserId'] as String? ?? '',
         fullName: j['targetUserFullName'] as String? ?? '',
-        userName: j['targetUserLogin']    as String? ?? '',
+        userName: j['targetUserLogin'] as String? ?? '',
       );
 }
 
@@ -3626,12 +4031,17 @@ class _InviteSheet extends StatefulWidget {
   final List<_PlayerDto> guestPlayers;
   final Future<void> Function() onInvited;
 
+  /// Cria um convidado — o outro caminho desta mesma folha.
+  final Future<void> Function(String name, bool isGoalkeeper, int? starRating)
+      onAddGuest;
+
   const _InviteSheet({
     required this.dio,
     required this.groupId,
     required this.existingUserIds,
     required this.guestPlayers,
     required this.onInvited,
+    required this.onAddGuest,
   });
 
   @override
@@ -3639,13 +4049,20 @@ class _InviteSheet extends StatefulWidget {
 }
 
 class _InviteSheetState extends State<_InviteSheet> {
+  /// "Usuário" vincula uma conta existente; "Convidado" cria um perfil avulso.
+  /// Os dois eram folhas separadas, alcançadas por botões diferentes — no
+  /// protótipo vivem na mesma, porque a decisão é uma só: quem entra agora.
+  static const _modeUser = 'Usuário';
+  static const _modeGuest = 'Convidado';
+  String _mode = _modeUser;
+
   final _searchCtrl = TextEditingController();
   Timer? _debounce;
-  bool _loading        = false;
+  bool _loading = false;
   bool _pendingLoading = false;
-  bool _hasTried       = false;
+  bool _hasTried = false;
   String? _err;
-  List<_UserResult>        _results      = [];
+  List<_UserResult> _results = [];
   List<_PendingInviteItem> _pendingItems = [];
 
   Set<String> get _pendingUserIds => _pendingItems.map((e) => e.userId).toSet();
@@ -3660,8 +4077,9 @@ class _InviteSheetState extends State<_InviteSheet> {
   Future<void> _loadPendingInvites() async {
     if (mounted) setState(() => _pendingLoading = true);
     try {
-      final res  = await widget.dio.get(ApiConstants.groupPendingInvites(widget.groupId));
-      final raw  = _GroupsPageState._unwrap(res.data);
+      final res = await widget.dio
+          .get(ApiConstants.groupPendingInvites(widget.groupId));
+      final raw = _GroupsPageState._unwrap(res.data);
       final list = raw is List ? raw : [];
       final items = list
           .map((e) => _PendingInviteItem.fromJson(e as Map<String, dynamic>))
@@ -3728,8 +4146,9 @@ class _InviteSheetState extends State<_InviteSheet> {
 
   Future<void> _invite(_UserResult user) async {
     // Captura antes de qualquer await para funcionar mesmo após Navigator.pop
-    final messenger   = ScaffoldMessenger.of(context);
-    final displayName = user.fullName.isNotEmpty ? user.fullName : user.userName;
+    final messenger = ScaffoldMessenger.of(context);
+    final displayName =
+        user.fullName.isNotEmpty ? user.fullName : user.userName;
 
     // If there are unlinked guests, ask whether to associate this user with one.
     String? guestPlayerId;
@@ -3738,7 +4157,7 @@ class _InviteSheetState extends State<_InviteSheet> {
         context: context,
         builder: (_) => _LinkGuestDialog(
           userName: user.fullName.isNotEmpty ? user.fullName : user.userName,
-          guests:   widget.guestPlayers,
+          guests: widget.guestPlayers,
         ),
       );
       // null  = dialog dismissed (cancel) → abort invite
@@ -3770,24 +4189,25 @@ class _InviteSheetState extends State<_InviteSheet> {
         ..clearSnackBars()
         ..showSnackBar(SnackBar(
           content: Text('Convite enviado para $displayName.'),
-          backgroundColor: const Color(0xFF16A34A),
+          backgroundColor: AppColors.primaryPressed,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ));
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      final errMsg    = _extractError(e);
+      final errMsg = _extractError(e);
       final isPending = errMsg.toLowerCase().contains('pendente');
       if (isPending) await _loadPendingInvites();
       messenger
         ..clearSnackBars()
         ..showSnackBar(SnackBar(
           content: Text(errMsg),
-          backgroundColor: isPending
-              ? const Color(0xFFF59E0B)
-              : const Color(0xFFE11D48),
+          backgroundColor:
+              isPending ? AppColors.warning : AppColors.prototypeDanger,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ));
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -3795,8 +4215,9 @@ class _InviteSheetState extends State<_InviteSheet> {
   }
 
   Future<void> _cancelInvite(_PendingInviteItem item) async {
-    final messenger   = ScaffoldMessenger.of(context);
-    final displayName = item.fullName.isNotEmpty ? item.fullName : item.userName;
+    final messenger = ScaffoldMessenger.of(context);
+    final displayName =
+        item.fullName.isNotEmpty ? item.fullName : item.userName;
     try {
       await widget.dio.delete(
         ApiConstants.groupCancelInvite(widget.groupId, item.inviteId),
@@ -3807,16 +4228,18 @@ class _InviteSheetState extends State<_InviteSheet> {
         ..showSnackBar(SnackBar(
           content: Text('Convite de $displayName cancelado.'),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ));
     } catch (e) {
       messenger
         ..clearSnackBars()
         ..showSnackBar(SnackBar(
           content: Text(_extractError(e)),
-          backgroundColor: const Color(0xFFE11D48),
+          backgroundColor: AppColors.prototypeDanger,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ));
     }
   }
@@ -3833,62 +4256,80 @@ class _InviteSheetState extends State<_InviteSheet> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _SheetHeader(
-              icon:     Icons.person_add_alt_1_outlined,
-              iconBg:   const Color(0xFF0F172A),
-              title:    'Convidar jogador',
-              subtitle: 'Busque por nome, usuário ou email',
-              isDark:   isDark,
+              icon: Icons.person_add_alt_1_outlined,
+              iconBg: AppColors.lightText,
+              title: 'Convidar jogador',
+              subtitle: 'Vincule uma conta ou crie um perfil convidado.',
+              isDark: isDark,
             ),
-            TabBar(
-              tabs: [
-                const Tab(text: 'Convidar'),
-                Tab(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('Pendentes'),
-                      if (_pendingItems.isNotEmpty) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            '${_pendingItems.length}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFFF59E0B),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-              labelColor: isDark ? Colors.white : const Color(0xFF0F172A),
-              unselectedLabelColor:
-                  isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
-              indicatorColor: const Color(0xFF0F172A),
-              dividerColor:
-                  isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-            ),
-            Flexible(
-              child: TabBarView(
-                children: [
-                  _buildSearchTab(isDark),
-                  _buildPendingTab(isDark),
-                ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+              child: PrototypeSegmented(
+                items: const [_modeUser, _modeGuest],
+                value: _mode,
+                semanticLabel: 'Tipo de convite',
+                onChanged: (m) => setState(() => _mode = m),
               ),
             ),
+            if (_mode == _modeGuest)
+              _AddGuestSheet(onSubmit: widget.onAddGuest, embedded: true)
+            else
+              ..._userModeChildren(isDark),
           ],
         ),
       ),
     );
+  }
+
+  /// Busca de usuário + convites pendentes, o conteúdo do modo "Usuário".
+  List<Widget> _userModeChildren(bool isDark) {
+    return [
+      TabBar(
+        tabs: [
+          const Tab(text: 'Convidar'),
+          Tab(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Pendentes'),
+                if (_pendingItems.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${_pendingItems.length}',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.warning,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+        labelColor: isDark ? AppColors.onDark : AppColors.lightText,
+        unselectedLabelColor:
+            isDark ? AppColors.lightTextSecondary : AppColors.lightTextMuted,
+        indicatorColor: AppColors.lightText,
+        dividerColor: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+      ),
+      Flexible(
+        child: TabBarView(
+          children: [
+            _buildSearchTab(isDark),
+            _buildPendingTab(isDark),
+          ],
+        ),
+      ),
+    ];
   }
 
   Widget _buildSearchTab(bool isDark) {
@@ -3898,16 +4339,16 @@ class _InviteSheetState extends State<_InviteSheet> {
         children: [
           _AppInput(
             controller: _searchCtrl,
-            hint:    'Pesquisar...',
+            hint: 'Pesquisar...',
             enabled: !_loading,
-            isDark:  isDark,
+            isDark: isDark,
           ),
           if (_err != null) ...[
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerLeft,
               child: Text(_err!,
-                  style: const TextStyle(color: Color(0xFFEF4444))),
+                  style: const TextStyle(color: AppColors.prototypeDanger)),
             ),
           ],
           const SizedBox(height: 16),
@@ -3928,8 +4369,8 @@ class _InviteSheetState extends State<_InviteSheet> {
                               'Nenhum resultado.',
                               style: TextStyle(
                                 color: isDark
-                                    ? const Color(0xFF94A3B8)
-                                    : const Color(0xFF64748B),
+                                    ? AppColors.lightPlaceholder
+                                    : AppColors.lightTextSecondary,
                               ),
                             ),
                           )
@@ -3940,14 +4381,16 @@ class _InviteSheetState extends State<_InviteSheet> {
                         itemCount: _results.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
-                          final user     = _results[index];
-                          final name     = user.fullName.isEmpty
-                              ? user.userName : user.fullName;
-                          final isMember = widget.existingUserIds.contains(user.id);
+                          final user = _results[index];
+                          final name = user.fullName.isEmpty
+                              ? user.userName
+                              : user.fullName;
+                          final isMember =
+                              widget.existingUserIds.contains(user.id);
                           final isPending = _pendingUserIds.contains(user.id);
                           return _buildUserRow(
-                            isDark:   isDark,
-                            name:     name,
+                            isDark: isDark,
+                            name: name,
                             userName: user.userName,
                             trailing: isMember
                                 ? _StatusBadge(label: 'Membro', isDark: isDark)
@@ -3955,14 +4398,15 @@ class _InviteSheetState extends State<_InviteSheet> {
                                     ? _StatusBadge(
                                         label: 'Pendente',
                                         isDark: isDark,
-                                        color: const Color(0xFFF59E0B),
+                                        color: AppColors.warning,
                                       )
                                     : ElevatedButton(
-                                        onPressed:
-                                            _loading ? null : () => _invite(user),
+                                        onPressed: _loading
+                                            ? null
+                                            : () => _invite(user),
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: const Color(0xFF0F172A),
-                                          foregroundColor: Colors.white,
+                                          backgroundColor: AppColors.lightText,
+                                          foregroundColor: AppColors.onDark,
                                           padding: const EdgeInsets.symmetric(
                                               horizontal: 14, vertical: 8),
                                           shape: RoundedRectangleBorder(
@@ -3993,8 +4437,8 @@ class _InviteSheetState extends State<_InviteSheet> {
             'Nenhum convite pendente.',
             style: TextStyle(
               color: isDark
-                  ? const Color(0xFF94A3B8)
-                  : const Color(0xFF64748B),
+                  ? AppColors.lightPlaceholder
+                  : AppColors.lightTextSecondary,
             ),
           ),
         ),
@@ -4008,19 +4452,18 @@ class _InviteSheetState extends State<_InviteSheet> {
         final item = _pendingItems[i];
         final name = item.fullName.isNotEmpty ? item.fullName : item.userName;
         return _buildUserRow(
-          isDark:   isDark,
-          name:     name,
+          isDark: isDark,
+          name: name,
           userName: item.userName,
           trailing: TextButton.icon(
             onPressed: () => _cancelInvite(item),
             style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFEF4444),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              foregroundColor: AppColors.prototypeDanger,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8)),
             ),
-            icon:  const Icon(Icons.close, size: 16),
+            icon: const Icon(Icons.close, size: 16),
             label: const Text('Cancelar', style: TextStyle(fontSize: 13)),
           ),
         );
@@ -4037,12 +4480,12 @@ class _InviteSheetState extends State<_InviteSheet> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+        color: isDark ? AppColors.lightText : AppColors.lightSubtle,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : const Color(0xFFE2E8F0),
+              ? AppColors.onDark.withValues(alpha: 0.08)
+              : AppColors.lightBorder,
         ),
       ),
       child: Row(
@@ -4050,12 +4493,12 @@ class _InviteSheetState extends State<_InviteSheet> {
           CircleAvatar(
             radius: 18,
             backgroundColor:
-                isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                isDark ? AppColors.darkBorder : AppColors.lightBorder,
             child: Text(
               name.isEmpty ? '?' : name[0].toUpperCase(),
               style: TextStyle(
                 fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                color: isDark ? AppColors.onDark : AppColors.lightText,
               ),
             ),
           ),
@@ -4070,7 +4513,7 @@ class _InviteSheetState extends State<_InviteSheet> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    color: isDark ? AppColors.onDark : AppColors.lightText,
                   ),
                 ),
                 Text(
@@ -4080,8 +4523,8 @@ class _InviteSheetState extends State<_InviteSheet> {
                   style: TextStyle(
                     fontSize: 12,
                     color: isDark
-                        ? const Color(0xFF94A3B8)
-                        : const Color(0xFF64748B),
+                        ? AppColors.lightPlaceholder
+                        : AppColors.lightTextSecondary,
                   ),
                 ),
               ],
@@ -4110,9 +4553,9 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final bg = color != null
         ? color!.withValues(alpha: 0.15)
-        : (isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0));
+        : (isDark ? AppColors.darkCard : AppColors.lightBorder);
     final fg = color ??
-        (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569));
+        (isDark ? AppColors.lightPlaceholder : AppColors.lightTextSecondary);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -4137,13 +4580,17 @@ class _StatusBadge extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _LinkGuestDialog extends StatelessWidget {
-  final String            userName;
-  final List<_PlayerDto>  guests;
+  final String userName;
+  final List<_PlayerDto> guests;
 
   /// Sentinel returned when the user chooses "Não vincular".
   static const _PlayerDto sentinel = _PlayerDto(
-    id: '__no_link__', name: '', skillPoints: 0,
-    isGoalkeeper: false, isGuest: true, status: 0,
+    id: '__no_link__',
+    name: '',
+    skillPoints: 0,
+    isGoalkeeper: false,
+    isGuest: true,
+    status: 0,
   );
 
   const _LinkGuestDialog({
@@ -4154,10 +4601,10 @@ class _LinkGuestDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg     = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final bg = isDark ? AppColors.darkCard : AppColors.onDark;
     final border = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : const Color(0xFFE2E8F0);
+        ? AppColors.onDark.withValues(alpha: 0.08)
+        : AppColors.lightBorder;
 
     return Dialog(
       backgroundColor: bg,
@@ -4172,13 +4619,14 @@ class _LinkGuestDialog extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  width: 36, height: 36,
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                    color: AppColors.warning.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(Icons.link_rounded,
-                      size: 18, color: Color(0xFFF59E0B)),
+                      size: 18, color: AppColors.warning),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -4188,18 +4636,21 @@ class _LinkGuestDialog extends StatelessWidget {
                       Text(
                         'Vincular a convidado?',
                         style: TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w700,
-                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color:
+                              isDark ? AppColors.onDark : AppColors.lightText,
                         ),
                       ),
                       Text(
                         userName,
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 12,
                           color: isDark
-                              ? const Color(0xFF94A3B8)
-                              : const Color(0xFF64748B),
+                              ? AppColors.lightPlaceholder
+                              : AppColors.lightTextSecondary,
                         ),
                       ),
                     ],
@@ -4212,7 +4663,9 @@ class _LinkGuestDialog extends StatelessWidget {
               'Deseja associar este usuário a um convidado já existente na patota?',
               style: TextStyle(
                 fontSize: 13,
-                color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                color: isDark
+                    ? AppColors.darkTextSecondary
+                    : AppColors.lightTextSecondary,
               ),
             ),
             const SizedBox(height: 16),
@@ -4234,17 +4687,18 @@ class _LinkGuestDialog extends StatelessWidget {
                           horizontal: 12, vertical: 10),
                       decoration: BoxDecoration(
                         color: isDark
-                            ? const Color(0xFF0F172A)
-                            : const Color(0xFFF8FAFC),
+                            ? AppColors.lightText
+                            : AppColors.lightSubtle,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: border),
                       ),
                       child: Row(
                         children: [
                           Container(
-                            width: 32, height: 32,
+                            width: 32,
+                            height: 32,
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFEF3C7),
+                              color: AppColors.amber50,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             alignment: Alignment.center,
@@ -4255,7 +4709,7 @@ class _LinkGuestDialog extends StatelessWidget {
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFFD97706),
+                                color: AppColors.warningLight,
                               ),
                             ),
                           ),
@@ -4266,25 +4720,28 @@ class _LinkGuestDialog extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
                                 color: isDark
-                                    ? Colors.white
-                                    : const Color(0xFF0F172A),
+                                    ? AppColors.onDark
+                                    : AppColors.lightText,
                               ),
                             ),
                           ),
                           if (g.isGoalkeeper) ...[
                             const SizedBox(width: 6),
-                            Icon(Icons.shield_outlined, size: 13,
+                            Icon(Icons.shield_outlined,
+                                size: 13,
                                 color: isDark
-                                    ? const Color(0xFF64748B)
-                                    : const Color(0xFF94A3B8)),
+                                    ? AppColors.lightTextSecondary
+                                    : AppColors.lightTextMuted),
                           ],
                           const SizedBox(width: 8),
-                          Icon(Icons.chevron_right_rounded, size: 18,
+                          Icon(Icons.chevron_right_rounded,
+                              size: 18,
                               color: isDark
-                                  ? const Color(0xFF475569)
-                                  : const Color(0xFFCBD5E1)),
+                                  ? AppColors.lightTextSecondary
+                                  : AppColors.lightTextMuted),
                         ],
                       ),
                     ),
@@ -4311,8 +4768,8 @@ class _LinkGuestDialog extends StatelessWidget {
                       'Cancelar',
                       style: TextStyle(
                         color: isDark
-                            ? const Color(0xFF94A3B8)
-                            : const Color(0xFF64748B),
+                            ? AppColors.lightPlaceholder
+                            : AppColors.lightTextSecondary,
                       ),
                     ),
                   ),
@@ -4322,8 +4779,8 @@ class _LinkGuestDialog extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: () => Navigator.pop(context, sentinel),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0F172A),
-                      foregroundColor: Colors.white,
+                      backgroundColor: AppColors.lightText,
+                      foregroundColor: AppColors.onDark,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -4374,17 +4831,19 @@ class _LeaveConfirmDialogState extends State<_LeaveConfirmDialog> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return AlertDialog(
-      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      backgroundColor: isDark ? AppColors.darkCard : AppColors.onDark,
       title: Text(
         'Sair da patota?',
         style: TextStyle(
-          color: isDark ? Colors.white : const Color(0xFF0F172A),
+          color: isDark ? AppColors.onDark : AppColors.lightText,
         ),
       ),
       content: Text(
         'Essa ação remove você da patota atual.',
         style: TextStyle(
-          color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+          color: isDark
+              ? AppColors.darkTextSecondary
+              : AppColors.lightTextSecondary,
         ),
       ),
       actions: [
@@ -4395,8 +4854,8 @@ class _LeaveConfirmDialogState extends State<_LeaveConfirmDialog> {
         ElevatedButton(
           onPressed: _loading ? null : _submit,
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFE11D48),
-            foregroundColor: Colors.white,
+            backgroundColor: AppColors.prototypeDanger,
+            foregroundColor: AppColors.onDark,
           ),
           child: _loading
               ? const SizedBox(
@@ -4404,7 +4863,7 @@ class _LeaveConfirmDialogState extends State<_LeaveConfirmDialog> {
                   height: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: AppColors.onDark,
                   ),
                 )
               : const Text('Sair'),
@@ -4468,7 +4927,7 @@ class _CreateGroupSheetState extends State<_CreateGroupSheet> {
           children: [
             _SheetHeader(
               icon: Icons.group_add_outlined,
-              iconBg: const Color(0xFF6366F1),
+              iconBg: AppColors.infoLight,
               title: 'Criar patota',
               subtitle: 'Você será o administrador',
               isDark: isDark,
@@ -4492,7 +4951,7 @@ class _CreateGroupSheetState extends State<_CreateGroupSheet> {
                     Text(
                       _err!,
                       style: const TextStyle(
-                        color: Color(0xFFF87171),
+                        color: AppColors.prototypeDanger,
                         fontSize: 13,
                       ),
                     ),

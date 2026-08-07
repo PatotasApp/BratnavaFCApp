@@ -6,10 +6,11 @@ class TeamBuilderDataSource {
   final Dio _dio;
   const TeamBuilderDataSource(this._dio);
 
-  Future<TeamBuilderStats> fetchStats(String groupId, List<String> playerIds) async {
+  Future<TeamBuilderStats> fetchStats(
+      String groupId, List<String> playerIds) async {
     final res = await _dio.post(
       '/api/TeamBuilder/group/$groupId/stats',
-      data: { 'playerIds': playerIds },
+      data: {'playerIds': playerIds},
     );
     return TeamBuilderStats.fromJson(res.data as Map<String, dynamic>);
   }

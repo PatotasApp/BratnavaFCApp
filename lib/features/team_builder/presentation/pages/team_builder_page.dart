@@ -4,11 +4,15 @@ import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/api/api_constants.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/football_pitch.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../data/datasources/team_builder_datasource.dart';
 import '../../domain/entities/team_builder_models.dart';
 
@@ -19,7 +23,8 @@ final _teamBuilderDsProvider = Provider<TeamBuilderDataSource>(
 );
 
 final _groupPlayersProvider =
-    FutureProvider.family<List<TeamBuilderPlayer>, String>((ref, groupId) async {
+    FutureProvider.family<List<TeamBuilderPlayer>, String>(
+        (ref, groupId) async {
   final dio = ref.watch(dioProvider);
   final res = await dio.get(ApiConstants.groupById(groupId));
   final raw = res.data;
@@ -31,8 +36,8 @@ final _groupPlayersProvider =
       .whereType<Map<String, dynamic>>()
       .where((p) => p['isGuest'] != true && p['status'] != 'Inactive')
       .map((p) => TeamBuilderPlayer(
-            id:           (p['id'] ?? '') as String,
-            name:         (p['name'] ?? '') as String,
+            id: (p['id'] ?? '') as String,
+            name: (p['name'] ?? '') as String,
             isGoalkeeper: (p['isGoalkeeper'] ?? false) as bool,
           ))
       .toList()
@@ -48,7 +53,12 @@ List<Offset> _outfieldPositions(int n) {
     1: [Offset(0.50, 0.40)],
     2: [Offset(0.30, 0.47), Offset(0.70, 0.47)],
     3: [Offset(0.50, 0.32), Offset(0.25, 0.56), Offset(0.75, 0.56)],
-    4: [Offset(0.30, 0.33), Offset(0.70, 0.33), Offset(0.22, 0.60), Offset(0.78, 0.60)],
+    4: [
+      Offset(0.30, 0.33),
+      Offset(0.70, 0.33),
+      Offset(0.22, 0.60),
+      Offset(0.78, 0.60)
+    ],
   };
   final key = math.min(n, 4);
   return patterns[key] ?? patterns[4]!;
@@ -56,12 +66,11 @@ List<Offset> _outfieldPositions(int n) {
 
 List<Offset> _getPositions(List<TeamBuilderPlayer> players) {
   final result = List<Offset>.filled(players.length, Offset.zero);
-  final gkIdx  = players.indexWhere((p) => p.isGoalkeeper);
+  final gkIdx = players.indexWhere((p) => p.isGoalkeeper);
   if (gkIdx >= 0) result[gkIdx] = const Offset(0.50, 0.85);
 
-  final outfieldIdx = List.generate(players.length, (i) => i)
-      .where((i) => i != gkIdx)
-      .toList();
+  final outfieldIdx =
+      List.generate(players.length, (i) => i).where((i) => i != gkIdx).toList();
   final outPos = _outfieldPositions(outfieldIdx.length);
   for (var i = 0; i < outfieldIdx.length; i++) {
     result[outfieldIdx[i]] = outPos[i];
@@ -69,119 +78,10 @@ List<Offset> _getPositions(List<TeamBuilderPlayer> players) {
   return result;
 }
 
-String _initials(String name) {
-  final parts = name.trim().split(RegExp(r'\s+'));
-  if (parts.length == 1) return parts[0].substring(0, math.min(2, parts[0].length)).toUpperCase();
-  return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
-}
-
 // ── Field painter ─────────────────────────────────────────────────────────────
-
-class _FieldPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-
-    // Grass stripes
-    final stripePaint = Paint()..color = Colors.black.withAlpha(18);
-    for (double y = 0; y < h; y += 36) {
-      canvas.drawRect(Rect.fromLTWH(0, y + 18, w, 18), stripePaint);
-    }
-
-    final linePaint = Paint()
-      ..color = Colors.white.withAlpha(140)
-      ..strokeWidth = 1.2
-      ..style = PaintingStyle.stroke;
-
-    final thin = Paint()
-      ..color = Colors.white.withAlpha(100)
-      ..strokeWidth = 0.8
-      ..style = PaintingStyle.stroke;
-
-    final glowPaint = Paint()
-      ..color = Colors.white.withAlpha(40)
-      ..style = PaintingStyle.fill;
-
-    final m = 8 / 200; // margin ratio
-
-    // Outer boundary
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTRB(w * m, h * (8 / 300), w * (1 - m), h * (292 / 300)),
-        const Radius.circular(3),
-      ),
-      linePaint,
-    );
-
-    // Center line
-    canvas.drawLine(Offset(w * m, h * 0.5), Offset(w * (1 - m), h * 0.5), thin);
-
-    // Center circle
-    canvas.drawCircle(Offset(w * 0.5, h * 0.5), w * 0.14, thin);
-    canvas.drawCircle(Offset(w * 0.5, h * 0.5), 2.5, glowPaint);
-
-    // Top penalty area
-    canvas.drawRect(
-      Rect.fromLTRB(w * (52 / 200), h * (8 / 300), w * (148 / 200), h * (54 / 300)),
-      thin,
-    );
-    // Top goal area
-    canvas.drawRect(
-      Rect.fromLTRB(w * (72 / 200), h * (8 / 300), w * (128 / 200), h * (28 / 300)),
-      thin,
-    );
-    // Top goal
-    final goalFill = Paint()..color = Colors.white.withAlpha(40)..style = PaintingStyle.fill;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTRB(w * (84 / 200), h * (2 / 300), w * (116 / 200), h * (9 / 300)),
-        const Radius.circular(1.5),
-      ),
-      goalFill,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTRB(w * (84 / 200), h * (2 / 300), w * (116 / 200), h * (9 / 300)),
-        const Radius.circular(1.5),
-      ),
-      linePaint,
-    );
-
-    // Bottom penalty area
-    canvas.drawRect(
-      Rect.fromLTRB(w * (52 / 200), h * (246 / 300), w * (148 / 200), h * (292 / 300)),
-      thin,
-    );
-    // Bottom goal area
-    canvas.drawRect(
-      Rect.fromLTRB(w * (72 / 200), h * (272 / 300), w * (128 / 200), h * (292 / 300)),
-      thin,
-    );
-    // Bottom goal
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTRB(w * (84 / 200), h * (291 / 300), w * (116 / 200), h * (298 / 300)),
-        const Radius.circular(1.5),
-      ),
-      goalFill,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTRB(w * (84 / 200), h * (291 / 300), w * (116 / 200), h * (298 / 300)),
-        const Radius.circular(1.5),
-      ),
-      linePaint,
-    );
-
-    // Penalty spots
-    canvas.drawCircle(Offset(w * 0.5, h * (36 / 300)),  2.5, glowPaint);
-    canvas.drawCircle(Offset(w * 0.5, h * (264 / 300)), 2.5, glowPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
+// As marcações agora vivem em `shared/presentation/widgets/football_pitch.dart`
+// (`FootballPitchPainter`), porque o dashboard também desenha o campo. Manter
+// duas cópias era garantia de divergirem.
 
 // ── Football field widget ─────────────────────────────────────────────────────
 
@@ -190,11 +90,13 @@ class _FootballField extends StatelessWidget {
     required this.players,
     required this.onRemove,
     required this.loading,
+    required this.icons,
   });
 
   final List<TeamBuilderPlayer> players;
   final void Function(TeamBuilderPlayer) onRemove;
   final bool loading;
+  final GroupIcons icons;
 
   @override
   Widget build(BuildContext context) {
@@ -210,9 +112,13 @@ class _FootballField extends StatelessWidget {
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFF166534), Color(0xFF15803D), Color(0xFF166534)],
+                  colors: [
+                    AppColors.primaryPressed,
+                    AppColors.primaryPressed,
+                    AppColors.primaryPressed
+                  ],
                   begin: Alignment.topCenter,
-                  end:   Alignment.bottomCenter,
+                  end: Alignment.bottomCenter,
                 ),
               ),
             ),
@@ -220,21 +126,27 @@ class _FootballField extends StatelessWidget {
             // Field markings
             CustomPaint(
               size: Size.infinite,
-              painter: _FieldPainter(),
+              painter: FootballPitchPainter(),
             ),
 
             // Loading overlay
             if (loading)
               Container(
-                color: Colors.black.withAlpha(76),
-                child: const Center(
+                color: AppColors.darkApp.withAlpha(76),
+                child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('⚽', style: TextStyle(fontSize: 40)),
-                      SizedBox(height: 8),
-                      Text('Buscando…',
-                          style: TextStyle(color: Colors.white, fontSize: 13,
+                      renderGroupIcon(
+                        icons.goal,
+                        size: 40,
+                        color: AppColors.onDark,
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('Buscando…',
+                          style: TextStyle(
+                              color: AppColors.onDark,
+                              fontSize: 13,
                               fontWeight: FontWeight.w600)),
                     ],
                   ),
@@ -247,15 +159,19 @@ class _FootballField extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('⚽',
-                        style: TextStyle(fontSize: 48,
-                            color: Colors.white.withAlpha(100))),
+                    renderGroupIcon(
+                      icons.goal,
+                      size: 48,
+                      color: AppColors.onDark.withAlpha(100),
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       'Selecione jogadores abaixo\npara montar o time',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white.withAlpha(120),
-                          fontSize: 13, height: 1.5),
+                      style: TextStyle(
+                          color: AppColors.onDark.withAlpha(120),
+                          fontSize: 13,
+                          height: 1.5),
                     ),
                   ],
                 ),
@@ -263,15 +179,16 @@ class _FootballField extends StatelessWidget {
 
             // Players
             ...List.generate(players.length, (i) {
-              final p   = players[i];
+              final p = players[i];
               final pos = positions[i];
               return AnimatedAlign(
                 duration: const Duration(milliseconds: 350),
                 curve: Curves.elasticOut,
                 alignment: Alignment(pos.dx * 2 - 1, pos.dy * 2 - 1),
                 child: _PlayerPin(
-                  player:   p,
+                  player: p,
                   onRemove: () => onRemove(p),
+                  icons: icons,
                 ),
               );
             }),
@@ -285,9 +202,14 @@ class _FootballField extends StatelessWidget {
 // ── Player pin (bubble on field) ──────────────────────────────────────────────
 
 class _PlayerPin extends StatefulWidget {
-  const _PlayerPin({required this.player, required this.onRemove});
+  const _PlayerPin({
+    required this.player,
+    required this.onRemove,
+    required this.icons,
+  });
   final TeamBuilderPlayer player;
   final VoidCallback onRemove;
+  final GroupIcons icons;
 
   @override
   State<_PlayerPin> createState() => _PlayerPinState();
@@ -296,7 +218,7 @@ class _PlayerPin extends StatefulWidget {
 class _PlayerPinState extends State<_PlayerPin>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
-  late final Animation<double>   _scale;
+  late final Animation<double> _scale;
   bool _hovering = false;
 
   @override
@@ -322,8 +244,11 @@ class _PlayerPinState extends State<_PlayerPin>
     return ScaleTransition(
       scale: _scale,
       child: GestureDetector(
-        onTapDown:  (_) => setState(() => _hovering = true),
-        onTapUp:    (_) { setState(() => _hovering = false); widget.onRemove(); },
+        onTapDown: (_) => setState(() => _hovering = true),
+        onTapUp: (_) {
+          setState(() => _hovering = false);
+          widget.onRemove();
+        },
         onTapCancel: () => setState(() => _hovering = false),
         child: AnimatedScale(
           scale: _hovering ? 1.15 : 1.0,
@@ -336,45 +261,47 @@ class _PlayerPinState extends State<_PlayerPin>
                 children: [
                   // Circle
                   Container(
-                    width: 44, height: 44,
+                    width: 44,
+                    height: 44,
                     decoration: BoxDecoration(
-                      shape:  BoxShape.circle,
-                      color:  isGK ? const Color(0xFFFBBF24) : const Color(0xFF2563EB),
-                      border: Border.all(color: Colors.white, width: 2),
+                      shape: BoxShape.circle,
+                      color: isGK ? AppColors.warning : AppColors.infoLight,
+                      border: Border.all(color: AppColors.onDark, width: 2),
                       boxShadow: [
-                        BoxShadow(color: Colors.black.withAlpha(60),
-                            blurRadius: 6, offset: const Offset(0, 3)),
+                        BoxShadow(
+                            color: AppColors.darkApp.withAlpha(60),
+                            blurRadius: 6,
+                            offset: const Offset(0, 3)),
                       ],
                     ),
                     child: Center(
                       child: _hovering
                           ? const Icon(Icons.close_rounded,
-                              color: Colors.white, size: 20)
-                          : isGK
-                              ? const Text('🧤',
-                                  style: TextStyle(fontSize: 22))
-                              : Text(_initials(widget.player.name),
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w900,
-                                    color: isGK
-                                        ? const Color(0xFF78350F)
-                                        : Colors.white,
-                                  )),
+                              color: AppColors.onDark, size: 20)
+                          : renderGroupIcon(
+                              isGK
+                                  ? widget.icons.goalkeeper
+                                  : widget.icons.player,
+                              size: 22,
+                              color: isGK
+                                  ? AppColors.warningLight
+                                  : AppColors.onDark,
+                            ),
                     ),
                   ),
                   // Red overlay when hovering
                   if (_hovering)
                     Container(
-                      width: 44, height: 44,
+                      width: 44,
+                      height: 44,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: const Color(0xFFDC2626).withAlpha(200),
-                        border: Border.all(color: Colors.white, width: 2),
+                        color: AppColors.prototypeDanger.withAlpha(200),
+                        border: Border.all(color: AppColors.onDark, width: 2),
                       ),
                       child: const Center(
                         child: Icon(Icons.close_rounded,
-                            color: Colors.white, size: 20),
+                            color: AppColors.onDark, size: 20),
                       ),
                     ),
                 ],
@@ -385,20 +312,33 @@ class _PlayerPinState extends State<_PlayerPin>
                 constraints: const BoxConstraints(maxWidth: 60),
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.black.withAlpha(140),
+                  color: AppColors.darkApp.withAlpha(140),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: Text(
-                  widget.player.name.split(' ').first,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    height: 1.2,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        widget.player.name.split(' ').first,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: AppColors.onDark,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    renderGroupIcon(
+                      isGK ? widget.icons.goalkeeper : widget.icons.player,
+                      size: 8,
+                      color: AppColors.onDark,
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -412,9 +352,16 @@ class _PlayerPinState extends State<_PlayerPin>
 // ── Stats panel ───────────────────────────────────────────────────────────────
 
 class _StatsPanel extends StatelessWidget {
-  const _StatsPanel({required this.stats, required this.isDark});
+  const _StatsPanel({
+    required this.stats,
+    required this.isDark,
+    required this.icons,
+    required this.goalkeeperNames,
+  });
   final TeamBuilderStats stats;
   final bool isDark;
+  final GroupIcons icons;
+  final Set<String> goalkeeperNames;
 
   @override
   Widget build(BuildContext context) {
@@ -422,9 +369,9 @@ class _StatsPanel extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color:        isDark ? AppColors.slate900 : Colors.white,
+          color: isDark ? AppColors.slate900 : AppColors.onDark,
           borderRadius: BorderRadius.circular(16),
-          border:       Border.all(
+          border: Border.all(
               color: isDark ? AppColors.slate700 : AppColors.slate200),
         ),
         child: Column(children: [
@@ -433,18 +380,20 @@ class _StatsPanel extends StatelessWidget {
           Text('Nunca jogaram juntos',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
                   color: isDark ? AppColors.slate100 : AppColors.slate800)),
           const SizedBox(height: 4),
           Text('Nenhuma partida finalizada com todos presentes.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12,
+              style: TextStyle(
+                  fontSize: 12,
                   color: isDark ? AppColors.slate400 : AppColors.slate500)),
         ]),
       );
     }
 
-    final total  = stats.wins + stats.draws + stats.losses;
+    final total = stats.wins + stats.draws + stats.losses;
     final winPct = total > 0 ? (stats.wins / total * 100).round() : 0;
 
     return Column(
@@ -457,34 +406,40 @@ class _StatsPanel extends StatelessWidget {
           Text(
             '${stats.totalMatches} partida${stats.totalMatches != 1 ? "s" : ""} juntos',
             style: TextStyle(
-                fontSize: 15, fontWeight: FontWeight.w800,
-                color: isDark ? Colors.white : AppColors.slate800),
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: isDark ? AppColors.onDark : AppColors.slate800),
           ),
           const Spacer(),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color:        AppColors.green500.withAlpha(isDark ? 40 : 25),
+              color: AppColors.green500.withAlpha(isDark ? 40 : 25),
               borderRadius: BorderRadius.circular(20),
-              border:       Border.all(color: AppColors.green500.withAlpha(100)),
+              border: Border.all(color: AppColors.green500.withAlpha(100)),
             ),
             child: Text('$winPct% vitória',
-                style: const TextStyle(fontSize: 11,
-                    fontWeight: FontWeight.w600, color: AppColors.green500)),
+                style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.green500)),
           ),
         ]),
         const SizedBox(height: 12),
 
         // W / D / L
         Row(children: [
-          Expanded(child: _resultTile('🏆', 'Vitórias', stats.wins,
-              const Color(0xFF22C55E), isDark)),
+          Expanded(
+              child: _resultTile(
+                  '🏆', 'Vitórias', stats.wins, AppColors.accent, isDark)),
           const SizedBox(width: 8),
-          Expanded(child: _resultTile('🤝', 'Empates',  stats.draws,
-              const Color(0xFFF59E0B), isDark)),
+          Expanded(
+              child: _resultTile(
+                  '🤝', 'Empates', stats.draws, AppColors.warning, isDark)),
           const SizedBox(width: 8),
-          Expanded(child: _resultTile('💔', 'Derrotas', stats.losses,
-              const Color(0xFFEF4444), isDark)),
+          Expanded(
+              child: _resultTile('💔', 'Derrotas', stats.losses,
+                  AppColors.prototypeDanger, isDark)),
         ]),
         const SizedBox(height: 12),
 
@@ -492,16 +447,32 @@ class _StatsPanel extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
-            color:        isDark ? AppColors.slate900 : Colors.white,
+            color: isDark ? AppColors.slate900 : AppColors.onDark,
             borderRadius: BorderRadius.circular(14),
-            border:       Border.all(
+            border: Border.all(
                 color: isDark ? AppColors.slate700 : AppColors.slate200),
           ),
           child: Row(children: [
-            Expanded(child: _goalStat('⚽', 'marcados', stats.goalsScored, isDark)),
-            Container(width: 1, height: 48,
+            Expanded(
+              child: _goalStat(
+                icons.goal,
+                'marcados',
+                stats.goalsScored,
+                isDark,
+              ),
+            ),
+            Container(
+                width: 1,
+                height: 48,
                 color: isDark ? AppColors.slate700 : AppColors.slate200),
-            Expanded(child: _goalStat('🥅', 'sofridos', stats.goalsConceded, isDark)),
+            Expanded(
+              child: _goalStat(
+                icons.goal,
+                'sofridos',
+                stats.goalsConceded,
+                isDark,
+              ),
+            ),
           ]),
         ),
 
@@ -511,47 +482,100 @@ class _StatsPanel extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color:        isDark ? AppColors.slate900 : Colors.white,
+              color: isDark ? AppColors.slate900 : AppColors.onDark,
               borderRadius: BorderRadius.circular(14),
-              border:       Border.all(
+              border: Border.all(
                   color: isDark ? AppColors.slate700 : AppColors.slate200),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('🎯 Assistências entre eles',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
-                        color: isDark ? AppColors.slate100 : AppColors.slate800)),
+                Row(
+                  children: [
+                    renderGroupIcon(
+                      icons.assist,
+                      size: 14,
+                      color: isDark ? AppColors.slate100 : AppColors.slate800,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Assistências entre eles',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? AppColors.slate100 : AppColors.slate800,
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 12),
                 ...stats.assistPairs.map((a) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(children: [
-                    Expanded(
-                      child: Text.rich(TextSpan(
-                        style: TextStyle(fontSize: 13,
-                            color: isDark ? AppColors.slate300 : AppColors.slate700),
-                        children: [
-                          TextSpan(text: a.assisterName.split(' ').first,
-                              style: const TextStyle(fontWeight: FontWeight.w700)),
-                          const TextSpan(text: ' → '),
-                          TextSpan(text: a.scorerName.split(' ').first,
-                              style: const TextStyle(fontWeight: FontWeight.w700)),
-                        ],
-                      )),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                      decoration: BoxDecoration(
-                        color:        isDark ? AppColors.slate700 : AppColors.slate100,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text('${a.count}x',
-                          style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.w700,
-                              color: isDark ? AppColors.slate200 : AppColors.slate700)),
-                    ),
-                  ]),
-                )),
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(children: [
+                        Expanded(
+                          child: Wrap(
+                            spacing: 5,
+                            runSpacing: 3,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              PlayerNameWithIcon(
+                                name: a.assisterName.split(' ').first,
+                                icons: icons,
+                                isGoalkeeper:
+                                    goalkeeperNames.contains(a.assisterName),
+                                iconSize: 10,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark
+                                      ? AppColors.slate300
+                                      : AppColors.slate700,
+                                ),
+                              ),
+                              Text(
+                                '→',
+                                style: TextStyle(
+                                  color: isDark
+                                      ? AppColors.slate400
+                                      : AppColors.slate500,
+                                ),
+                              ),
+                              PlayerNameWithIcon(
+                                name: a.scorerName.split(' ').first,
+                                icons: icons,
+                                isGoalkeeper:
+                                    goalkeeperNames.contains(a.scorerName),
+                                iconSize: 10,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark
+                                      ? AppColors.slate300
+                                      : AppColors.slate700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? AppColors.slate700
+                                : AppColors.slate100,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text('${a.count}x',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark
+                                      ? AppColors.slate200
+                                      : AppColors.slate700)),
+                        ),
+                      ]),
+                    )),
               ],
             ),
           ),
@@ -560,37 +584,48 @@ class _StatsPanel extends StatelessWidget {
     );
   }
 
-  Widget _resultTile(String emoji, String label, int val, Color color, bool isDark) =>
+  Widget _resultTile(
+          String emoji, String label, int val, Color color, bool isDark) =>
       Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color:        color.withAlpha(isDark ? 40 : 25),
+          color: color.withAlpha(isDark ? 40 : 25),
           borderRadius: BorderRadius.circular(12),
-          border:       Border.all(color: color.withAlpha(100)),
+          border: Border.all(color: color.withAlpha(100)),
         ),
         child: Column(children: [
           Text(emoji, style: const TextStyle(fontSize: 20)),
           const SizedBox(height: 2),
           Text('$val',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: color)),
+              style: TextStyle(
+                  fontSize: 24, fontWeight: FontWeight.w900, color: color)),
           Text(label,
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600,
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
                   color: color.withAlpha(200))),
         ]),
       );
 
-  Widget _goalStat(String emoji, String label, int val, bool isDark) => Column(
-    children: [
-      Text(emoji, style: const TextStyle(fontSize: 22)),
-      const SizedBox(height: 4),
-      Text('$val',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900,
-              color: isDark ? AppColors.slate100 : AppColors.slate900)),
-      Text(label,
-          style: TextStyle(fontSize: 11,
-              color: isDark ? AppColors.slate400 : AppColors.slate500)),
-    ],
-  );
+  Widget _goalStat(String icon, String label, int val, bool isDark) => Column(
+        children: [
+          renderGroupIcon(
+            icon,
+            size: 22,
+            color: isDark ? AppColors.slate300 : AppColors.slate600,
+          ),
+          const SizedBox(height: 4),
+          Text('$val',
+              style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: isDark ? AppColors.slate100 : AppColors.slate900)),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 11,
+                  color: isDark ? AppColors.slate400 : AppColors.slate500)),
+        ],
+      );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -605,9 +640,9 @@ class TeamBuilderPage extends ConsumerStatefulWidget {
 class _TeamBuilderPageState extends ConsumerState<TeamBuilderPage> {
   final List<TeamBuilderPlayer> _selected = [];
   TeamBuilderStats? _stats;
-  bool              _loading = false;
-  String?           _error;
-  Timer?            _debounce;
+  bool _loading = false;
+  String? _error;
+  Timer? _debounce;
 
   @override
   void dispose() {
@@ -618,7 +653,9 @@ class _TeamBuilderPageState extends ConsumerState<TeamBuilderPage> {
   bool _canAdd(TeamBuilderPlayer player) {
     if (_selected.any((p) => p.id == player.id)) return false;
     if (_selected.length >= 5) return false;
-    if (player.isGoalkeeper && _selected.any((p) => p.isGoalkeeper)) return false;
+    if (player.isGoalkeeper && _selected.any((p) => p.isGoalkeeper)) {
+      return false;
+    }
     return true;
   }
 
@@ -640,42 +677,57 @@ class _TeamBuilderPageState extends ConsumerState<TeamBuilderPage> {
   }
 
   Future<void> _fetchStats() async {
-    final groupId =
-        ref.read(accountStoreProvider).activeAccount?.activeGroupId;
+    final groupId = ref.read(accountStoreProvider).activeAccount?.activeGroupId;
     if (groupId == null) return;
 
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
-      final ds     = ref.read(_teamBuilderDsProvider);
-      final result = await ds.fetchStats(
-          groupId, _selected.map((p) => p.id).toList());
-      if (mounted) setState(() { _stats = result; _loading = false; });
+      final ds = ref.read(_teamBuilderDsProvider);
+      final result =
+          await ds.fetchStats(groupId, _selected.map((p) => p.id).toList());
+      if (mounted) {
+        setState(() {
+          _stats = result;
+          _loading = false;
+        });
+      }
     } on DioException catch (e) {
-      if (mounted) setState(() {
-        _error   = e.response?.data?['error'] as String?
-            ?? 'Erro ao buscar estatísticas.';
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.response?.data?['error'] as String? ??
+              'Erro ao buscar estatísticas.';
+          _loading = false;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() {
-        _error   = 'Erro inesperado. Tente novamente.';
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = 'Erro inesperado. Tente novamente.';
+          _loading = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark      = Theme.of(context).brightness == Brightness.dark;
-    final account     = ref.watch(accountStoreProvider).activeAccount;
-    final groupId     = account?.activeGroupId ?? '';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final account = ref.watch(accountStoreProvider).activeAccount;
+    final groupId = account?.activeGroupId ?? '';
     final playersAsync = ref.watch(_groupPlayersProvider(groupId));
+    final settings = groupId.isEmpty
+        ? null
+        : ref.watch(groupSettingsProvider(groupId)).valueOrNull;
+    final icons = GroupIcons.from(settings);
 
     return Scaffold(
       body: CustomScrollView(
         slivers: [
           // ── Header ──────────────────────────────────────────────────────────
-          SliverToBoxAdapter(child: _buildHeader()),
+          SliverToBoxAdapter(child: _buildHeader(icons)),
 
           // ── Content ─────────────────────────────────────────────────────────
           SliverToBoxAdapter(
@@ -686,9 +738,10 @@ class _TeamBuilderPageState extends ConsumerState<TeamBuilderPage> {
                 children: [
                   // Football field
                   _FootballField(
-                    players:  _selected,
+                    players: _selected,
                     onRemove: _togglePlayer,
-                    loading:  _loading,
+                    loading: _loading,
+                    icons: icons,
                   ),
                   const SizedBox(height: 12),
 
@@ -706,7 +759,9 @@ class _TeamBuilderPageState extends ConsumerState<TeamBuilderPage> {
                         textAlign: TextAlign.center,
                         style: TextStyle(
                             fontSize: 12,
-                            color: isDark ? AppColors.slate400 : AppColors.slate500),
+                            color: isDark
+                                ? AppColors.slate400
+                                : AppColors.slate500),
                       ),
                     ),
                   ),
@@ -714,11 +769,20 @@ class _TeamBuilderPageState extends ConsumerState<TeamBuilderPage> {
 
                   // Stats
                   if (_error != null) _buildError(isDark),
-                  if (_stats != null) _StatsPanel(stats: _stats!, isDark: isDark),
+                  if (_stats != null)
+                    _StatsPanel(
+                      stats: _stats!,
+                      isDark: isDark,
+                      icons: icons,
+                      goalkeeperNames: {
+                        for (final player in _selected)
+                          if (player.isGoalkeeper) player.name,
+                      },
+                    ),
                   const SizedBox(height: 20),
 
                   // Player selector
-                  _buildPlayerSelector(isDark, playersAsync),
+                  _buildPlayerSelector(isDark, playersAsync, icons),
                 ],
               ),
             ),
@@ -730,122 +794,165 @@ class _TeamBuilderPageState extends ConsumerState<TeamBuilderPage> {
 
   // ── Header ─────────────────────────────────────────────────────────────────
 
-  Widget _buildHeader() => Container(
-    decoration: const BoxDecoration(
-      gradient: LinearGradient(
-        colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A)],
-        begin: Alignment.topLeft,
-        end:   Alignment.bottomRight,
+  Widget _buildHeader(GroupIcons icons) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
       ),
-    ),
-    child: SafeArea(
-      bottom: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        child: Row(children: [
-          Container(
-            width: 56, height: 56,
-            decoration: BoxDecoration(
-              color:        Colors.white.withAlpha(25),
-              borderRadius: BorderRadius.circular(16),
-              border:       Border.all(color: Colors.white.withAlpha(50)),
-            ),
-            child: const Center(
-              child: Text('⚽', style: TextStyle(fontSize: 28)),
-            ),
-          ),
-          const SizedBox(width: 16),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: SafeArea(
+        bottom: false,
+        child: SizedBox(
+          height: 72,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
               children: [
-                Text('Monte seu Time',
-                    style: TextStyle(color: Colors.white, fontSize: 22,
-                        fontWeight: FontWeight.w900, letterSpacing: -0.5)),
-                SizedBox(height: 4),
-                Row(children: [
-                  Icon(Icons.celebration_outlined, size: 12,
-                      color: Color(0xFFFBBF24)),
-                  SizedBox(width: 4),
-                  Text('Funcionalidade de evento',
-                      style: TextStyle(color: Color(0xFFFBBF24), fontSize: 11)),
-                ]),
+                IconButton(
+                  onPressed: () {
+                    if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      context.go('/app');
+                    }
+                  },
+                  tooltip: 'Voltar',
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
+                const SizedBox(width: 8),
+                renderGroupIcon(
+                  icons.goal,
+                  size: 24,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Monte seu time',
+                        style: theme.textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Visualize o desempenho da formação',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-        ]),
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   // ── Player selector ────────────────────────────────────────────────────────
 
-  Widget _buildPlayerSelector(bool isDark, AsyncValue<List<TeamBuilderPlayer>> async) {
+  Widget _buildPlayerSelector(
+    bool isDark,
+    AsyncValue<List<TeamBuilderPlayer>> async,
+    GroupIcons icons,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Jogadores',
             style: TextStyle(
-                fontSize: 13, fontWeight: FontWeight.w700,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
                 color: isDark ? AppColors.slate300 : AppColors.slate600)),
         const SizedBox(height: 10),
         async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error:   (e, _) => Text('Erro ao carregar jogadores.',
+          error: (e, _) => Text('Erro ao carregar jogadores.',
               style: TextStyle(
                   color: isDark ? AppColors.slate400 : AppColors.slate500)),
           data: (players) => Wrap(
             spacing: 8,
             runSpacing: 8,
             children: players.map((p) {
-              final sel      = _selected.any((s) => s.id == p.id);
-              final canAdd   = _canAdd(p);
+              final sel = _selected.any((s) => s.id == p.id);
+              final canAdd = _canAdd(p);
               final disabled = !sel && !canAdd;
 
               return GestureDetector(
                 onTap: disabled ? null : () => _togglePlayer(p),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  constraints: const BoxConstraints(minHeight: 44),
                   decoration: BoxDecoration(
                     color: sel
-                        ? (isDark ? Colors.white : AppColors.slate900)
+                        ? (isDark ? AppColors.onDark : AppColors.slate900)
                         : disabled
-                            ? (isDark ? AppColors.slate800.withAlpha(100) : AppColors.slate100.withAlpha(100))
-                            : (isDark ? AppColors.slate800 : Colors.white),
+                            ? (isDark
+                                ? AppColors.slate800.withAlpha(100)
+                                : AppColors.slate100.withAlpha(100))
+                            : (isDark ? AppColors.slate800 : AppColors.onDark),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: sel
-                          ? (isDark ? Colors.white : AppColors.slate900)
+                          ? (isDark ? AppColors.onDark : AppColors.slate900)
                           : disabled
-                              ? (isDark ? AppColors.slate700.withAlpha(100) : AppColors.slate200.withAlpha(100))
-                              : (isDark ? AppColors.slate600 : AppColors.slate300),
+                              ? (isDark
+                                  ? AppColors.slate700.withAlpha(100)
+                                  : AppColors.slate200.withAlpha(100))
+                              : (isDark
+                                  ? AppColors.slate600
+                                  : AppColors.slate300),
                     ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (p.isGoalkeeper)
-                        const Padding(
-                          padding: EdgeInsets.only(right: 4),
-                          child: Text('🧤', style: TextStyle(fontSize: 12)),
-                        ),
+                      renderGroupIcon(
+                        p.isGoalkeeper ? icons.goalkeeper : icons.player,
+                        size: 12,
+                        color: sel
+                            ? (isDark ? AppColors.slate900 : AppColors.onDark)
+                            : disabled
+                                ? (isDark
+                                    ? AppColors.slate600
+                                    : AppColors.slate300)
+                                : (isDark
+                                    ? AppColors.slate100
+                                    : AppColors.slate800),
+                      ),
+                      const SizedBox(width: 4),
                       Text(
                         p.name.split(' ').first,
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: sel
-                              ? (isDark ? AppColors.slate900 : Colors.white)
+                              ? (isDark ? AppColors.slate900 : AppColors.onDark)
                               : disabled
-                                  ? (isDark ? AppColors.slate600 : AppColors.slate300)
-                                  : (isDark ? AppColors.slate100 : AppColors.slate800),
+                                  ? (isDark
+                                      ? AppColors.slate600
+                                      : AppColors.slate300)
+                                  : (isDark
+                                      ? AppColors.slate100
+                                      : AppColors.slate800),
                         ),
                       ),
                       if (sel) ...[
                         const SizedBox(width: 4),
-                        Icon(Icons.close_rounded, size: 12,
-                            color: isDark ? AppColors.slate600 : AppColors.slate300),
+                        Icon(Icons.close_rounded,
+                            size: 12,
+                            color: isDark
+                                ? AppColors.slate600
+                                : AppColors.slate300),
                       ],
                     ],
                   ),
@@ -861,19 +968,23 @@ class _TeamBuilderPageState extends ConsumerState<TeamBuilderPage> {
   // ── Error ──────────────────────────────────────────────────────────────────
 
   Widget _buildError(bool isDark) => Container(
-    margin: const EdgeInsets.only(bottom: 16),
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color:        isDark ? const Color(0xFF2D1515) : const Color(0xFFFEF2F2),
-      borderRadius: BorderRadius.circular(10),
-      border:       Border.all(color: const Color(0xFFFCA5A5)),
-    ),
-    child: Row(children: [
-      const Icon(Icons.error_outline_rounded, size: 16,
-          color: Color(0xFFEF4444)),
-      const SizedBox(width: 8),
-      Expanded(child: Text(_error!,
-          style: const TextStyle(fontSize: 13, color: Color(0xFFEF4444)))),
-    ]),
-  );
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isDark
+              ? AppColors.dangerBackground
+              : AppColors.dangerBackgroundLight,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.rose200),
+        ),
+        child: Row(children: [
+          const Icon(Icons.error_outline_rounded,
+              size: 16, color: AppColors.prototypeDanger),
+          const SizedBox(width: 8),
+          Expanded(
+              child: Text(_error!,
+                  style: const TextStyle(
+                      fontSize: 13, color: AppColors.prototypeDanger))),
+        ]),
+      );
 }

@@ -4,12 +4,12 @@ import '../../data/datasources/calendar_remote_datasource.dart';
 import '../../domain/entities/calendar_event.dart';
 
 class CreateEditEventSheet extends StatefulWidget {
-  final String                   groupId;
+  final String groupId;
   final CalendarRemoteDataSource datasource;
-  final List<CalendarCategory>   categories;
-  final CalendarEvent?           event;       // null = criar
-  final String?                  initialDate;
-  final VoidCallback             onSaved;
+  final List<CalendarCategory> categories;
+  final CalendarEvent? event; // null = criar
+  final String? initialDate;
+  final VoidCallback onSaved;
 
   const CreateEditEventSheet({
     super.key,
@@ -31,16 +31,16 @@ class CreateEditEventSheet extends StatefulWidget {
     required VoidCallback onSaved,
   }) {
     return showModalBottomSheet(
-      context:            context,
+      context: context,
       isScrollControlled: true,
-      backgroundColor:    Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => CreateEditEventSheet(
-        groupId:    groupId,
+        groupId: groupId,
         datasource: datasource,
         categories: categories,
-        event:      event,
+        event: event,
         initialDate: initialDate,
-        onSaved:    onSaved,
+        onSaved: onSaved,
       ),
     );
   }
@@ -51,13 +51,13 @@ class CreateEditEventSheet extends StatefulWidget {
 
 class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
   final _titleCtrl = TextEditingController();
-  final _descCtrl  = TextEditingController();
-  final _timeCtrl  = TextEditingController();
+  final _descCtrl = TextEditingController();
+  final _timeCtrl = TextEditingController();
 
-  late String  _date;
-  bool         _timeTBD      = false;
-  String?      _categoryId;
-  bool         _saving       = false;
+  late String _date;
+  bool _timeTBD = false;
+  String? _categoryId;
+  bool _saving = false;
 
   bool get _isEdit => widget.event != null;
 
@@ -67,11 +67,11 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
     final ev = widget.event;
     if (ev != null) {
       _titleCtrl.text = ev.title;
-      _descCtrl.text  = ev.description ?? '';
-      _timeCtrl.text  = ev.time ?? '';
-      _date           = ev.date;
-      _timeTBD        = ev.timeTBD;
-      _categoryId     = ev.categoryId;
+      _descCtrl.text = ev.description ?? '';
+      _timeCtrl.text = ev.time ?? '';
+      _date = ev.date;
+      _timeTBD = ev.timeTBD;
+      _categoryId = ev.categoryId;
     } else {
       _date = widget.initialDate ?? _todayStr();
     }
@@ -92,15 +92,16 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
 
   Future<void> _pickDate() async {
     final initial = DateTime.tryParse(_date) ?? DateTime.now();
-    final picked  = await showDatePicker(
-      context:      context,
-      initialDate:  initial,
-      firstDate:    DateTime(2020),
-      lastDate:     DateTime(2030),
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
     );
     if (picked != null) {
       setState(() {
-        _date = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+        _date =
+            '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
       });
     }
   }
@@ -117,17 +118,19 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
     setState(() => _saving = true);
     try {
       final dto = {
-        'type':        'manual',
-        'title':       title,
-        'date':        _date,
-        'timeTBD':     _timeTBD,
-        if (!_timeTBD && _timeCtrl.text.isNotEmpty) 'time': _timeCtrl.text.trim(),
+        'type': 'manual',
+        'title': title,
+        'date': _date,
+        'timeTBD': _timeTBD,
+        if (!_timeTBD && _timeCtrl.text.isNotEmpty)
+          'time': _timeCtrl.text.trim(),
         if (_descCtrl.text.isNotEmpty) 'description': _descCtrl.text.trim(),
         if (_categoryId != null) 'categoryId': _categoryId,
       };
 
       if (_isEdit) {
-        await widget.datasource.updateEvent(widget.groupId, widget.event!.id!, dto);
+        await widget.datasource
+            .updateEvent(widget.groupId, widget.event!.id!, dto);
       } else {
         await widget.datasource.createEvent(widget.groupId, dto);
       }
@@ -156,7 +159,7 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
       ),
       child: Container(
         decoration: BoxDecoration(
-          color:        isDark ? AppColors.slate900 : Colors.white,
+          color: isDark ? AppColors.slate900 : AppColors.onDark,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: SafeArea(
@@ -170,9 +173,10 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
                 Center(
                   child: Container(
                     margin: const EdgeInsets.symmetric(vertical: 12),
-                    width: 36, height: 4,
+                    width: 36,
+                    height: 4,
                     decoration: BoxDecoration(
-                      color:        isDark ? AppColors.slate700 : AppColors.slate200,
+                      color: isDark ? AppColors.slate700 : AppColors.slate200,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -182,9 +186,9 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
                 Text(
                   _isEdit ? 'Editar evento' : 'Novo evento',
                   style: TextStyle(
-                    fontSize:   18,
+                    fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.white : AppColors.slate900,
+                    color: isDark ? AppColors.onDark : AppColors.slate900,
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -192,7 +196,10 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
                 // Título do evento
                 _label('Título', isDark),
                 const SizedBox(height: 6),
-                _field(controller: _titleCtrl, hint: 'Ex: Treino extra', isDark: isDark),
+                _field(
+                    controller: _titleCtrl,
+                    hint: 'Ex: Treino extra',
+                    isDark: isDark),
                 const SizedBox(height: 14),
 
                 // Data
@@ -201,22 +208,30 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
                 GestureDetector(
                   onTap: _pickDate,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 13),
                     decoration: BoxDecoration(
-                      border:       Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
+                      border: Border.all(
+                          color:
+                              isDark ? AppColors.slate700 : AppColors.slate200),
                       borderRadius: BorderRadius.circular(12),
-                      color:        isDark ? AppColors.slate800 : AppColors.slate50,
+                      color: isDark ? AppColors.slate800 : AppColors.slate50,
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.calendar_today_outlined, size: 16,
-                            color: isDark ? AppColors.slate400 : AppColors.slate500),
+                        Icon(Icons.calendar_today_outlined,
+                            size: 16,
+                            color: isDark
+                                ? AppColors.slate400
+                                : AppColors.slate500),
                         const SizedBox(width: 10),
                         Text(
                           _date,
                           style: TextStyle(
                             fontSize: 14,
-                            color: isDark ? AppColors.slate200 : AppColors.slate700,
+                            color: isDark
+                                ? AppColors.slate200
+                                : AppColors.slate700,
                           ),
                         ),
                       ],
@@ -233,17 +248,17 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
                     Expanded(
                       child: _field(
                         controller: _timeCtrl,
-                        hint:       'HH:MM',
-                        isDark:     isDark,
-                        enabled:    !_timeTBD,
-                        keyboard:   TextInputType.datetime,
+                        hint: 'HH:MM',
+                        isDark: isDark,
+                        enabled: !_timeTBD,
+                        keyboard: TextInputType.datetime,
                       ),
                     ),
                     const SizedBox(width: 12),
                     Row(
                       children: [
                         Checkbox(
-                          value:    _timeTBD,
+                          value: _timeTBD,
                           onChanged: (v) => setState(() {
                             _timeTBD = v ?? false;
                             if (_timeTBD) _timeCtrl.clear();
@@ -256,7 +271,9 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
                           'A confirmar',
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDark ? AppColors.slate400 : AppColors.slate500,
+                            color: isDark
+                                ? AppColors.slate400
+                                : AppColors.slate500,
                           ),
                         ),
                       ],
@@ -271,9 +288,9 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
                   const SizedBox(height: 6),
                   _CategoryDropdown(
                     categories: widget.categories,
-                    value:      _categoryId,
-                    isDark:     isDark,
-                    onChanged:  (v) => setState(() => _categoryId = v),
+                    value: _categoryId,
+                    isDark: isDark,
+                    onChanged: (v) => setState(() => _categoryId = v),
                   ),
                   const SizedBox(height: 14),
                 ],
@@ -283,9 +300,9 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
                 const SizedBox(height: 6),
                 _field(
                   controller: _descCtrl,
-                  hint:       'Detalhes do evento...',
-                  isDark:     isDark,
-                  maxLines:   3,
+                  hint: 'Detalhes do evento...',
+                  isDark: isDark,
+                  maxLines: 3,
                 ),
                 const SizedBox(height: 24),
 
@@ -295,8 +312,10 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
                   child: FilledButton(
                     onPressed: _saving ? null : _save,
                     style: FilledButton.styleFrom(
-                      backgroundColor: isDark ? Colors.white : AppColors.slate900,
-                      foregroundColor: isDark ? AppColors.slate900 : Colors.white,
+                      backgroundColor:
+                          isDark ? AppColors.onDark : AppColors.slate900,
+                      foregroundColor:
+                          isDark ? AppColors.slate900 : AppColors.onDark,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -304,9 +323,11 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
                     ),
                     child: _saving
                         ? const SizedBox(
-                            width: 20, height: 20,
+                            width: 20,
+                            height: 20,
                             child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white,
+                              strokeWidth: 2,
+                              color: AppColors.onDark,
                             ),
                           )
                         : Text(
@@ -324,59 +345,65 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
   }
 
   Widget _label(String text, bool isDark) => Text(
-    text,
-    style: TextStyle(
-      fontSize:   12,
-      fontWeight: FontWeight.w600,
-      color: isDark ? AppColors.slate400 : AppColors.slate500,
-      letterSpacing: .3,
-    ),
-  );
+        text,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: isDark ? AppColors.slate400 : AppColors.slate500,
+          letterSpacing: .3,
+        ),
+      );
 
   Widget _field({
     required TextEditingController controller,
-    required String                hint,
-    required bool                  isDark,
-    bool                           enabled   = true,
-    int                            maxLines  = 1,
-    TextInputType                  keyboard  = TextInputType.text,
+    required String hint,
+    required bool isDark,
+    bool enabled = true,
+    int maxLines = 1,
+    TextInputType keyboard = TextInputType.text,
   }) {
     return TextField(
-      controller:   controller,
-      enabled:      enabled,
-      maxLines:     maxLines,
+      controller: controller,
+      enabled: enabled,
+      maxLines: maxLines,
       keyboardType: keyboard,
       style: TextStyle(
         fontSize: 14,
         color: isDark ? AppColors.slate200 : AppColors.slate800,
       ),
       decoration: InputDecoration(
-        hintText:        hint,
-        hintStyle: TextStyle(color: isDark ? AppColors.slate600 : AppColors.slate400),
-        filled:          true,
-        fillColor:       isDark ? AppColors.slate800 : AppColors.slate50,
-        border:          OutlineInputBorder(
+        hintText: hint,
+        hintStyle:
+            TextStyle(color: isDark ? AppColors.slate600 : AppColors.slate400),
+        filled: true,
+        fillColor: isDark ? AppColors.slate800 : AppColors.slate50,
+        border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:   BorderSide(color: isDark ? AppColors.slate700 : AppColors.slate200),
+          borderSide: BorderSide(
+              color: isDark ? AppColors.slate700 : AppColors.slate200),
         ),
-        enabledBorder:   OutlineInputBorder(
+        enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:   BorderSide(color: isDark ? AppColors.slate700 : AppColors.slate200),
+          borderSide: BorderSide(
+              color: isDark ? AppColors.slate700 : AppColors.slate200),
         ),
-        focusedBorder:   OutlineInputBorder(
+        focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:   BorderSide(color: isDark ? AppColors.slate400 : AppColors.slate500, width: 1.5),
+          borderSide: BorderSide(
+              color: isDark ? AppColors.slate400 : AppColors.slate500,
+              width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       ),
     );
   }
 }
 
 class _CategoryDropdown extends StatelessWidget {
-  final List<CalendarCategory>        categories;
-  final String?                       value;
-  final bool                          isDark;
+  final List<CalendarCategory> categories;
+  final String? value;
+  final bool isDark;
   final void Function(String?) onChanged;
 
   const _CategoryDropdown({
@@ -398,37 +425,42 @@ class _CategoryDropdown extends StatelessWidget {
             )),
       ),
       ...categories.map((c) => DropdownMenuItem<String>(
-        value: c.id,
-        child: Text(c.name,
-            style: TextStyle(
-              fontSize: 14,
-              color: isDark ? AppColors.slate200 : AppColors.slate700,
-            )),
-      )),
+            value: c.id,
+            child: Text(c.name,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? AppColors.slate200 : AppColors.slate700,
+                )),
+          )),
     ];
 
     return DropdownButtonFormField<String>(
       initialValue: value,
-      items:    items,
+      items: items,
       onChanged: onChanged,
       decoration: InputDecoration(
-        filled:    true,
+        filled: true,
         fillColor: isDark ? AppColors.slate800 : AppColors.slate50,
-        border:    OutlineInputBorder(
+        border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:   BorderSide(color: isDark ? AppColors.slate700 : AppColors.slate200),
+          borderSide: BorderSide(
+              color: isDark ? AppColors.slate700 : AppColors.slate200),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:   BorderSide(color: isDark ? AppColors.slate700 : AppColors.slate200),
+          borderSide: BorderSide(
+              color: isDark ? AppColors.slate700 : AppColors.slate200),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:   BorderSide(color: isDark ? AppColors.slate400 : AppColors.slate500, width: 1.5),
+          borderSide: BorderSide(
+              color: isDark ? AppColors.slate400 : AppColors.slate500,
+              width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       ),
-      dropdownColor: isDark ? AppColors.slate800 : Colors.white,
+      dropdownColor: isDark ? AppColors.slate800 : AppColors.onDark,
     );
   }
 }

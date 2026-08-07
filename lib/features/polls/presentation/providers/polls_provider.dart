@@ -7,13 +7,17 @@ final pollsDsProvider = Provider<PollsRemoteDataSource>(
   (ref) => PollsRemoteDataSource(ref.watch(dioProvider)),
 );
 
-final pollsListProvider = FutureProvider.autoDispose.family<List<PollSummary>, String>(
+final pollsListProvider =
+    FutureProvider.autoDispose.family<List<PollSummary>, String>(
   (ref, groupId) => ref.watch(pollsDsProvider).getPolls(groupId),
 );
 
-final pendingPollsCountProvider = FutureProvider.autoDispose.family<int, String>(
+final pendingPollsCountProvider =
+    FutureProvider.autoDispose.family<int, String>(
   (ref, groupId) async {
     final list = await ref.watch(pollsListProvider(groupId).future);
-    return list.where((p) => p.isOpen && !p.hasVoted && !p.deadlinePassed).length;
+    return list
+        .where((p) => p.isOpen && !p.hasVoted && !p.deadlinePassed)
+        .length;
   },
 );

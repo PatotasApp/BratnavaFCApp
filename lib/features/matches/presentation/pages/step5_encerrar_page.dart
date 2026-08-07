@@ -42,7 +42,7 @@ class Step5EncerrarPage extends ConsumerWidget {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                     side:
-                        const BorderSide(color: AppColors.amber400, width: 1.5),
+                        const BorderSide(color: AppColors.warning, width: 1.5),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(20),
@@ -64,7 +64,7 @@ class Step5EncerrarPage extends ConsumerWidget {
                                 'Encerrado',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w700,
-                                  color: AppColors.orange700,
+                                  color: AppColors.warningLight,
                                   fontSize: 13,
                                 ),
                               ),
@@ -123,7 +123,7 @@ class Step5EncerrarPage extends ConsumerWidget {
                                   endedMessage,
                                   style: const TextStyle(
                                     fontSize: 13,
-                                    color: AppColors.orange700,
+                                    color: AppColors.warningLight,
                                   ),
                                 ),
                               ),
@@ -153,7 +153,7 @@ class Step5EncerrarPage extends ConsumerWidget {
                           height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: AppColors.onDark,
                           ),
                         )
                       : const Icon(Icons.arrow_forward),

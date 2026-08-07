@@ -32,6 +32,7 @@ class MatchDetailsPage extends ConsumerStatefulWidget {
 class _MatchDetailsPageState extends ConsumerState<MatchDetailsPage> {
   // 0 = Todos, 1 = Time A, 2 = Time B
   int _goalsTab = 0;
+  int _detailsTab = 0;
   List<ReplayClip> _replays = [];
   bool _sharingCard = false;
   final Set<String> _togglingNoShow = {};
@@ -40,6 +41,9 @@ class _MatchDetailsPageState extends ConsumerState<MatchDetailsPage> {
     final allPlayers = [...data.teamAPlayers, ...data.teamBPlayers]
         .where((p) => p.playerId != null && p.playerId!.isNotEmpty)
         .toList();
+    final icons = GroupIcons.from(
+      ref.read(groupSettingsProvider(widget.groupId)).valueOrNull,
+    );
 
     await showModalBottomSheet<void>(
       context: context,
@@ -48,6 +52,7 @@ class _MatchDetailsPageState extends ConsumerState<MatchDetailsPage> {
           borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (_) => _GoalFormSheet(
         players: allPlayers,
+        icons: icons,
         editing: editing,
         onSave: (scorerId, assistId, time, isOwnGoal) async {
           final ds = ref.read(matchDsProvider);
@@ -237,12 +242,14 @@ class _MatchDetailsPageState extends ConsumerState<MatchDetailsPage> {
         isAdmin: isAdmin,
         canSeeStats: isAdmin || (settings?.showPlayerStats ?? false),
         goalsTab: _goalsTab,
+        activeTab: _detailsTab,
         icons: icons,
         replays: _replays,
         groupId: widget.groupId,
         accessToken: accessToken,
         sharingCard: _sharingCard,
         onGoalsTab: (t) => setState(() => _goalsTab = t),
+        onTabChanged: (t) => setState(() => _detailsTab = t),
         onBack: () => context.go('/app/history'),
         onShare: _shareMatchCard,
         togglingNoShow: _togglingNoShow,
@@ -264,7 +271,9 @@ class _DetailsBody extends StatelessWidget {
   final bool isAdmin;
   final bool canSeeStats;
   final int goalsTab;
+  final int activeTab;
   final void Function(int) onGoalsTab;
+  final void Function(int) onTabChanged;
   final VoidCallback onBack;
   final GroupIcons icons;
   final List<ReplayClip> replays;
@@ -284,7 +293,9 @@ class _DetailsBody extends StatelessWidget {
     required this.isAdmin,
     required this.canSeeStats,
     required this.goalsTab,
+    required this.activeTab,
     required this.onGoalsTab,
+    required this.onTabChanged,
     required this.onBack,
     required this.icons,
     required this.replays,
@@ -300,14 +311,15 @@ class _DetailsBody extends StatelessWidget {
   });
 
   Color get aColor =>
-      _hexColor(data.teamAColor?.hexValue) ?? const Color(0xFF0f172a);
+      _hexColor(data.teamAColor?.hexValue) ?? AppColors.slate900;
   Color get bColor =>
-      _hexColor(data.teamBColor?.hexValue) ?? const Color(0xFF0f172a);
+      _hexColor(data.teamBColor?.hexValue) ?? AppColors.slate900;
   String get aName => data.teamAColor?.name ?? 'Time A';
   String get bName => data.teamBColor?.name ?? 'Time B';
 
   @override
   Widget build(BuildContext context) {
+    final selectedTab = activeTab == 2 && !canSeeStats ? 0 : activeTab;
     // Build sorted goals with team info
     final byMatchPlayerId = <String, String>{};
     final byPlayerId = <String, String>{};
@@ -344,6 +356,10 @@ class _DetailsBody extends StatelessWidget {
       ...data.teamAPlayers,
       ...data.teamBPlayers,
     ].where((p) => p.isMvp && !p.didNotPlay).toList();
+    final goalkeeperByName = <String, bool>{
+      for (final player in [...data.teamAPlayers, ...data.teamBPlayers])
+        player.playerName: player.isGoalkeeper,
+    };
 
     return CustomScrollView(
       slivers: [
@@ -351,39 +367,56 @@ class _DetailsBody extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Back button + share icon
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+              Container(
+                height: 72 + MediaQuery.paddingOf(context).top,
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  MediaQuery.paddingOf(context).top + 12,
+                  16,
+                  12,
+                ),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  border: Border(
+                    bottom: BorderSide(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
+                  ),
+                ),
                 child: Row(
                   children: [
-                    Expanded(
-                      child: TextButton.icon(
-                        onPressed: onBack,
-                        icon: const Icon(Icons.chevron_left_rounded, size: 18),
-                        label: const Text('Voltar ao histórico'),
-                        style: TextButton.styleFrom(
-                          foregroundColor:
-                              isDark ? AppColors.slate400 : AppColors.slate500,
-                          alignment: Alignment.centerLeft,
-                        ),
-                      ),
-                    ),
                     IconButton(
-                      onPressed: sharingCard ? null : onShare,
-                      tooltip: 'Compartilhar',
-                      icon: sharingCard
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Icon(
-                              Icons.share_rounded,
-                              size: 20,
-                              color: isDark
-                                  ? AppColors.slate400
-                                  : AppColors.slate500,
-                            ),
+                      onPressed: onBack,
+                      tooltip: 'Voltar',
+                      icon: const Icon(Icons.arrow_back_rounded),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Detalhes da partida',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            [
+                              if (data.playedAt != null)
+                                DateFormat(
+                                  'dd/MM/yyyy',
+                                  'pt_BR',
+                                ).format(data.playedAt!),
+                              if (data.placeName?.isNotEmpty == true)
+                                data.placeName!,
+                            ].join(' · '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -402,26 +435,37 @@ class _DetailsBody extends StatelessWidget {
                 icons: icons,
               ),
 
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                child: _MatchDetailsTabs(
+                  activeTab: selectedTab,
+                  onChanged: onTabChanged,
+                  isDark: isDark,
+                  canSeeStats: canSeeStats,
+                ),
+              ),
               const SizedBox(height: 12),
 
               // Simulação minuto a minuto
-              _SectionHeader(title: 'Simulação', isDark: isDark),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _SimulationTimeline(
-                  goalEvents: goalEvents,
-                  aColor: aColor,
-                  bColor: bColor,
-                  aName: aName,
-                  bName: bName,
-                  isDark: isDark,
+              if (selectedTab == 0) ...[
+                _SectionHeader(title: 'Simulação', isDark: isDark),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _SimulationTimeline(
+                    goalEvents: goalEvents,
+                    aColor: aColor,
+                    bColor: bColor,
+                    aName: aName,
+                    bName: bName,
+                    isDark: isDark,
+                  ),
                 ),
-              ),
+              ],
 
               const SizedBox(height: 12),
 
               // Gols — visível apenas para admin ou quando showPlayerStats=true
-              if (canSeeStats) ...[
+              if (selectedTab == 2 && canSeeStats) ...[
                 _SectionHeader(
                   title: 'Gols (${goals.length})',
                   isDark: isDark,
@@ -436,6 +480,7 @@ class _DetailsBody extends StatelessWidget {
                   bName: bName,
                   isDark: isDark,
                   icons: icons,
+                  goalkeeperByName: goalkeeperByName,
                   isAdmin: isAdmin,
                   onAddGoal: onAddGoal,
                   onEditGoal: onEditGoal,
@@ -446,22 +491,25 @@ class _DetailsBody extends StatelessWidget {
               const SizedBox(height: 12),
 
               // ── Jogadores ─────────────────────────────────────────
-              _TeamCards(
-                teamAPlayers: data.teamAPlayers,
-                teamBPlayers: data.teamBPlayers,
-                aColor: aColor,
-                bColor: bColor,
-                aName: aName,
-                bName: bName,
-                isDark: isDark,
-                icons: icons,
-                isAdmin: isAdmin,
-                togglingNoShow: togglingNoShow,
-                onToggleNoShow: onToggleNoShow,
-              ),
+              if (selectedTab == 1) ...[
+                _SectionHeader(title: 'Escalação', isDark: isDark),
+                _TeamCards(
+                  teamAPlayers: data.teamAPlayers,
+                  teamBPlayers: data.teamBPlayers,
+                  aColor: aColor,
+                  bColor: bColor,
+                  aName: aName,
+                  bName: bName,
+                  isDark: isDark,
+                  icons: icons,
+                  isAdmin: isAdmin,
+                  togglingNoShow: togglingNoShow,
+                  onToggleNoShow: onToggleNoShow,
+                ),
+              ],
 
               // Replays section (only when replays exist)
-              if (replays.isNotEmpty) ...[
+              if (selectedTab == 3 && replays.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _ReplaysSection(
                   replays: replays,
@@ -471,7 +519,8 @@ class _DetailsBody extends StatelessWidget {
                 ),
               ],
 
-              if (mvpPlayers.isNotEmpty || data.voteCounts.isNotEmpty) ...[
+              if (selectedTab == 4 &&
+                  (mvpPlayers.isNotEmpty || data.voteCounts.isNotEmpty)) ...[
                 const SizedBox(height: 12),
                 _SectionHeader(title: 'MVP', isDark: isDark),
                 Padding(
@@ -482,6 +531,7 @@ class _DetailsBody extends StatelessWidget {
                     isAdmin: isAdmin,
                     isDark: isDark,
                     icons: icons,
+                    goalkeeperByName: goalkeeperByName,
                   ),
                 ),
               ],
@@ -496,6 +546,86 @@ class _DetailsBody extends StatelessWidget {
 }
 
 // ── Hero card ─────────────────────────────────────────────────────────────────
+
+class _MatchDetailsTabs extends StatelessWidget {
+  final int activeTab;
+  final ValueChanged<int> onChanged;
+  final bool isDark;
+  final bool canSeeStats;
+
+  const _MatchDetailsTabs({
+    required this.activeTab,
+    required this.onChanged,
+    required this.isDark,
+    required this.canSeeStats,
+  });
+
+  List<(String, int)> get _tabs => [
+        ('Resumo', 0),
+        ('Escalação', 1),
+        if (canSeeStats) ('Gols', 2),
+        ('Replays', 3),
+        ('MVP', 4),
+      ];
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.slate800 : AppColors.slate100,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: List.generate(
+            _tabs.length,
+            (index) {
+              final tab = _tabs[index];
+              final selected = activeTab == tab.$2;
+              return Expanded(
+                child: InkWell(
+                  onTap: () => onChanged(tab.$2),
+                  borderRadius: BorderRadius.circular(8),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    height: 38,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? (isDark ? AppColors.slate700 : AppColors.onDark)
+                          : AppColors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: selected
+                          ? const [
+                              BoxShadow(
+                                  color: AppColors.shadow08, blurRadius: 4)
+                            ]
+                          : null,
+                    ),
+                    child: FittedBox(
+                      child: Text(
+                        tab.$1,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight:
+                              selected ? FontWeight.w700 : FontWeight.w600,
+                          color: isDark
+                              ? (selected
+                                  ? AppColors.onDark
+                                  : AppColors.slate400)
+                              : (selected
+                                  ? AppColors.slate900
+                                  : AppColors.slate500),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+}
 
 class _HeroCard extends StatelessWidget {
   final MatchDetails data;
@@ -554,8 +684,8 @@ class _HeroCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          border:
-              Border.all(color: Colors.black.withValues(alpha: 0.25), width: 1),
+          border: Border.all(
+              color: AppColors.darkApp.withValues(alpha: 0.25), width: 1),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(15),
@@ -575,7 +705,7 @@ class _HeroCard extends StatelessWidget {
 
                       // Dark background body
                       Container(
-                        color: const Color(0xFF0f172a),
+                        color: AppColors.slate900,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 20, vertical: 24),
                         child: Column(
@@ -594,7 +724,7 @@ class _HeroCard extends StatelessWidget {
                                           fontSize: 11,
                                           fontWeight: FontWeight.w700,
                                           letterSpacing: 1.2,
-                                          color: Color(0xFF94a3b8),
+                                          color: AppColors.lightPlaceholder,
                                         ),
                                         textAlign: TextAlign.center,
                                         maxLines: 1,
@@ -609,7 +739,7 @@ class _HeroCard extends StatelessWidget {
                                     'vs',
                                     style: TextStyle(
                                       fontSize: 14,
-                                      color: Color(0xFF475569),
+                                      color: AppColors.lightTextSecondary,
                                     ),
                                   ),
                                 ),
@@ -624,7 +754,7 @@ class _HeroCard extends StatelessWidget {
                                           fontSize: 11,
                                           fontWeight: FontWeight.w700,
                                           letterSpacing: 1.2,
-                                          color: Color(0xFF94a3b8),
+                                          color: AppColors.lightPlaceholder,
                                         ),
                                         textAlign: TextAlign.center,
                                         maxLines: 1,
@@ -647,7 +777,7 @@ class _HeroCard extends StatelessWidget {
                                   style: const TextStyle(
                                     fontSize: 64,
                                     fontWeight: FontWeight.w900,
-                                    color: Colors.white,
+                                    color: AppColors.onDark,
                                     height: 1,
                                   ),
                                 ),
@@ -657,7 +787,7 @@ class _HeroCard extends StatelessWidget {
                                     '×',
                                     style: TextStyle(
                                       fontSize: 28,
-                                      color: Color(0xFF475569),
+                                      color: AppColors.lightTextSecondary,
                                     ),
                                   ),
                                 ),
@@ -666,7 +796,7 @@ class _HeroCard extends StatelessWidget {
                                   style: const TextStyle(
                                     fontSize: 64,
                                     fontWeight: FontWeight.w900,
-                                    color: Colors.white,
+                                    color: AppColors.onDark,
                                     height: 1,
                                   ),
                                 ),
@@ -686,13 +816,14 @@ class _HeroCard extends StatelessWidget {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       const Icon(Icons.location_on_outlined,
-                                          size: 12, color: Color(0xFF64748b)),
+                                          size: 12,
+                                          color: AppColors.lightTextSecondary),
                                       const SizedBox(width: 4),
                                       Text(
                                         data.placeName!,
                                         style: const TextStyle(
                                           fontSize: 12,
-                                          color: Color(0xFF64748b),
+                                          color: AppColors.lightTextSecondary,
                                         ),
                                       ),
                                     ],
@@ -702,34 +833,17 @@ class _HeroCard extends StatelessWidget {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       const Icon(Icons.calendar_today_outlined,
-                                          size: 12, color: Color(0xFF64748b)),
+                                          size: 12,
+                                          color: AppColors.lightTextSecondary),
                                       const SizedBox(width: 4),
                                       Text(
                                         playedStr,
                                         style: const TextStyle(
                                           fontSize: 12,
-                                          color: Color(0xFF64748b),
+                                          color: AppColors.lightTextSecondary,
                                         ),
                                       ),
                                     ],
-                                  ),
-                                if (data.statusName != null)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withAlpha(15),
-                                      borderRadius: BorderRadius.circular(99),
-                                      border: Border.all(
-                                          color: Colors.white.withAlpha(25)),
-                                    ),
-                                    child: Text(
-                                      data.statusName!,
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: Color(0xFFcbd5e1),
-                                      ),
-                                    ),
                                   ),
                               ],
                             ),
@@ -738,6 +852,13 @@ class _HeroCard extends StatelessWidget {
                               mvpPlayers: mvpPlayers,
                               voteCounts: voteCounts,
                               icons: icons,
+                              goalkeeperByName: {
+                                for (final player in [
+                                  ...data.teamAPlayers,
+                                  ...data.teamBPlayers,
+                                ])
+                                  player.playerName: player.isGoalkeeper,
+                              },
                             ),
                           ],
                         ),
@@ -764,11 +885,13 @@ class _HeroMvpBadge extends StatelessWidget {
   final List<MatchPlayer> mvpPlayers;
   final List<MvpVoteResult> voteCounts;
   final GroupIcons icons;
+  final Map<String, bool> goalkeeperByName;
 
   const _HeroMvpBadge({
     required this.mvpPlayers,
     required this.voteCounts,
     required this.icons,
+    required this.goalkeeperByName,
   });
 
   @override
@@ -784,16 +907,17 @@ class _HeroMvpBadge extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final text = hasMvp
-        ? '${mvpPlayers.length > 1 ? 'MVPs' : 'MVP'}: ${mvpPlayers.map((p) => p.playerName).join(' & ')}'
+    final label = hasMvp
+        ? (mvpPlayers.length > 1 ? 'MVPs:' : 'MVP:')
         : isVoteTie
-            ? 'Empate — sem MVP: ${topPlayers.map((p) => p.playerName).join(' & ')}'
-            : 'Liderando: ${topPlayers.first.playerName}';
+            ? 'Empate — sem MVP:'
+            : 'Liderando:';
+    final names = hasMvp
+        ? mvpPlayers.map((player) => player.playerName).toList()
+        : topPlayers.map((player) => player.playerName).toList();
     final isTieWithoutMvp = !hasMvp && isVoteTie;
-    final accent =
-        isTieWithoutMvp ? const Color(0xFFfb923c) : const Color(0xFFfbbf24);
-    final textColor =
-        isTieWithoutMvp ? const Color(0xFFfdba74) : const Color(0xFFfde68a);
+    final accent = isTieWithoutMvp ? AppColors.warning : AppColors.warning;
+    final textColor = isTieWithoutMvp ? AppColors.amber200 : AppColors.amber200;
 
     return Padding(
       padding: const EdgeInsets.only(top: 16),
@@ -810,16 +934,30 @@ class _HeroMvpBadge extends StatelessWidget {
             renderGroupIcon(icons.mvp, size: 16, color: accent),
             const SizedBox(width: 6),
             Flexible(
-              child: Text(
-                text,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
-                ),
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 5,
+                runSpacing: 4,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: textColor,
+                    ),
+                  ),
+                  for (final name in names)
+                    Text(
+                      name,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: textColor,
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
@@ -835,6 +973,7 @@ class _MvpResultSection extends StatelessWidget {
   final bool isAdmin;
   final bool isDark;
   final GroupIcons icons;
+  final Map<String, bool> goalkeeperByName;
 
   const _MvpResultSection({
     required this.mvpPlayers,
@@ -842,6 +981,7 @@ class _MvpResultSection extends StatelessWidget {
     required this.isAdmin,
     required this.isDark,
     required this.icons,
+    required this.goalkeeperByName,
   });
 
   @override
@@ -850,13 +990,23 @@ class _MvpResultSection extends StatelessWidget {
     final maxVotes = voteCounts.isEmpty ? 0 : voteCounts.first.votes;
     final topPlayers =
         voteCounts.where((v) => v.votes == maxVotes && maxVotes > 0).toList();
+    final totalVotes =
+        voteCounts.fold<int>(0, (total, vote) => total + vote.votes);
+    final winnerVotes = mvpPlayers.fold<int>(
+      0,
+      (total, player) =>
+          total +
+          voteCounts
+              .where((vote) => vote.playerName == player.playerName)
+              .fold<int>(0, (sum, vote) => sum + vote.votes),
+    );
     final voteTie = !hasMvp && topPlayers.length > 1;
     final voteLeading = !hasMvp && topPlayers.length == 1;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate900 : Colors.white,
+        color: isDark ? AppColors.slate900 : AppColors.onDark,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -867,34 +1017,39 @@ class _MvpResultSection extends StatelessWidget {
         children: [
           if (hasMvp)
             _MvpMainResult(
-              iconColor: const Color(0xFFf59e0b),
-              bgColor: const Color(0xFFf59e0b).withValues(alpha: 0.10),
-              borderColor: const Color(0xFFf59e0b).withValues(alpha: 0.24),
+              iconColor: AppColors.warning,
+              bgColor: AppColors.warning.withValues(alpha: 0.10),
+              borderColor: AppColors.warning.withValues(alpha: 0.24),
               title: mvpPlayers.length > 1 ? 'MVPs do jogo' : 'Melhor do jogo',
               names: mvpPlayers.map((p) => p.playerName).toList(),
+              voteSummary:
+                  totalVotes > 0 ? '$winnerVotes de $totalVotes votos' : null,
               isDark: isDark,
               icons: icons,
+              goalkeeperByName: goalkeeperByName,
             )
           else if (voteTie)
             _MvpMainResult(
-              iconColor: const Color(0xFFf97316),
-              bgColor: const Color(0xFFf97316).withValues(alpha: 0.10),
-              borderColor: const Color(0xFFf97316).withValues(alpha: 0.24),
+              iconColor: AppColors.warning,
+              bgColor: AppColors.warning.withValues(alpha: 0.10),
+              borderColor: AppColors.warning.withValues(alpha: 0.24),
               title: 'Empate — nenhum MVP eleito',
               subtitle: 'Mais votados:',
               names: topPlayers.map((p) => p.playerName).toList(),
               isDark: isDark,
               icons: icons,
+              goalkeeperByName: goalkeeperByName,
             )
           else if (voteLeading)
             _MvpMainResult(
-              iconColor: const Color(0xFFf59e0b),
-              bgColor: const Color(0xFFf59e0b).withValues(alpha: 0.08),
-              borderColor: const Color(0xFFf59e0b).withValues(alpha: 0.18),
+              iconColor: AppColors.warning,
+              bgColor: AppColors.warning.withValues(alpha: 0.08),
+              borderColor: AppColors.warning.withValues(alpha: 0.18),
               title: 'Liderando a votação',
               names: [topPlayers.first.playerName],
               isDark: isDark,
               icons: icons,
+              goalkeeperByName: goalkeeperByName,
             )
           else
             Text(
@@ -948,6 +1103,7 @@ class _MvpResultSection extends StatelessWidget {
                                 .any((p) => p.playerName == vote.playerName),
                         isDark: isDark,
                         icons: icons,
+                        goalkeeperByName: goalkeeperByName,
                       ),
                     ),
                   ),
@@ -985,8 +1141,10 @@ class _MvpMainResult extends StatelessWidget {
   final String title;
   final String? subtitle;
   final List<String> names;
+  final String? voteSummary;
   final bool isDark;
   final GroupIcons icons;
+  final Map<String, bool> goalkeeperByName;
 
   const _MvpMainResult({
     required this.iconColor,
@@ -995,8 +1153,10 @@ class _MvpMainResult extends StatelessWidget {
     required this.title,
     this.subtitle,
     required this.names,
+    this.voteSummary,
     required this.isDark,
     required this.icons,
+    required this.goalkeeperByName,
   });
 
   @override
@@ -1076,6 +1236,16 @@ class _MvpMainResult extends StatelessWidget {
                       )
                       .toList(),
                 ),
+                if (voteSummary != null) ...[
+                  const SizedBox(height: 5),
+                  Text(
+                    voteSummary!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? AppColors.slate400 : AppColors.slate500,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1092,6 +1262,7 @@ class _MvpVoteRow extends StatelessWidget {
   final bool isTie;
   final bool isDark;
   final GroupIcons icons;
+  final Map<String, bool> goalkeeperByName;
 
   const _MvpVoteRow({
     required this.vote,
@@ -1100,12 +1271,13 @@ class _MvpVoteRow extends StatelessWidget {
     required this.isTie,
     required this.isDark,
     required this.icons,
+    required this.goalkeeperByName,
   });
 
   @override
   Widget build(BuildContext context) {
     final pct = maxVotes <= 0 ? 0.0 : vote.votes / maxVotes;
-    final accent = isTie ? const Color(0xFFfb923c) : const Color(0xFFf59e0b);
+    final accent = isTie ? AppColors.warning : AppColors.warning;
     final barColor =
         highlight ? accent : (isDark ? AppColors.slate600 : AppColors.slate300);
 
@@ -1199,28 +1371,22 @@ class _TeamCards extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: _TeamCard(
+            child: _PrototypeTeamColumn(
               players: teamAPlayers,
               color: aColor,
               name: aName,
               isDark: isDark,
               icons: icons,
-              isAdmin: isAdmin,
-              togglingNoShow: togglingNoShow,
-              onToggleNoShow: onToggleNoShow,
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: _TeamCard(
+            child: _PrototypeTeamColumn(
               players: teamBPlayers,
               color: bColor,
               name: bName,
               isDark: isDark,
               icons: icons,
-              isAdmin: isAdmin,
-              togglingNoShow: togglingNoShow,
-              onToggleNoShow: onToggleNoShow,
             ),
           ),
         ],
@@ -1229,7 +1395,176 @@ class _TeamCards extends StatelessWidget {
   }
 }
 
-class _TeamCard extends StatelessWidget {
+class _PrototypeTeamColumn extends StatelessWidget {
+  final List<MatchPlayer> players;
+  final Color color;
+  final String name;
+  final bool isDark;
+  final GroupIcons icons;
+
+  const _PrototypeTeamColumn({
+    required this.players,
+    required this.color,
+    required this.name,
+    required this.isDark,
+    required this.icons,
+  });
+
+  String _initials(String value) {
+    final parts = value.trim().split(RegExp(r'\s+'));
+    return parts
+        .where((part) => part.isNotEmpty)
+        .take(2)
+        .map((part) => part[0])
+        .join();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(2, 0, 2, 7),
+          child: Row(
+            children: [
+              Container(
+                width: 9,
+                height: 9,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withValues(alpha: .28),
+                      blurRadius: 4,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  name.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: .45,
+                    color: isDark ? AppColors.slate400 : AppColors.slate500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (players.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.slate900 : AppColors.slate100,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text('Nenhum jogador',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? AppColors.slate500 : AppColors.slate400)),
+          )
+        else
+          ...players.map(
+            (player) => Padding(
+              padding: const EdgeInsets.only(bottom: 7),
+              child: Opacity(
+                opacity: player.didNotPlay ? .5 : 1,
+                child: Container(
+                  height: 53,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.slate900 : AppColors.slate100,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark ? AppColors.slate800 : AppColors.slate200,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: AppColors.amber50,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          _initials(player.playerName),
+                          style: const TextStyle(
+                            color: AppColors.primaryPressed,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    player.playerName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      color: isDark
+                                          ? AppColors.slate100
+                                          : AppColors.slate900,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                renderGroupIcon(
+                                  player.isGoalkeeper
+                                      ? icons.goalkeeper
+                                      : icons.player,
+                                  size: 11,
+                                  color: isDark
+                                      ? AppColors.slate400
+                                      : AppColors.slate500,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              player.isGoalkeeper ? 'Goleiro' : 'Jogador',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isDark
+                                    ? AppColors.slate400
+                                    : AppColors.slate500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class TeamCard extends StatelessWidget {
   final List<MatchPlayer> players;
   final Color color;
   final String name;
@@ -1239,7 +1574,8 @@ class _TeamCard extends StatelessWidget {
   final Set<String> togglingNoShow;
   final void Function(String, bool) onToggleNoShow;
 
-  const _TeamCard({
+  const TeamCard({
+    super.key,
     required this.players,
     required this.color,
     required this.name,
@@ -1254,7 +1590,7 @@ class _TeamCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate900 : Colors.white,
+        color: isDark ? AppColors.slate900 : AppColors.onDark,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -1346,15 +1682,12 @@ class _TeamCard extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
                   child: Row(
                     children: [
-                      if (p.isGoalkeeper) ...[
-                        renderGroupIcon(
-                          icons.goalkeeper,
-                          size: 14,
-                          color:
-                              isDark ? AppColors.slate400 : AppColors.slate500,
-                        ),
-                        const SizedBox(width: 4),
-                      ],
+                      renderGroupIcon(
+                        p.isGoalkeeper ? icons.goalkeeper : icons.player,
+                        size: 14,
+                        color: isDark ? AppColors.slate400 : AppColors.slate500,
+                      ),
+                      const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           p.playerName,
@@ -1394,7 +1727,7 @@ class _TeamCard extends StatelessWidget {
                         renderGroupIcon(
                           icons.mvp,
                           size: 13,
-                          color: const Color(0xFFfbbf24),
+                          color: AppColors.warning,
                         ),
                       ],
                       // Botão de toggle no-show (só admin)
@@ -1455,6 +1788,7 @@ class _GoalsSection extends StatelessWidget {
   final String aName, bName;
   final bool isDark;
   final GroupIcons icons;
+  final Map<String, bool> goalkeeperByName;
   final bool isAdmin;
   final VoidCallback? onAddGoal;
   final void Function(MatchGoal)? onEditGoal;
@@ -1470,6 +1804,7 @@ class _GoalsSection extends StatelessWidget {
     required this.bName,
     required this.isDark,
     required this.icons,
+    required this.goalkeeperByName,
     this.isAdmin = false,
     required this.onAddGoal,
     required this.onEditGoal,
@@ -1490,7 +1825,7 @@ class _GoalsSection extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
         decoration: BoxDecoration(
-          color: isDark ? AppColors.slate900 : Colors.white,
+          color: isDark ? AppColors.slate900 : AppColors.onDark,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -1499,9 +1834,9 @@ class _GoalsSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Tabs + optional add button
+            // Filtros por time
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 4, 8),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
               child: Row(
                 children: [
                   Expanded(
@@ -1532,16 +1867,6 @@ class _GoalsSection extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (isAdmin)
-                    IconButton(
-                      onPressed: onAddGoal,
-                      icon: const Icon(Icons.add_circle_outline_rounded),
-                      tooltip: 'Adicionar gol',
-                      iconSize: 22,
-                      color: isDark ? AppColors.slate300 : AppColors.slate600,
-                      padding: const EdgeInsets.all(4),
-                      constraints: const BoxConstraints(),
-                    ),
                 ],
               ),
             ),
@@ -1568,6 +1893,7 @@ class _GoalsSection extends StatelessWidget {
                     bColor: bColor,
                     isDark: isDark,
                     icons: icons,
+                    goalkeeperByName: goalkeeperByName,
                     isAdmin: isAdmin,
                     onEdit:
                         onEditGoal == null ? null : () => onEditGoal!(g.goal),
@@ -1575,6 +1901,30 @@ class _GoalsSection extends StatelessWidget {
                         ? null
                         : () => onDeleteGoal!(g.goal),
                   )),
+            if (isAdmin && onAddGoal != null) ...[
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: SizedBox(
+                  height: 44,
+                  child: FilledButton.icon(
+                    onPressed: onAddGoal,
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text('Registrar gol'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      foregroundColor: AppColors.darkApp,
+                      textStyle: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -1587,6 +1937,7 @@ class _GoalRow extends StatelessWidget {
   final Color aColor, bColor;
   final bool isDark;
   final GroupIcons icons;
+  final Map<String, bool> goalkeeperByName;
   final bool isAdmin;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
@@ -1597,6 +1948,7 @@ class _GoalRow extends StatelessWidget {
     required this.bColor,
     required this.isDark,
     required this.icons,
+    required this.goalkeeperByName,
     this.isAdmin = false,
     required this.onEdit,
     required this.onDelete,
@@ -1623,16 +1975,16 @@ class _GoalRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Team dot
+          // Marcador vertical do time que marcou
           Container(
-            width: 8,
-            height: 8,
+            width: 3,
+            height: 34,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
               color: color,
+              borderRadius: BorderRadius.circular(99),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           // Scorer + assist
           Expanded(
             child: Column(
@@ -1643,15 +1995,16 @@ class _GoalRow extends StatelessWidget {
                     renderGroupIcon(icons.goal, size: 13),
                     const SizedBox(width: 4),
                     Expanded(
-                      child: Text(
-                        g.scorerName ?? '—',
+                      child: PlayerNameWithIcon(
+                        name: g.scorerName ?? '—',
+                        icons: icons,
+                        isGoalkeeper: goalkeeperByName[g.scorerName] ?? false,
+                        iconSize: 10,
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : AppColors.slate900,
+                          color: isDark ? AppColors.onDark : AppColors.slate900,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     if (g.isOwnGoal)
@@ -1660,7 +2013,7 @@ class _GoalRow extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 5, vertical: 1),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFfff7ed),
+                          color: AppColors.orange50,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Text(
@@ -1668,7 +2021,7 @@ class _GoalRow extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 9,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFFea580c),
+                            color: AppColors.warningLight,
                           ),
                         ),
                       ),
@@ -1687,16 +2040,18 @@ class _GoalRow extends StatelessWidget {
                         ),
                         const SizedBox(width: 4),
                         Expanded(
-                          child: Text(
-                            g.assistName!,
+                          child: PlayerNameWithIcon(
+                            name: g.assistName!,
+                            icons: icons,
+                            isGoalkeeper:
+                                goalkeeperByName[g.assistName] ?? false,
+                            iconSize: 9,
                             style: TextStyle(
                               fontSize: 11,
                               color: isDark
                                   ? AppColors.slate400
                                   : AppColors.slate500,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -1711,7 +2066,6 @@ class _GoalRow extends StatelessWidget {
               g.time!,
               style: TextStyle(
                 fontSize: 11,
-                fontFamily: 'monospace',
                 color: isDark ? AppColors.slate500 : AppColors.slate400,
               ),
             ),
@@ -1767,12 +2121,12 @@ class _TabBtn extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: active
-              ? (isDark ? Colors.white : AppColors.slate900)
-              : (isDark ? AppColors.slate900 : Colors.white),
+              ? (isDark ? AppColors.onDark : AppColors.slate900)
+              : (isDark ? AppColors.slate900 : AppColors.onDark),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: active
-                ? (isDark ? Colors.white : AppColors.slate900)
+                ? (isDark ? AppColors.onDark : AppColors.slate900)
                 : (isDark ? AppColors.slate700 : AppColors.slate200),
           ),
         ),
@@ -1796,7 +2150,7 @@ class _TabBtn extends StatelessWidget {
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
                 color: active
-                    ? (isDark ? AppColors.slate900 : Colors.white)
+                    ? (isDark ? AppColors.slate900 : AppColors.onDark)
                     : (isDark ? AppColors.slate300 : AppColors.slate700),
               ),
             ),
@@ -1824,7 +2178,7 @@ class _SectionHeader extends StatelessWidget {
         style: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w700,
-          color: isDark ? Colors.white : AppColors.slate900,
+          color: isDark ? AppColors.onDark : AppColors.slate900,
         ),
       ),
     );
@@ -1840,7 +2194,7 @@ class _ColorSwatch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isWhite = color == const Color(0xFFFFFFFF);
+    final isWhite = color == AppColors.darkText;
     return Container(
       width: size,
       height: size,
@@ -1848,7 +2202,7 @@ class _ColorSwatch extends StatelessWidget {
         color: color,
         borderRadius: BorderRadius.circular(3),
         border: Border.all(
-          color: isWhite ? AppColors.slate300 : Colors.white.withAlpha(80),
+          color: isWhite ? AppColors.slate300 : AppColors.onDark.withAlpha(80),
           width: 1,
         ),
       ),
@@ -1943,7 +2297,7 @@ class _ReplaysSectionState extends State<_ReplaysSection> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: widget.isDark ? AppColors.slate900 : Colors.white,
+          color: widget.isDark ? AppColors.slate900 : AppColors.onDark,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: widget.isDark ? AppColors.slate700 : AppColors.slate200,
@@ -1957,7 +2311,7 @@ class _ReplaysSectionState extends State<_ReplaysSection> {
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
-                color: widget.isDark ? Colors.white : AppColors.slate900,
+                color: widget.isDark ? AppColors.onDark : AppColors.slate900,
               ),
             ),
             const SizedBox(height: 14),
@@ -2099,7 +2453,7 @@ class _ReplayFilterButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fg = active
-        ? Colors.white
+        ? AppColors.onDark
         : (isDark ? AppColors.slate300 : AppColors.slate600);
     return InkWell(
       onTap: onTap,
@@ -2119,7 +2473,7 @@ class _ReplayFilterButton extends StatelessWidget {
           boxShadow: active
               ? [
                   BoxShadow(
-                    color: Colors.black.withAlpha(45),
+                    color: AppColors.darkApp.withAlpha(45),
                     blurRadius: 8,
                     offset: const Offset(0, 3),
                   ),
@@ -2141,7 +2495,7 @@ class _ReplayFilterButton extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               decoration: BoxDecoration(
                 color: active
-                    ? Colors.white.withAlpha(35)
+                    ? AppColors.onDark.withAlpha(35)
                     : (isDark ? AppColors.slate700 : AppColors.slate100),
                 borderRadius: BorderRadius.circular(999),
               ),
@@ -2151,7 +2505,7 @@ class _ReplayFilterButton extends StatelessWidget {
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
                   color: active
-                      ? Colors.white
+                      ? AppColors.onDark
                       : (isDark ? AppColors.slate300 : AppColors.slate500),
                 ),
               ),
@@ -2189,13 +2543,12 @@ class _ReplayTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final badgeColor =
-        _isGoal ? const Color(0xFF10b981) : const Color(0xFF3b82f6);
+    final badgeColor = _isGoal ? AppColors.accent : AppColors.info;
 
     return AspectRatio(
       aspectRatio: 1.65,
       child: Material(
-        color: Colors.transparent,
+        color: AppColors.transparent,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -2205,7 +2558,7 @@ class _ReplayTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withAlpha(55),
+                  color: AppColors.darkApp.withAlpha(55),
                   blurRadius: 8,
                   offset: const Offset(0, 3),
                 ),
@@ -2222,9 +2575,9 @@ class _ReplayTile extends StatelessWidget {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          Color(0xFF334155),
-                          Color(0xFF1e293b),
-                          Color(0xFF020617),
+                          AppColors.darkBorder,
+                          AppColors.darkCard,
+                          AppColors.darkApp,
                         ],
                       ),
                     ),
@@ -2237,9 +2590,9 @@ class _ReplayTile extends StatelessWidget {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          Colors.black.withAlpha(18),
-                          Colors.transparent,
-                          Colors.black.withAlpha(210),
+                          AppColors.darkApp.withAlpha(18),
+                          AppColors.transparent,
+                          AppColors.darkApp.withAlpha(210),
                         ],
                       ),
                     ),
@@ -2250,9 +2603,9 @@ class _ReplayTile extends StatelessWidget {
                       height: 38,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.white.withAlpha(hasUrl ? 52 : 24),
+                        color: AppColors.onDark.withAlpha(hasUrl ? 52 : 24),
                         border: Border.all(
-                          color: Colors.white.withAlpha(hasUrl ? 88 : 38),
+                          color: AppColors.onDark.withAlpha(hasUrl ? 88 : 38),
                         ),
                       ),
                       child: Icon(
@@ -2260,7 +2613,7 @@ class _ReplayTile extends StatelessWidget {
                             ? Icons.play_arrow_rounded
                             : Icons.videocam_off_rounded,
                         size: 25,
-                        color: Colors.white.withAlpha(hasUrl ? 230 : 90),
+                        color: AppColors.onDark.withAlpha(hasUrl ? 230 : 90),
                       ),
                     ),
                   ),
@@ -2278,7 +2631,7 @@ class _ReplayTile extends StatelessWidget {
                         _label,
                         style: const TextStyle(
                           fontSize: 9,
-                          color: Colors.white,
+                          color: AppColors.onDark,
                           fontWeight: FontWeight.w900,
                         ),
                       ),
@@ -2291,7 +2644,7 @@ class _ReplayTile extends StatelessWidget {
                       '#$index',
                       style: const TextStyle(
                         fontSize: 10,
-                        color: Colors.white70,
+                        color: AppColors.onDark70,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -2307,13 +2660,13 @@ class _ReplayTile extends StatelessWidget {
                               ? Icons.favorite
                               : Icons.favorite_border_rounded,
                           size: 13,
-                          color: Colors.white70,
+                          color: AppColors.onDark70,
                         ),
                         if (clip.likeCount > 0) ...[
                           const SizedBox(width: 2),
                           Text('${clip.likeCount}',
                               style: const TextStyle(
-                                  fontSize: 10, color: Colors.white70)),
+                                  fontSize: 10, color: AppColors.onDark70)),
                         ],
                         const SizedBox(width: 7),
                         Icon(
@@ -2321,7 +2674,7 @@ class _ReplayTile extends StatelessWidget {
                               ? Icons.bookmark
                               : Icons.bookmark_border_rounded,
                           size: 13,
-                          color: Colors.white70,
+                          color: AppColors.onDark70,
                         ),
                         const Spacer(),
                         Text(
@@ -2329,7 +2682,7 @@ class _ReplayTile extends StatelessWidget {
                           style: const TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: Colors.white70,
+                            color: AppColors.onDark70,
                           ),
                         ),
                         const SizedBox(width: 7),
@@ -2368,10 +2721,10 @@ class _MiniReplayIcon extends StatelessWidget {
       width: 18,
       height: 18,
       decoration: BoxDecoration(
-        color: Colors.black.withAlpha(130),
+        color: AppColors.darkApp.withAlpha(130),
         borderRadius: BorderRadius.circular(5),
       ),
-      child: Icon(icon, size: 11, color: Colors.white70),
+      child: Icon(icon, size: 11, color: AppColors.onDark70),
     );
   }
 }
@@ -2478,11 +2831,11 @@ class _ReplayPitchPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final line = Paint()
-      ..color = Colors.white.withAlpha(30)
+      ..color = AppColors.onDark.withAlpha(30)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     final fill = Paint()
-      ..color = const Color(0xFF166534).withAlpha(110)
+      ..color = AppColors.primaryPressed.withAlpha(110)
       ..style = PaintingStyle.fill;
 
     canvas.drawRect(Offset.zero & size, fill);
@@ -2491,7 +2844,7 @@ class _ReplayPitchPainter extends CustomPainter {
       canvas.drawRect(
         Rect.fromLTWH(x, 0, size.width / 8, size.height),
         Paint()
-          ..color = Colors.white.withAlpha(i.isEven ? 12 : 5)
+          ..color = AppColors.onDark.withAlpha(i.isEven ? 12 : 5)
           ..style = PaintingStyle.fill,
       );
     }
@@ -2595,12 +2948,12 @@ class _ReplayChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final border = isDark ? AppColors.slate700 : AppColors.slate200;
-    final bg = isDark ? AppColors.slate800 : Colors.white;
+    final bg = isDark ? AppColors.slate800 : AppColors.onDark;
 
     return Padding(
       padding: const EdgeInsets.only(right: 10, top: 4, bottom: 4),
       child: Material(
-        color: Colors.transparent,
+        color: AppColors.transparent,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -2623,7 +2976,7 @@ class _ReplayChip extends StatelessWidget {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        Container(color: const Color(0xFF0F172A)),
+                        Container(color: AppColors.lightText),
 
                         Center(
                           child: Container(
@@ -2631,9 +2984,11 @@ class _ReplayChip extends StatelessWidget {
                             height: 34,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: Colors.white.withAlpha(hasUrl ? 28 : 14),
+                              color:
+                                  AppColors.onDark.withAlpha(hasUrl ? 28 : 14),
                               border: Border.all(
-                                color: Colors.white.withAlpha(hasUrl ? 55 : 25),
+                                color: AppColors.onDark
+                                    .withAlpha(hasUrl ? 55 : 25),
                                 width: 1.5,
                               ),
                             ),
@@ -2642,7 +2997,8 @@ class _ReplayChip extends StatelessWidget {
                                   ? Icons.play_arrow_rounded
                                   : Icons.videocam_off_rounded,
                               size: 20,
-                              color: Colors.white.withAlpha(hasUrl ? 220 : 70),
+                              color:
+                                  AppColors.onDark.withAlpha(hasUrl ? 220 : 70),
                             ),
                           ),
                         ),
@@ -2655,14 +3011,14 @@ class _ReplayChip extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 4, vertical: 1),
                             decoration: BoxDecoration(
-                              color: Colors.black.withAlpha(150),
+                              color: AppColors.darkApp.withAlpha(150),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text('#$index',
                                 style: const TextStyle(
                                     fontSize: 8,
                                     fontWeight: FontWeight.w800,
-                                    color: Colors.white)),
+                                    color: AppColors.onDark)),
                           ),
                         ),
 
@@ -2675,15 +3031,14 @@ class _ReplayChip extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 4, vertical: 1),
                               decoration: BoxDecoration(
-                                color: Colors.black.withAlpha(150),
+                                color: AppColors.darkApp.withAlpha(150),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text("${clip.minute}'",
                                   style: const TextStyle(
                                       fontSize: 8,
                                       fontWeight: FontWeight.w700,
-                                      fontFamily: 'monospace',
-                                      color: Colors.white70)),
+                                      color: AppColors.onDark70)),
                             ),
                           ),
                       ],
@@ -2704,7 +3059,8 @@ class _ReplayChip extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: isDark ? Colors.white : AppColors.slate900,
+                            color:
+                                isDark ? AppColors.onDark : AppColors.slate900,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -2993,7 +3349,7 @@ class _SimulationTimelineState extends State<_SimulationTimeline>
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate900 : Colors.white,
+        color: isDark ? AppColors.slate900 : AppColors.onDark,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -3091,7 +3447,6 @@ class _SimulationTimelineState extends State<_SimulationTimeline>
                   TextSpan(
                     text: "$_simMinute'",
                     style: TextStyle(
-                      fontFamily: 'monospace',
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: isDark ? AppColors.slate300 : AppColors.slate700,
@@ -3100,7 +3455,6 @@ class _SimulationTimelineState extends State<_SimulationTimeline>
                   TextSpan(
                     text: '/$_totalMinutes',
                     style: TextStyle(
-                      fontFamily: 'monospace',
                       fontSize: 11,
                       color: isDark ? AppColors.slate600 : AppColors.slate400,
                     ),
@@ -3175,7 +3529,7 @@ class _SimCtrlBtn extends StatelessWidget {
           width: 32,
           height: 32,
           decoration: BoxDecoration(
-            color: isDark ? AppColors.slate900 : Colors.white,
+            color: isDark ? AppColors.slate900 : AppColors.onDark,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -3221,7 +3575,8 @@ class _ScoreChip extends StatelessWidget {
             shape: BoxShape.circle,
             color: color,
             border: Border.all(
-              color: isWhite ? AppColors.slate300 : Colors.white.withAlpha(60),
+              color:
+                  isWhite ? AppColors.slate300 : AppColors.onDark.withAlpha(60),
               width: 1,
             ),
           ),
@@ -3250,7 +3605,7 @@ class _ScoreChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w900,
-              color: isDark ? Colors.white : AppColors.slate900,
+              color: isDark ? AppColors.onDark : AppColors.slate900,
             ),
           ),
         ),
@@ -3483,7 +3838,7 @@ class _GoalBall extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.white,
+        color: AppColors.onDark,
         border: Border.all(color: borderColor, width: 2),
         boxShadow: [
           // Inner soft glow
@@ -3511,12 +3866,14 @@ class _GoalBall extends StatelessWidget {
 
 class _GoalFormSheet extends StatefulWidget {
   final List<MatchPlayer> players;
+  final GroupIcons icons;
   final MatchGoal? editing;
   final Future<void> Function(String scorerPlayerId, String? assistPlayerId,
       String time, bool isOwnGoal) onSave;
 
   const _GoalFormSheet({
     required this.players,
+    required this.icons,
     this.editing,
     required this.onSave,
   });
@@ -3614,7 +3971,7 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final labelColor = isDark ? Colors.white : AppColors.slate900;
+    final labelColor = isDark ? AppColors.onDark : AppColors.slate900;
 
     return Padding(
       padding:
@@ -3622,7 +3979,7 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
         decoration: BoxDecoration(
-          color: isDark ? AppColors.slate900 : Colors.white,
+          color: isDark ? AppColors.slate900 : AppColors.onDark,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
         ),
         child: Column(
@@ -3666,6 +4023,7 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
             _PlayerDropdown(
               label: 'Marcador *',
               players: widget.players,
+              icons: widget.icons,
               selectedId: _scorerPlayerId,
               onChanged: _setScorer,
               isDark: isDark,
@@ -3707,6 +4065,7 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
                     ? 'Quem forçou o gol contra (opcional)'
                     : 'Assistência (opcional)',
                 players: _assistCandidates,
+                icons: widget.icons,
                 selectedId: _assistPlayerId,
                 onChanged: (id) => setState(() => _assistPlayerId = id),
                 isDark: isDark,
@@ -3729,7 +4088,7 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
+                          strokeWidth: 2, color: AppColors.onDark))
                   : Text(widget.editing != null
                       ? 'Salvar alterações'
                       : 'Adicionar gol'),
@@ -3744,6 +4103,7 @@ class _GoalFormSheetState extends State<_GoalFormSheet> {
 class _PlayerDropdown extends StatelessWidget {
   final String label;
   final List<MatchPlayer> players;
+  final GroupIcons icons;
   final String? selectedId;
   final void Function(String?) onChanged;
   final bool isDark;
@@ -3752,6 +4112,7 @@ class _PlayerDropdown extends StatelessWidget {
   const _PlayerDropdown({
     required this.label,
     required this.players,
+    required this.icons,
     required this.selectedId,
     required this.onChanged,
     required this.isDark,
@@ -3782,17 +4143,22 @@ class _PlayerDropdown extends StatelessWidget {
           ),
         ...players.map((p) => DropdownMenuItem<String?>(
               value: p.playerId,
-              child: Text(p.playerName,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 14,
-                      color: isDark ? Colors.white : AppColors.slate900)),
+              child: PlayerNameWithIcon(
+                name: p.playerName,
+                isGoalkeeper: p.isGoalkeeper,
+                icons: icons,
+                iconSize: 14,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? AppColors.onDark : AppColors.slate900,
+                ),
+              ),
             )),
       ],
       onChanged: onChanged,
       style: TextStyle(
-          fontSize: 14, color: isDark ? Colors.white : AppColors.slate900),
-      dropdownColor: isDark ? AppColors.slate800 : Colors.white,
+          fontSize: 14, color: isDark ? AppColors.onDark : AppColors.slate900),
+      dropdownColor: isDark ? AppColors.slate800 : AppColors.onDark,
     );
   }
 }

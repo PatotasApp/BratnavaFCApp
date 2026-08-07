@@ -21,8 +21,7 @@ class Validators {
   }
 
   /// Encadeia múltiplos validadores, retorna o primeiro erro.
-  static String? chain(
-      String? v, List<String? Function(String?)> validators) {
+  static String? chain(String? v, List<String? Function(String?)> validators) {
     for (final fn in validators) {
       final err = fn(v);
       if (err != null) return err;

@@ -6,6 +6,7 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import '../../../../core/realtime/realtime_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../matches/domain/entities/match_models.dart';
 import '../../../matches/presentation/providers/match_provider.dart';
@@ -246,7 +247,7 @@ class _PollDetailSheetState extends ConsumerState<PollDetailSheet>
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => ClosePollSheet(pollTitle: _poll.title),
     );
     if (result == null) return;
@@ -439,7 +440,7 @@ class _PollDetailSheetState extends ConsumerState<PollDetailSheet>
       minChildSize: 0.5,
       builder: (_, controller) => Container(
         decoration: BoxDecoration(
-          color: isDark ? AppColors.slate900 : Colors.white,
+          color: isDark ? AppColors.slate900 : AppColors.onDark,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
@@ -469,7 +470,7 @@ class _PollDetailSheetState extends ConsumerState<PollDetailSheet>
                                   fontSize: 18,
                                   fontWeight: FontWeight.w800,
                                   color: isDark
-                                      ? Colors.white
+                                      ? AppColors.onDark
                                       : AppColors.slate900,
                                 )),
                             if (_poll.description != null) ...[
@@ -510,8 +511,8 @@ class _PollDetailSheetState extends ConsumerState<PollDetailSheet>
                             : 'Prazo: ${_poll.deadlineDate}',
                         isDark: isDark,
                         color: _poll.deadlinePassed
-                            ? Colors.red.shade400
-                            : Colors.amber.shade600,
+                            ? AppColors.prototypeDanger
+                            : AppColors.warningLight,
                       ),
                     ],
                   ]),
@@ -572,7 +573,7 @@ class _PollDetailSheetState extends ConsumerState<PollDetailSheet>
                                   width: 16,
                                   height: 16,
                                   child: CircularProgressIndicator(
-                                      strokeWidth: 2, color: Colors.white))
+                                      strokeWidth: 2, color: AppColors.onDark))
                               : const Text('Votar'),
                         ),
                       )
@@ -605,6 +606,7 @@ class _PollDetailSheetState extends ConsumerState<PollDetailSheet>
                   if (widget.isAdmin) ...[
                     const SizedBox(height: 20),
                     _AdminPollPanel(
+                      groupId: widget.groupId,
                       poll: _poll,
                       open: _adminOpen,
                       saving: _saving,
@@ -717,7 +719,7 @@ class _OptionTile extends StatelessWidget {
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
                                 color: isDark
-                                    ? Colors.white
+                                    ? AppColors.onDark
                                     : AppColors.slate900)),
                         if (opt.description != null)
                           Text(opt.description!,
@@ -740,7 +742,7 @@ class _OptionTile extends StatelessWidget {
                   if (isAdmin && onDelete != null)
                     IconButton(
                       icon: const Icon(Icons.delete_outline,
-                          size: 18, color: Colors.red),
+                          size: 18, color: AppColors.prototypeDanger),
                       onPressed: saving ? null : onDelete,
                       padding: EdgeInsets.zero,
                       constraints:
@@ -801,7 +803,7 @@ class _LinkMatchSection extends StatelessWidget {
     showModalBottomSheet(
       context: ctx,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => _MatchPickerSheet(
         matches: upcoming,
         isDark: isDark,
@@ -883,7 +885,7 @@ class _LinkMatchSection extends StatelessWidget {
                     size: 14,
                     color: upcoming.isEmpty
                         ? (isDark ? AppColors.slate700 : AppColors.slate300)
-                        : AppColors.blue600),
+                        : AppColors.infoLight),
                 const SizedBox(width: 6),
                 Text(
                   upcoming.isEmpty
@@ -893,7 +895,7 @@ class _LinkMatchSection extends StatelessWidget {
                       fontSize: 13,
                       color: upcoming.isEmpty
                           ? (isDark ? AppColors.slate600 : AppColors.slate400)
-                          : AppColors.blue600),
+                          : AppColors.infoLight),
                 ),
               ]),
             ),
@@ -914,7 +916,7 @@ class _MatchPickerSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate900 : Colors.white,
+        color: isDark ? AppColors.slate900 : AppColors.onDark,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -933,7 +935,7 @@ class _MatchPickerSheet extends StatelessWidget {
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: isDark ? Colors.white : AppColors.slate900,
+                color: isDark ? AppColors.onDark : AppColors.slate900,
               )),
         ),
         ConstrainedBox(
@@ -953,12 +955,12 @@ class _MatchPickerSheet extends StatelessWidget {
                   '${m.playedAt.minute.toString().padLeft(2, '0')}';
               return ListTile(
                 leading: const Icon(Icons.sports_soccer_rounded,
-                    size: 20, color: AppColors.blue600),
+                    size: 20, color: AppColors.infoLight),
                 title: Text(m.placeName.isNotEmpty ? m.placeName : 'Partida',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white : AppColors.slate900,
+                      color: isDark ? AppColors.onDark : AppColors.slate900,
                     )),
                 subtitle: Text(date,
                     style: TextStyle(
@@ -980,6 +982,7 @@ class _MatchPickerSheet extends StatelessWidget {
 }
 
 class _AdminPollPanel extends StatelessWidget {
+  final String groupId;
   final PollDetail poll;
   final bool open;
   final bool saving;
@@ -999,6 +1002,7 @@ class _AdminPollPanel extends StatelessWidget {
   final VoidCallback? onClearDeadline;
 
   const _AdminPollPanel({
+    required this.groupId,
     required this.poll,
     required this.open,
     required this.saving,
@@ -1076,6 +1080,7 @@ class _AdminPollPanel extends StatelessWidget {
                     onClearDeadline: onClearDeadline,
                   ),
                   _ResultTab(
+                      groupId: groupId,
                       poll: poll,
                       saving: saving,
                       isDark: isDark,
@@ -1202,7 +1207,7 @@ class _OptionsTab extends StatelessWidget {
                 icon: const Icon(Icons.lock_outlined, size: 15),
                 label: const Text('Encerrar', style: TextStyle(fontSize: 13)),
                 style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.orange.shade700),
+                    foregroundColor: AppColors.warningLight),
               ))
             else
               Expanded(
@@ -1216,7 +1221,8 @@ class _OptionsTab extends StatelessWidget {
               onPressed: saving ? null : onDelete,
               icon: const Icon(Icons.delete_outline, size: 15),
               label: const Text('Excluir', style: TextStyle(fontSize: 13)),
-              style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+              style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.prototypeDanger),
             ),
           ]),
           const SizedBox(height: 8),
@@ -1231,7 +1237,7 @@ class _OptionsTab extends StatelessWidget {
                 style: const TextStyle(fontSize: 13),
               ),
               style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.amber.shade700),
+                  foregroundColor: AppColors.warningLight),
             )),
             if (onClearDeadline != null) ...[
               const SizedBox(width: 8),
@@ -1241,7 +1247,7 @@ class _OptionsTab extends StatelessWidget {
                 label:
                     const Text('Remover prazo', style: TextStyle(fontSize: 13)),
                 style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red.shade400),
+                    foregroundColor: AppColors.prototypeDanger),
               ),
             ],
           ]),
@@ -1252,13 +1258,15 @@ class _OptionsTab extends StatelessWidget {
 }
 
 class _ResultTab extends StatelessWidget {
+  final String groupId;
   final PollDetail poll;
   final bool saving;
   final bool isDark;
   final Function(String playerId, List<String> optionIds) onAdminVote;
 
   const _ResultTab(
-      {required this.poll,
+      {required this.groupId,
+      required this.poll,
       required this.saving,
       required this.isDark,
       required this.onAdminVote});
@@ -1281,11 +1289,16 @@ class _ResultTab extends StatelessWidget {
         return Row(
           children: [
             Expanded(
-                child: Text(m.playerName,
-                    style: TextStyle(
-                        fontSize: 13,
-                        color:
-                            isDark ? AppColors.slate200 : AppColors.slate700))),
+              child: ConfiguredPlayerName(
+                groupId: groupId,
+                name: m.playerName,
+                iconSize: 13,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? AppColors.slate200 : AppColors.slate700,
+                ),
+              ),
+            ),
             DropdownButton<String>(
               value:
                   m.votedOptionIds.isNotEmpty ? m.votedOptionIds.first : null,
@@ -1320,16 +1333,16 @@ class _StatusChip extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: isOpen ? Colors.green.shade50 : AppColors.slate100,
+          color: isOpen ? AppColors.green50 : AppColors.slate100,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-              color: isOpen ? Colors.green.shade200 : AppColors.slate200),
+              color: isOpen ? AppColors.green200 : AppColors.slate200),
         ),
         child: Text(isOpen ? 'Aberta' : 'Encerrada',
             style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: isOpen ? Colors.green.shade700 : AppColors.slate500)),
+                color: isOpen ? AppColors.primaryPressed : AppColors.slate500)),
       );
 }
 

@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/auth/jwt_helper.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
-import '../widgets/app_top_bar.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
-import '../../../polls/presentation/providers/polls_provider.dart';
+import '../widgets/app_top_bar.dart';
 
 class ShellPage extends ConsumerStatefulWidget {
   final Widget child;
@@ -87,9 +87,9 @@ class _ShellPageState extends ConsumerState<ShellPage>
   int _selectedIndex(BuildContext context) {
     final location = GoRouterState.of(context).uri.path;
     for (var i = 0; i < _tabs.length - 1; i++) {
-      if (location.startsWith(_tabs[i].path)) return i;
+      if (location == _tabs[i].path) return i;
     }
-    return 0;
+    return 4;
   }
 
   @override
@@ -104,29 +104,26 @@ class _ShellPageState extends ConsumerState<ShellPage>
       accountStoreProvider.select((s) => s.activeAccountId),
     );
 
+    final isMainDestination = selected < 4;
+
     return Scaffold(
-      appBar: const AppTopBar(),
+      appBar: selected == 0 ? const AppTopBar() : null,
       body: KeyedSubtree(
         key: ValueKey(accountKey),
         child: widget.child,
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: selected,
-        onDestinationSelected: (i) {
-          if (_tabs[i].path.isNotEmpty) {
-            context.go(_tabs[i].path);
-          } else {
-            _openDrawer(context);
-          }
-        },
-        destinations: _tabs
-            .map((t) => NavigationDestination(
-                  icon: Icon(t.icon),
-                  selectedIcon: Icon(t.activeIcon),
-                  label: t.label,
-                ))
-            .toList(),
-      ),
+      bottomNavigationBar: isMainDestination
+          ? _PrototypeBottomNavigation(
+              selectedIndex: selected,
+              onDestinationSelected: (i) {
+                if (_tabs[i].path.isNotEmpty) {
+                  context.go(_tabs[i].path);
+                } else {
+                  _openDrawer(context);
+                }
+              },
+            )
+          : null,
     );
   }
 
@@ -134,9 +131,7 @@ class _ShellPageState extends ConsumerState<ShellPage>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      useSafeArea: true,
       builder: (_) => const _MoreSheet(),
     );
   }
@@ -156,61 +151,222 @@ class _TabItem {
   });
 }
 
+class _PrototypeBottomNavigation extends StatelessWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onDestinationSelected;
+
+  const _PrototypeBottomNavigation({
+    required this.selectedIndex,
+    required this.onDestinationSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      height: PrototypeLayout.bottomNavigationHeight,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: .96),
+        border: Border(
+          top: BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        child: Row(
+          children: List.generate(_ShellPageState._tabs.length, (index) {
+            final item = _ShellPageState._tabs[index];
+            final selected = selectedIndex == index;
+
+            return Expanded(
+              child: Semantics(
+                selected: selected,
+                button: true,
+                label: item.label,
+                child: InkResponse(
+                  radius: 34,
+                  onTap: () => onDestinationSelected(index),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      minWidth: PrototypeLayout.minimumTouchTarget,
+                      minHeight: PrototypeLayout.minimumTouchTarget,
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 160),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? theme.colorScheme.primaryContainer
+                                : AppColors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            selected ? item.activeIcon : item.icon,
+                            size: 19,
+                            color: selected
+                                ? theme.colorScheme.onPrimaryContainer
+                                : theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          item.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontSize: 10,
+                            color: selected
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurfaceVariant,
+                            fontWeight:
+                                selected ? FontWeight.w700 : FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+}
+
 class _MoreSheet extends ConsumerWidget {
   const _MoreSheet();
 
-  // (icon, label, path, hasBadge, adminOnly)
-  static const _items = [
-    (
-      Icons.calendar_month_outlined,
-      'Calendário',
-      '/app/calendar',
-      false,
-      false
+  static const _groups = [
+    _MoreGroup(
+      label: 'Desempenho',
+      items: [
+        _MoreItem(
+          icon: Icons.bar_chart_outlined,
+          label: 'Estatísticas',
+          path: '/app/visual-stats',
+          statsPermission: true,
+        ),
+        _MoreItem(
+          icon: Icons.timeline_outlined,
+          label: 'Meu Histórico',
+          path: '/app/player-history',
+        ),
+      ],
     ),
-    (Icons.palette_outlined, 'Cores', '/app/team-colors', false, false),
-    (
-      Icons.bar_chart_outlined,
-      'Estatísticas',
-      '/app/visual-stats',
-      false,
-      true
+    _MoreGroup(
+      label: 'Organização',
+      items: [
+        _MoreItem(
+          icon: Icons.calendar_month_outlined,
+          label: 'Calendário',
+          path: '/app/calendar',
+        ),
+        _MoreItem(
+          icon: Icons.event_busy_outlined,
+          label: 'Ausências',
+          path: '/app/absences',
+        ),
+        _MoreItem(
+          icon: Icons.cake_outlined,
+          label: 'Aniversários',
+          path: '/app/birthdays',
+          adminOnly: true,
+        ),
+        _MoreItem(
+          icon: Icons.palette_outlined,
+          label: 'Uniformes',
+          path: '/app/team-colors',
+        ),
+        _MoreItem(
+          icon: Icons.people_alt_outlined,
+          label: 'Monte seu Time',
+          path: '/app/team-builder',
+          adminOnly: true,
+        ),
+      ],
     ),
-    (
-      Icons.timeline_outlined,
-      'Meu Histórico',
-      '/app/player-history',
-      false,
-      true
+    _MoreGroup(
+      label: 'Social',
+      items: [
+        _MoreItem(
+          icon: Icons.calendar_today_outlined,
+          label: 'Eventos',
+          path: '/app/polls/events',
+        ),
+        _MoreItem(
+          icon: Icons.how_to_vote_outlined,
+          label: 'Votações',
+          path: '/app/polls/votes',
+        ),
+        _MoreItem(
+          icon: Icons.monetization_on_outlined,
+          label: 'Bet',
+          path: '/app/bet',
+        ),
+        _MoreItem(
+          icon: Icons.video_library_outlined,
+          label: 'Replays',
+          path: '/app/replays',
+        ),
+      ],
     ),
-    (
-      Icons.people_alt_outlined,
-      'Monte seu Time 🎉',
-      '/app/team-builder',
-      false,
-      false
+    _MoreGroup(
+      label: 'Gestão',
+      items: [
+        _MoreItem(
+          icon: Icons.payments_outlined,
+          label: 'Pagamentos',
+          path: '/app/payments',
+        ),
+        _MoreItem(
+          icon: Icons.settings_outlined,
+          label: 'Configurações',
+          path: '/app/settings',
+          adminOnly: true,
+        ),
+      ],
     ),
-    (Icons.payments_outlined, 'Pagamentos', '/app/payments', false, false),
-    (Icons.how_to_vote_outlined, 'Votações', '/app/polls', true, false),
-    (Icons.event_busy_outlined, 'Ausências', '/app/absences', false, false),
-    (Icons.monetization_on_outlined, 'Bet', '/app/bet', false, false),
-    (Icons.video_library_outlined, 'Replays', '/app/replays', false, true),
-    (Icons.cake_outlined, 'Aniversários', '/app/birthdays', false, true),
-    (Icons.settings_outlined, 'Configurações', '/app/settings', false, true),
-    (
-      Icons.manage_accounts_outlined,
-      'Usuários',
-      '/app/admin/users',
-      false,
-      false
+    _MoreGroup(
+      label: 'Conta',
+      items: [
+        _MoreItem(
+          icon: Icons.account_circle_outlined,
+          label: 'Minha conta',
+          path: '/app/account',
+        ),
+        _MoreItem(
+          icon: Icons.palette_outlined,
+          label: 'Tema',
+          path: '/app/theme',
+        ),
+        _MoreItem(
+          icon: Icons.mail_outline_rounded,
+          label: 'Convites',
+          path: '/app/invites',
+        ),
+      ],
     ),
   ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
-    final groupId = account?.activeGroupId ?? activePlayer?.groupId;
+    // O jogador manda no grupo: `activeGroupId` da conta pode apontar
+    // para uma patota sem jogador nosso, e aí toda rota por grupo
+    // responde 403. Ver dashboard_page para o diagnóstico completo.
+    final groupId = activePlayer?.groupId ?? account?.activeGroupId;
 
     final isAdmin = groupId != null &&
         groupId.isNotEmpty &&
@@ -220,71 +376,114 @@ class _MoreSheet extends ConsumerWidget {
         : null;
     final canSeeStats = isAdmin || (settings?.showPlayerStats ?? false);
 
-    final pendingCount = groupId != null
-        ? ref.watch(pendingPollsCountProvider(groupId)).valueOrNull ?? 0
-        : 0;
-
-    // Filter out admin-only items for regular players. Statistics follow the
-    // group setting that also exposes goals/assists to non-admin players.
-    final visibleItems = _items.where((item) {
-      if (item.$3 == '/app/visual-stats') return canSeeStats;
-      return !item.$5 || isAdmin;
-    }).toList();
-
-    return SafeArea(
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.slate300,
-                borderRadius: BorderRadius.circular(2),
-              ),
+    return FractionallySizedBox(
+      heightFactor: .86,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Mais', style: theme.textTheme.headlineSmall),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Recursos organizados por objetivo',
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Fechar',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            ...visibleItems.map(
-              (item) => ListTile(
-                leading: item.$4 && pendingCount > 0
-                    ? Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Icon(item.$1, size: 22),
-                          Positioned(
-                            top: -4,
-                            right: -4,
-                            child: Container(
-                              width: 16,
-                              height: 16,
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 22),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final group in _groups) ...[
+                    Text(
+                      group.label.toUpperCase(),
+                      style: theme.textTheme.labelSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final columns = constraints.maxWidth < 320 ? 1 : 2;
+                        const gap = 8.0;
+                        final itemWidth =
+                            (constraints.maxWidth - gap * (columns - 1)) /
+                                columns;
+                        final visibleItems = group.items.where((item) {
+                          if (item.adminOnly && !isAdmin) return false;
+                          if (item.statsPermission && !canSeeStats) {
+                            return false;
+                          }
+                          return true;
+                        });
+
+                        return Wrap(
+                          spacing: gap,
+                          runSpacing: gap,
+                          children: [
+                            for (final item in visibleItems)
+                              SizedBox(
+                                width: itemWidth,
+                                child: PrototypeMenuTile(
+                                  icon: Icon(item.icon),
+                                  title: item.label,
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    context.go(item.path);
+                                  },
+                                ),
                               ),
-                              alignment: Alignment.center,
-                              child: Text('$pendingCount',
-                                  style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w700)),
-                            ),
-                          ),
-                        ],
-                      )
-                    : Icon(item.$1, size: 22),
-                title: Text(item.$2, style: const TextStyle(fontSize: 14)),
-                onTap: () {
-                  Navigator.pop(context);
-                  context.go(item.$3);
-                },
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
+}
+
+class _MoreGroup {
+  final String label;
+  final List<_MoreItem> items;
+
+  const _MoreGroup({required this.label, required this.items});
+}
+
+class _MoreItem {
+  final IconData icon;
+  final String label;
+  final String path;
+  final bool adminOnly;
+  final bool statsPermission;
+
+  const _MoreItem({
+    required this.icon,
+    required this.label,
+    required this.path,
+    this.adminOnly = false,
+    this.statsPermission = false,
+  });
 }

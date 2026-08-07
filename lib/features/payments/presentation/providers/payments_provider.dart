@@ -16,16 +16,15 @@ final transactionsDsProvider = Provider<TransactionsRemoteDataSource>(
 
 // ── Admin providers ───────────────────────────────────────────────────────────
 
-final monthlyGridProvider =
-    FutureProvider.autoDispose.family<MonthlyGrid, ({String groupId, int year})>(
+final monthlyGridProvider = FutureProvider.autoDispose
+    .family<MonthlyGrid, ({String groupId, int year})>(
   (ref, args) =>
       ref.watch(paymentsDsProvider).getMonthlyGrid(args.groupId, args.year),
 );
 
 final extraChargesProvider =
     FutureProvider.autoDispose.family<List<ExtraCharge>, String>(
-  (ref, groupId) =>
-      ref.watch(paymentsDsProvider).getExtraCharges(groupId),
+  (ref, groupId) => ref.watch(paymentsDsProvider).getExtraCharges(groupId),
 );
 
 // ── User providers ────────────────────────────────────────────────────────────
@@ -38,8 +37,7 @@ final myMonthlyRowProvider =
 
 final myExtraChargesProvider =
     FutureProvider.autoDispose.family<List<ExtraCharge>, String>(
-  (ref, groupId) =>
-      ref.watch(paymentsDsProvider).getMyExtraCharges(groupId),
+  (ref, groupId) => ref.watch(paymentsDsProvider).getMyExtraCharges(groupId),
 );
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -49,7 +47,7 @@ final myExtraChargesProvider =
 final myPaymentSummaryProvider =
     FutureProvider.autoDispose.family<PaymentSummary?, String>(
   (ref, groupId) async {
-    final ds   = ref.watch(paymentsDsProvider);
+    final ds = ref.watch(paymentsDsProvider);
     final year = DateTime.now().year;
 
     final results = await Future.wait([
@@ -57,32 +55,34 @@ final myPaymentSummaryProvider =
       ds.getMyExtraCharges(groupId).catchError((_) => <ExtraCharge>[]),
     ]);
 
-    final row    = results[0] as PlayerRow?;
+    final row = results[0] as PlayerRow?;
     final extras = results[1] as List<ExtraCharge>;
 
     // Mensalidades pendentes no ano corrente
     final pendingMonths = row?.months.where((m) => !m.isPaid).toList() ?? [];
-    final pendingMonthlyCount  = pendingMonths.length;
-    final pendingMonthlyAmount = pendingMonths.fold(
-      0.0, (sum, m) => sum + (m.amount - m.discount));
+    final pendingMonthlyCount = pendingMonths.length;
+    final pendingMonthlyAmount =
+        pendingMonths.fold(0.0, (sum, m) => sum + (m.amount - m.discount));
 
     // Cobranças extras pendentes (não canceladas, não finalizadas)
-    final pendingExtras = extras
-        .where((e) => !e.isCancelled && !e.isFinalized)
-        .toList();
-    final pendingExtraCount  = pendingExtras.length;
+    final pendingExtras =
+        extras.where((e) => !e.isCancelled && !e.isFinalized).toList();
+    final pendingExtraCount = pendingExtras.length;
     final pendingExtraAmount = pendingExtras.fold(
-      0.0, (sum, e) => sum + (e.payments.isEmpty
-          ? e.amount
-          : e.payments
-              .where((p) => !p.isPaid)
-              .fold(0.0, (s, p) => s + (p.amount - p.discount))));
+        0.0,
+        (sum, e) =>
+            sum +
+            (e.payments.isEmpty
+                ? e.amount
+                : e.payments
+                    .where((p) => !p.isPaid)
+                    .fold(0.0, (s, p) => s + (p.amount - p.discount))));
 
     return PaymentSummary(
       pendingMonthlyCount: pendingMonthlyCount,
-      pendingExtraCount:   pendingExtraCount,
-      totalPendingAmount:  pendingMonthlyAmount + pendingExtraAmount,
-      paymentMode:         0,
+      pendingExtraCount: pendingExtraCount,
+      totalPendingAmount: pendingMonthlyAmount + pendingExtraAmount,
+      paymentMode: 0,
     );
   },
 );

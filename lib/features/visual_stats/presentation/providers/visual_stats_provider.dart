@@ -9,6 +9,5 @@ final visualStatsDsProvider = Provider<VisualStatsDatasource>(
 
 final visualStatsProvider =
     FutureProvider.autoDispose.family<PlayerVisualStatsReport, String>(
-  (ref, groupId) =>
-      ref.watch(visualStatsDsProvider).fetchVisualStats(groupId),
+  (ref, groupId) => ref.watch(visualStatsDsProvider).fetchVisualStats(groupId),
 );

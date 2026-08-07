@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/push/push_providers.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/theme_mode_provider.dart';
 import 'features/auth/presentation/providers/account_store.dart';
 
 class App extends ConsumerStatefulWidget {
@@ -51,6 +52,7 @@ class _AppState extends ConsumerState<App> {
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
+    final themeMode = ref.watch(themeModeProvider);
 
     // Escuta mudanças de login para inicializar push assim que o usuário fizer login
     ref.listen<AccountState>(accountStoreProvider, (previous, next) {
@@ -61,11 +63,11 @@ class _AppState extends ConsumerState<App> {
     });
 
     return MaterialApp.router(
-      title:                    'BratnavaFC',
-      theme:                    AppTheme.light,
-      darkTheme:                AppTheme.dark,
-      themeMode:                ThemeMode.system,
-      routerConfig:             router,
+      title: 'BratnavaFC',
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: themeMode,
+      routerConfig: router,
       debugShowCheckedModeBanner: false,
     );
   }

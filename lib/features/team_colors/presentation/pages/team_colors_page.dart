@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/account_store.dart';
@@ -23,10 +24,13 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final account      = ref.watch(accountStoreProvider).activeAccount;
+    final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
     // Fallback: usa groupId do player ativo se activeGroupId não estiver persistido.
-    final groupId   = account?.activeGroupId ?? activePlayer?.groupId;
+    // O jogador manda no grupo: `activeGroupId` da conta pode apontar
+    // para uma patota sem jogador nosso, e aí toda rota por grupo
+    // responde 403. Ver dashboard_page para o diagnóstico completo.
+    final groupId = activePlayer?.groupId ?? account?.activeGroupId;
     final groupIdNN = groupId; // non-null alias used in closures
     final canManage = account != null &&
         groupIdNN != null &&
@@ -39,74 +43,78 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
           ref.invalidate(teamColorsProvider(groupIdNN));
         }
       },
-      child: CustomScrollView(
-        slivers: [
-          // ── Header ──────────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: _Header(
-              groupId:    groupId,
-              isDark:     isDark,
-              canManage:  canManage,
-              onRefresh: groupIdNN == null
-                  ? null
-                  : () => ref.invalidate(teamColorsProvider(groupIdNN)),
-              onAdd: canManage
-                  ? () => _openEditSheet(
-                        context,
-                        groupId:  groupIdNN,
-                        canManage: canManage,
-                        isDark:   isDark,
-                      )
-                  : null,
-            ),
-          ),
-
-          if (groupId == null) ...[
-            // Enquanto myPlayersProvider carrega, spinner em vez de "sem grupo"
-            SliverFillRemaining(
-              child: ref.watch(myPlayersProvider).isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _NoGroupState(isDark: isDark),
-            ),
-          ] else ...[
+      child: SafeArea(
+        bottom: false,
+        child: CustomScrollView(
+          slivers: [
+            // ── Header ──────────────────────────────────────────────────
             SliverToBoxAdapter(
-              child: _ColorsBody(
-                groupId:       groupId,
-                isDark:        isDark,
-                canManage:     canManage,
-                selectedIndex: _selectedIndex,
-                onIndexChanged: (i) => setState(() => _selectedIndex = i),
-                onOpenPreview:  (color) => _openPreview(context, color, isDark),
-                onOpenEdit: (color) => _openEditSheet(
-                  context,
-                  groupId:   groupId,
-                  canManage: canManage,
-                  isDark:    isDark,
-                  existing:  color,
-                ),
-                onActivate: (color) async {
-                  final ds = ref.read(teamColorDsProvider);
-                  try {
-                    if (color.isActive) {
-                      await ds.deactivateColor(groupId, color.id);
-                    } else {
-                      await ds.activateColor(groupId, color.id);
-                    }
-                    ref.invalidate(teamColorsProvider(groupId));
-                  } catch (e) {
-                    if (context.mounted) {
-                      final msg = extractDioError(e);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(msg)),
-                      );
-                    }
-                  }
-                },
+              child: _Header(
+                groupId: groupId,
+                isDark: isDark,
+                canManage: canManage,
+                onRefresh: groupIdNN == null
+                    ? null
+                    : () => ref.invalidate(teamColorsProvider(groupIdNN)),
+                onAdd: canManage
+                    ? () => _openEditSheet(
+                          context,
+                          groupId: groupIdNN,
+                          canManage: canManage,
+                          isDark: isDark,
+                        )
+                    : null,
               ),
             ),
-            const SliverToBoxAdapter(child: SizedBox(height: 32)),
+
+            if (groupId == null) ...[
+              // Enquanto myPlayersProvider carrega, spinner em vez de "sem grupo"
+              SliverFillRemaining(
+                child: ref.watch(myPlayersProvider).isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _NoGroupState(isDark: isDark),
+              ),
+            ] else ...[
+              SliverToBoxAdapter(
+                child: _ColorsBody(
+                  groupId: groupId,
+                  isDark: isDark,
+                  canManage: canManage,
+                  selectedIndex: _selectedIndex,
+                  onIndexChanged: (i) => setState(() => _selectedIndex = i),
+                  onOpenPreview: (color) =>
+                      _openPreview(context, color, isDark),
+                  onOpenEdit: (color) => _openEditSheet(
+                    context,
+                    groupId: groupId,
+                    canManage: canManage,
+                    isDark: isDark,
+                    existing: color,
+                  ),
+                  onActivate: (color) async {
+                    final ds = ref.read(teamColorDsProvider);
+                    try {
+                      if (color.isActive) {
+                        await ds.deactivateColor(groupId, color.id);
+                      } else {
+                        await ds.activateColor(groupId, color.id);
+                      }
+                      ref.invalidate(teamColorsProvider(groupId));
+                    } catch (e) {
+                      if (context.mounted) {
+                        final msg = extractDioError(e);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(msg)),
+                        );
+                      }
+                    }
+                  },
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 32)),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -115,8 +123,8 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
 
   void _openPreview(BuildContext context, TeamColor color, bool isDark) {
     showModalBottomSheet(
-      context:         context,
-      backgroundColor: Colors.transparent,
+      context: context,
+      backgroundColor: AppColors.transparent,
       builder: (_) => _PreviewSheet(color: color, isDark: isDark),
     );
   }
@@ -125,22 +133,22 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
 
   void _openEditSheet(
     BuildContext context, {
-    required String  groupId,
-    required bool    canManage,
-    required bool    isDark,
-    TeamColor?       existing,
+    required String groupId,
+    required bool canManage,
+    required bool isDark,
+    TeamColor? existing,
   }) {
     if (!canManage) return;
     showModalBottomSheet(
-      context:            context,
+      context: context,
       isScrollControlled: true,
-      backgroundColor:    Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => _EditSheet(
-        groupId:  groupId,
+        groupId: groupId,
         existing: existing,
-        isDark:   isDark,
+        isDark: isDark,
         onSaved: () => ref.invalidate(teamColorsProvider(groupId)),
-        ds:       ref.read(teamColorDsProvider),
+        ds: ref.read(teamColorDsProvider),
       ),
     );
   }
@@ -149,9 +157,9 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
 // ── Header ────────────────────────────────────────────────────────────────────
 
 class _Header extends ConsumerWidget {
-  final String?      groupId;
-  final bool         isDark;
-  final bool         canManage;
+  final String? groupId;
+  final bool isDark;
+  final bool canManage;
   final VoidCallback? onRefresh;
   final VoidCallback? onAdd;
 
@@ -170,91 +178,119 @@ class _Header extends ConsumerWidget {
         : const AsyncValue<List<TeamColor>>.data([]);
 
     final isLoading = colorsAsync.isLoading;
-    final count     = colorsAsync.valueOrNull?.where((c) => c.isActive).length ?? 0;
+    final count = colorsAsync.valueOrNull?.where((c) => c.isActive).length ?? 0;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          begin:  Alignment.topLeft,
-          end:    Alignment.bottomRight,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
           colors: [
-            Color(0xFF0f172a),
-            Color(0xFF1e293b),
-            Color(0xFF0f172a),
+            AppColors.slate900,
+            AppColors.darkCard,
+            AppColors.slate900,
           ],
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Icon box
-          Container(
-            width: 52, height: 52,
-            decoration: BoxDecoration(
-              color:        Colors.white.withAlpha(25),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withAlpha(50)),
-            ),
-            child: const Icon(
-              Icons.palette_rounded,
-              color: Colors.white,
-              size:  26,
-            ),
-          ),
-          const SizedBox(width: 16),
-          // Title + subtitle
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Uniformes',
-                  style: TextStyle(
-                    fontSize:   22,
-                    fontWeight: FontWeight.w900,
-                    color:      Colors.white,
-                  ),
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Voltar',
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/app');
+                  }
+                },
+                constraints:
+                    const BoxConstraints.tightFor(width: 48, height: 48),
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.onDark.withAlpha(20),
+                  foregroundColor: AppColors.onDark,
+                  side: BorderSide(color: AppColors.onDark.withAlpha(40)),
                 ),
-                const SizedBox(height: 2),
-                if (isLoading)
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 10, height: 10,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 1.5,
-                          color: Colors.white.withAlpha(128),
-                        ),
+                icon: const Icon(Icons.arrow_back_rounded,
+                    color: AppColors.onDark),
+              ),
+              const SizedBox(width: 4),
+              // Icon box
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: AppColors.onDark.withAlpha(25),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.onDark.withAlpha(50)),
+                ),
+                child: const Icon(
+                  Icons.palette_rounded,
+                  color: AppColors.onDark,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Title + subtitle
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Uniformes',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.onDark,
                       ),
-                      const SizedBox(width: 6),
+                    ),
+                    const SizedBox(height: 2),
+                    if (isLoading)
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 10,
+                            height: 10,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: AppColors.onDark.withAlpha(128),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Carregando...',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.onDark.withAlpha(128),
+                            ),
+                          ),
+                        ],
+                      )
+                    else if (groupId == null)
                       Text(
-                        'Carregando...',
+                        'Crie ou entre em um grupo',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.white.withAlpha(128),
+                          color: AppColors.onDark.withAlpha(128),
+                        ),
+                      )
+                    else
+                      Text(
+                        '$count uniforme${count != 1 ? 's' : ''} disponível${count != 1 ? 'eis' : ''}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.onDark.withAlpha(128),
                         ),
                       ),
-                    ],
-                  )
-                else if (groupId == null)
-                  Text(
-                    'Crie ou entre em um grupo',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withAlpha(128),
-                    ),
-                  )
-                else
-                  Text(
-                    '$count cor${count != 1 ? 'es' : ''} disponív${count != 1 ? 'eis' : 'el'}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withAlpha(128),
-                    ),
-                  ),
-              ],
-            ),
+                  ],
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 16),
           // Buttons row
           Row(
             mainAxisSize: MainAxisSize.min,
@@ -264,28 +300,28 @@ class _Header extends ConsumerWidget {
                 GestureDetector(
                   onTap: onAdd,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color:        Colors.white.withAlpha(25),
+                      color: AppColors.onDark.withAlpha(25),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withAlpha(50)),
+                      border: Border.all(color: AppColors.onDark.withAlpha(50)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
                           Icons.add_rounded,
-                          size:  14,
-                          color: Colors.white.withAlpha(204),
+                          size: 14,
+                          color: AppColors.onDark.withAlpha(204),
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          'Nova cor',
+                          'Novo uniforme',
                           style: TextStyle(
-                            fontSize:   12,
+                            fontSize: 12,
                             fontWeight: FontWeight.w500,
-                            color:      Colors.white.withAlpha(204),
+                            color: AppColors.onDark.withAlpha(204),
                           ),
                         ),
                       ],
@@ -299,28 +335,28 @@ class _Header extends ConsumerWidget {
                 GestureDetector(
                   onTap: isLoading ? null : onRefresh,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color:        Colors.white.withAlpha(25),
+                      color: AppColors.onDark.withAlpha(25),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withAlpha(50)),
+                      border: Border.all(color: AppColors.onDark.withAlpha(50)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
                           Icons.refresh_rounded,
-                          size:  14,
-                          color: Colors.white.withAlpha(204),
+                          size: 14,
+                          color: AppColors.onDark.withAlpha(204),
                         ),
                         const SizedBox(width: 4),
                         Text(
                           'Atualizar',
                           style: TextStyle(
-                            fontSize:   12,
+                            fontSize: 12,
                             fontWeight: FontWeight.w500,
-                            color:      Colors.white.withAlpha(204),
+                            color: AppColors.onDark.withAlpha(204),
                           ),
                         ),
                       ],
@@ -338,14 +374,14 @@ class _Header extends ConsumerWidget {
 // ── Colors body (carousel + action bar) ──────────────────────────────────────
 
 class _ColorsBody extends ConsumerWidget {
-  final String   groupId;
-  final bool     isDark;
-  final bool     canManage;
-  final int      selectedIndex;
-  final void     Function(int)       onIndexChanged;
-  final void     Function(TeamColor) onOpenPreview;
-  final void     Function(TeamColor) onOpenEdit;
-  final void     Function(TeamColor) onActivate;
+  final String groupId;
+  final bool isDark;
+  final bool canManage;
+  final int selectedIndex;
+  final void Function(int) onIndexChanged;
+  final void Function(TeamColor) onOpenPreview;
+  final void Function(TeamColor) onOpenEdit;
+  final void Function(TeamColor) onActivate;
 
   const _ColorsBody({
     required this.groupId,
@@ -377,21 +413,19 @@ class _ColorsBody extends ConsumerWidget {
       ),
       data: (all) {
         // Non-admin sees only active colors
-        final items = canManage
-            ? all
-            : all.where((c) => c.isActive).toList();
+        final items = canManage ? all : all.where((c) => c.isActive).toList();
 
         if (items.isEmpty) {
           return _EmptyState(isDark: isDark);
         }
 
         final safeIndex = selectedIndex.clamp(0, items.length - 1);
-        final selected  = items[safeIndex];
+        final selected = items[safeIndex];
 
         return Container(
           margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
           decoration: BoxDecoration(
-            color:        isDark ? AppColors.slate800 : Colors.white,
+            color: isDark ? AppColors.slate800 : AppColors.onDark,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -411,9 +445,8 @@ class _ColorsBody extends ConsumerWidget {
                           horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: isDark
-                              ? AppColors.slate600
-                              : AppColors.slate300,
+                          color:
+                              isDark ? AppColors.slate600 : AppColors.slate300,
                         ),
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -422,7 +455,7 @@ class _ColorsBody extends ConsumerWidget {
                         children: [
                           Icon(
                             Icons.visibility_outlined,
-                            size:  14,
+                            size: 14,
                             color: isDark
                                 ? AppColors.slate300
                                 : AppColors.slate600,
@@ -431,7 +464,7 @@ class _ColorsBody extends ConsumerWidget {
                           Text(
                             'Ver selecionado',
                             style: TextStyle(
-                              fontSize:   12,
+                              fontSize: 12,
                               fontWeight: FontWeight.w500,
                               color: isDark
                                   ? AppColors.slate300
@@ -447,11 +480,11 @@ class _ColorsBody extends ConsumerWidget {
 
               // ── Carousel ──────────────────────────────────────────
               _ColorCarousel(
-                items:          items,
-                isDark:         isDark,
-                selectedIndex:  safeIndex,
+                items: items,
+                isDark: isDark,
+                selectedIndex: safeIndex,
                 onIndexChanged: onIndexChanged,
-                onTap:          onOpenPreview,
+                onTap: onOpenPreview,
               ),
 
               // ── Action bar ─────────────────────────────────────────
@@ -461,11 +494,11 @@ class _ColorsBody extends ConsumerWidget {
                   color: isDark ? AppColors.slate700 : AppColors.slate200,
                 ),
                 _ActionBar(
-                  selected:   selected,
-                  isDark:     isDark,
-                  canManage:  canManage,
-                  onPreview:  () => onOpenPreview(selected),
-                  onEdit:     () => onOpenEdit(selected),
+                  selected: selected,
+                  isDark: isDark,
+                  canManage: canManage,
+                  onPreview: () => onOpenPreview(selected),
+                  onEdit: () => onOpenEdit(selected),
                   onActivate: () => onActivate(selected),
                 ),
               ] else
@@ -481,11 +514,11 @@ class _ColorsBody extends ConsumerWidget {
 // ── Carousel ──────────────────────────────────────────────────────────────────
 
 class _ColorCarousel extends StatefulWidget {
-  final List<TeamColor>              items;
-  final bool                         isDark;
-  final int                          selectedIndex;
-  final void Function(int)           onIndexChanged;
-  final void Function(TeamColor)     onTap;
+  final List<TeamColor> items;
+  final bool isDark;
+  final int selectedIndex;
+  final void Function(int) onIndexChanged;
+  final void Function(TeamColor) onTap;
 
   const _ColorCarousel({
     required this.items,
@@ -539,7 +572,7 @@ class _ColorCarouselState extends State<_ColorCarousel> {
       final currentReal = currentVirtual % n;
       if (currentReal != widget.selectedIndex) {
         // External selection change — jump to the nearest virtual page.
-        final diff   = (widget.selectedIndex - currentReal + n) % n;
+        final diff = (widget.selectedIndex - currentReal + n) % n;
         final target = diff <= n ~/ 2
             ? currentVirtual + diff
             : currentVirtual - (n - diff);
@@ -579,7 +612,7 @@ class _ColorCarouselState extends State<_ColorCarousel> {
   @override
   Widget build(BuildContext context) {
     final items = widget.items;
-    final n     = items.length;
+    final n = items.length;
 
     return Column(
       children: [
@@ -592,21 +625,25 @@ class _ColorCarouselState extends State<_ColorCarousel> {
                 animation: _ctrl,
                 builder: (_, __) {
                   return PageView.builder(
-                    controller:   _ctrl,
+                    controller: _ctrl,
                     clipBehavior: Clip.none,
-                    physics: n <= 1 ? const NeverScrollableScrollPhysics() : null,
-                    itemCount:    n <= 1 ? 1 : n * _kMult,
+                    physics:
+                        n <= 1 ? const NeverScrollableScrollPhysics() : null,
+                    itemCount: n <= 1 ? 1 : n * _kMult,
                     onPageChanged: (virtualIndex) =>
                         widget.onIndexChanged(virtualIndex % n),
                     itemBuilder: (context, virtualIndex) {
-                      final realIndex  = virtualIndex % n;
-                      final color      = items[realIndex];
+                      final realIndex = virtualIndex % n;
+                      final color = items[realIndex];
                       final isSelected = realIndex == widget.selectedIndex;
 
                       double scale = 0.88;
                       if (_ctrl.hasClients && _ctrl.position.haveDimensions) {
-                        final page  = _ctrl.page ?? (n <= 1 ? 0 : _midOffset + widget.selectedIndex).toDouble();
-                        final delta = (page - virtualIndex).abs().clamp(0.0, 1.0);
+                        final page = _ctrl.page ??
+                            (n <= 1 ? 0 : _midOffset + widget.selectedIndex)
+                                .toDouble();
+                        final delta =
+                            (page - virtualIndex).abs().clamp(0.0, 1.0);
                         scale = 1.0 - delta * 0.12;
                       } else {
                         scale = isSelected ? 1.0 : 0.88;
@@ -627,8 +664,8 @@ class _ColorCarouselState extends State<_ColorCarousel> {
                             }
                           },
                           child: _ColorCard(
-                            color:      color,
-                            isDark:     widget.isDark,
+                            color: color,
+                            isDark: widget.isDark,
                             isSelected: isSelected,
                           ),
                         ),
@@ -637,30 +674,33 @@ class _ColorCarouselState extends State<_ColorCarousel> {
                   );
                 },
               ),
-
               if (n > 1) ...[
                 // Left arrow
                 Positioned(
-                  left: 0, top: 0, bottom: 0,
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
                   child: Center(
                     child: _NavArrow(
-                      icon:    Icons.chevron_left_rounded,
+                      icon: Icons.chevron_left_rounded,
                       enabled: true,
-                      isDark:  widget.isDark,
-                      onTap:   _goLeft,
+                      isDark: widget.isDark,
+                      onTap: _goLeft,
                     ),
                   ),
                 ),
 
                 // Right arrow
                 Positioned(
-                  right: 0, top: 0, bottom: 0,
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
                   child: Center(
                     child: _NavArrow(
-                      icon:    Icons.chevron_right_rounded,
+                      icon: Icons.chevron_right_rounded,
                       enabled: true,
-                      isDark:  widget.isDark,
-                      onTap:   _goRight,
+                      isDark: widget.isDark,
+                      onTap: _goRight,
                     ),
                   ),
                 ),
@@ -672,7 +712,7 @@ class _ColorCarouselState extends State<_ColorCarousel> {
         // Dot indicators
         const SizedBox(height: 12),
         _DotIndicators(
-          count:    items.length,
+          count: items.length,
           selected: widget.selectedIndex,
           getColor: (i) => items[i].color,
         ),
@@ -685,9 +725,9 @@ class _ColorCarouselState extends State<_ColorCarousel> {
 // ── Nav arrow ─────────────────────────────────────────────────────────────────
 
 class _NavArrow extends StatelessWidget {
-  final IconData     icon;
-  final bool         enabled;
-  final bool         isDark;
+  final IconData icon;
+  final bool enabled;
+  final bool isDark;
   final VoidCallback onTap;
 
   const _NavArrow({
@@ -704,26 +744,26 @@ class _NavArrow extends StatelessWidget {
       child: GestureDetector(
         onTap: enabled ? onTap : null,
         child: Container(
-          width:  36,
+          width: 36,
           height: 36,
           margin: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            color: isDark ? AppColors.slate800 : Colors.white,
+            color: isDark ? AppColors.slate800 : AppColors.onDark,
             shape: BoxShape.circle,
             border: Border.all(
               color: isDark ? AppColors.slate700 : AppColors.slate200,
             ),
             boxShadow: [
               BoxShadow(
-                color:      Colors.black.withAlpha(20),
+                color: AppColors.darkApp.withAlpha(20),
                 blurRadius: 6,
-                offset:     const Offset(0, 2),
+                offset: const Offset(0, 2),
               ),
             ],
           ),
           child: Icon(
             icon,
-            size:  20,
+            size: 20,
             color: isDark ? AppColors.slate300 : AppColors.slate600,
           ),
         ),
@@ -735,8 +775,8 @@ class _NavArrow extends StatelessWidget {
 // ── Dot indicators ────────────────────────────────────────────────────────────
 
 class _DotIndicators extends StatelessWidget {
-  final int          count;
-  final int          selected;
+  final int count;
+  final int selected;
   final Color Function(int) getColor;
 
   const _DotIndicators({
@@ -752,15 +792,15 @@ class _DotIndicators extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(count, (i) {
         final isSel = i == selected;
-        final c     = isSel ? getColor(i) : AppColors.slate300;
+        final c = isSel ? getColor(i) : AppColors.slate300;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 250),
-          curve:    Curves.easeInOut,
-          margin:   const EdgeInsets.symmetric(horizontal: 3),
-          width:    isSel ? 20 : 6,
-          height:   6,
+          curve: Curves.easeInOut,
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          width: isSel ? 20 : 6,
+          height: 6,
           decoration: BoxDecoration(
-            color:        c,
+            color: c,
             borderRadius: BorderRadius.circular(3),
           ),
         );
@@ -773,8 +813,8 @@ class _DotIndicators extends StatelessWidget {
 
 class _ColorCard extends StatelessWidget {
   final TeamColor color;
-  final bool      isDark;
-  final bool      isSelected;
+  final bool isDark;
+  final bool isSelected;
 
   const _ColorCard({
     required this.color,
@@ -788,25 +828,27 @@ class _ColorCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color:        isDark ? AppColors.slate900 : Colors.white,
+        color: isDark ? AppColors.slate900 : AppColors.onDark,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isSelected ? teamColor : (isDark ? AppColors.slate700 : AppColors.slate200),
+          color: isSelected
+              ? teamColor
+              : (isDark ? AppColors.slate700 : AppColors.slate200),
           width: isSelected ? 2 : 1,
         ),
         boxShadow: isSelected
             ? [
                 BoxShadow(
-                  color:      teamColor.withAlpha(102),
+                  color: teamColor.withAlpha(102),
                   blurRadius: 24,
-                  offset:     const Offset(0, 8),
+                  offset: const Offset(0, 8),
                 ),
               ]
             : [
                 BoxShadow(
-                  color:      Colors.black.withAlpha(15),
+                  color: AppColors.darkApp.withAlpha(15),
                   blurRadius: 8,
-                  offset:     const Offset(0, 2),
+                  offset: const Offset(0, 2),
                 ),
               ],
       ),
@@ -823,9 +865,9 @@ class _ColorCard extends StatelessWidget {
               child: Container(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    begin:  Alignment.topCenter,
-                    end:    Alignment.bottomCenter,
-                    colors: [Color(0xFF4B5563), Color(0xFF111827)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [AppColors.lightTextSecondary, AppColors.lightText],
                   ),
                 ),
                 child: Center(
@@ -842,7 +884,7 @@ class _ColorCard extends StatelessWidget {
 
             // Info section — matches site layout
             Container(
-              color: isDark ? AppColors.slate900 : Colors.white,
+              color: isDark ? AppColors.slate900 : AppColors.onDark,
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -854,26 +896,27 @@ class _ColorCard extends StatelessWidget {
                         child: Text(
                           color.name,
                           style: TextStyle(
-                            fontSize:   14,
+                            fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: isDark ? Colors.white : AppColors.slate900,
+                            color:
+                                isDark ? AppColors.onDark : AppColors.slate900,
                           ),
-                          maxLines:  1,
-                          overflow:  TextOverflow.ellipsis,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (color.isActive)
                         const _Badge(
                           label: 'Ativo',
-                          bg:    Color(0xFFecfdf5),
-                          fg:    Color(0xFF059669),
+                          bg: AppColors.emerald50,
+                          fg: AppColors.primaryPressed,
                         ),
                       if (isSelected) ...[
                         const SizedBox(width: 4),
                         const _Badge(
                           label: 'Sel.',
-                          bg:    Color(0xFF1e293b),
-                          fg:    Colors.white,
+                          bg: AppColors.darkCard,
+                          fg: AppColors.onDark,
                         ),
                       ],
                     ],
@@ -882,8 +925,8 @@ class _ColorCard extends StatelessWidget {
                   Text(
                     'CLIQUE PARA SELECIONAR',
                     style: TextStyle(
-                      fontSize:      9,
-                      fontWeight:    FontWeight.w600,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
                       letterSpacing: 0.5,
                       color: isSelected
                           ? teamColor
@@ -924,7 +967,7 @@ class _JerseyPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final scaleX = size.width  / 240.0;
+    final scaleX = size.width / 240.0;
     final scaleY = size.height / 220.0;
 
     canvas.save();
@@ -933,8 +976,8 @@ class _JerseyPainter extends CustomPainter {
     // Determine if color is light to adjust stroke
     final luminance = color.computeLuminance();
     final strokeColor = luminance > 0.7
-        ? const Color(0xFF334155)   // dark stroke for light jerseys
-        : const Color(0xFF0f172a);  // very dark for colored jerseys
+        ? AppColors.darkBorder // dark stroke for light jerseys
+        : AppColors.slate900; // very dark for colored jerseys
 
     // Jersey fill
     final bodyPath = Path()
@@ -964,8 +1007,8 @@ class _JerseyPainter extends CustomPainter {
       ..color = strokeColor.withAlpha(180)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3.0
-      ..strokeJoin  = StrokeJoin.round
-      ..strokeCap   = StrokeCap.round;
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
     canvas.drawPath(bodyPath, strokePaint);
 
     // Collar (V-shape, stroke only)
@@ -978,16 +1021,16 @@ class _JerseyPainter extends CustomPainter {
       ..color = strokeColor.withAlpha(200)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.5
-      ..strokeJoin  = StrokeJoin.round
-      ..strokeCap   = StrokeCap.round;
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
     canvas.drawPath(collarPath, collarPaint);
 
     // Subtle inner highlight line along the shoulder seams
     final highlightPaint = Paint()
-      ..color = Colors.white.withAlpha(60)
+      ..color = AppColors.onDark.withAlpha(60)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
-      ..strokeCap   = StrokeCap.round;
+      ..strokeCap = StrokeCap.round;
 
     // Left seam highlight
     final leftSeam = Path()
@@ -1015,9 +1058,9 @@ class _JerseyPainter extends CustomPainter {
 // ── Action bar ────────────────────────────────────────────────────────────────
 
 class _ActionBar extends StatelessWidget {
-  final TeamColor    selected;
-  final bool         isDark;
-  final bool         canManage;
+  final TeamColor selected;
+  final bool isDark;
+  final bool canManage;
   final VoidCallback onPreview;
   final VoidCallback onEdit;
   final VoidCallback onActivate;
@@ -1040,24 +1083,24 @@ class _ActionBar extends StatelessWidget {
               children: [
                 Expanded(
                   child: _ActionButton(
-                    label:  'Editar selecionado',
-                    icon:   Icons.edit_outlined,
+                    label: 'Editar selecionado',
+                    icon: Icons.edit_outlined,
                     isDark: isDark,
-                    onTap:  onEdit,
+                    onTap: onEdit,
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: _ActionButton(
                     label: selected.isActive ? 'Inativar' : 'Ativar',
-                    icon:  selected.isActive
+                    icon: selected.isActive
                         ? Icons.power_settings_new_rounded
                         : Icons.check_circle_outline_rounded,
-                    isDark:   isDark,
-                    accent:   selected.isActive
-                        ? const Color(0xFFf97316)   // orange – matches website
-                        : const Color(0xFF22c55e),
-                    onTap:    onActivate,
+                    isDark: isDark,
+                    accent: selected.isActive
+                        ? AppColors.warning // orange – matches website
+                        : AppColors.accent,
+                    onTap: onActivate,
                   ),
                 ),
               ],
@@ -1065,10 +1108,10 @@ class _ActionBar extends StatelessWidget {
           : SizedBox(
               width: double.infinity,
               child: _ActionButton(
-                label:  'Ver uniforme',
-                icon:   Icons.visibility_outlined,
+                label: 'Ver uniforme',
+                icon: Icons.visibility_outlined,
                 isDark: isDark,
-                onTap:  onPreview,
+                onTap: onPreview,
               ),
             ),
     );
@@ -1076,10 +1119,10 @@ class _ActionBar extends StatelessWidget {
 }
 
 class _ActionButton extends StatelessWidget {
-  final String     label;
-  final IconData   icon;
-  final bool       isDark;
-  final Color?     accent;
+  final String label;
+  final IconData icon;
+  final bool isDark;
+  final Color? accent;
   final VoidCallback onTap;
 
   const _ActionButton({
@@ -1103,7 +1146,7 @@ class _ActionButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color:        bg,
+          color: bg,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: border.withAlpha(100)),
         ),
@@ -1115,9 +1158,9 @@ class _ActionButton extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                fontSize:   13,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color:      fg,
+                color: fg,
               ),
             ),
           ],
@@ -1131,7 +1174,7 @@ class _ActionButton extends StatelessWidget {
 
 class _PreviewSheet extends StatelessWidget {
   final TeamColor color;
-  final bool      isDark;
+  final bool isDark;
 
   const _PreviewSheet({required this.color, required this.isDark});
 
@@ -1141,7 +1184,7 @@ class _PreviewSheet extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color:        isDark ? AppColors.slate900 : Colors.white,
+        color: isDark ? AppColors.slate900 : AppColors.onDark,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: SafeArea(
@@ -1152,10 +1195,11 @@ class _PreviewSheet extends StatelessWidget {
           children: [
             // Colored top strip
             Container(
-              height:       3,
+              height: 3,
               decoration: BoxDecoration(
-                color:        teamColor,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                color: teamColor,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(20)),
               ),
             ),
 
@@ -1164,11 +1208,11 @@ class _PreviewSheet extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  begin:  Alignment.topLeft,
-                  end:    Alignment.bottomRight,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                   colors: [
-                    const Color(0xFF0f172a),
-                    Color.lerp(const Color(0xFF1e293b), teamColor, 0.15)!,
+                    AppColors.slate900,
+                    Color.lerp(AppColors.darkCard, teamColor, 0.15)!,
                   ],
                 ),
               ),
@@ -1181,8 +1225,8 @@ class _PreviewSheet extends StatelessWidget {
                         const Text(
                           'Preview do uniforme',
                           style: TextStyle(
-                            fontSize:   12,
-                            color:      Color(0xFF94A3B8),
+                            fontSize: 12,
+                            color: AppColors.lightPlaceholder,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -1190,9 +1234,9 @@ class _PreviewSheet extends StatelessWidget {
                         Text(
                           color.name,
                           style: const TextStyle(
-                            fontSize:   20,
+                            fontSize: 20,
                             fontWeight: FontWeight.w800,
-                            color:      Colors.white,
+                            color: AppColors.onDark,
                           ),
                         ),
                       ],
@@ -1201,16 +1245,18 @@ class _PreviewSheet extends StatelessWidget {
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
                     child: Container(
-                      width: 32, height: 32,
+                      width: 32,
+                      height: 32,
                       decoration: BoxDecoration(
-                        color:  Colors.white.withAlpha(20),
-                        shape:  BoxShape.circle,
-                        border: Border.all(color: Colors.white.withAlpha(40)),
+                        color: AppColors.onDark.withAlpha(20),
+                        shape: BoxShape.circle,
+                        border:
+                            Border.all(color: AppColors.onDark.withAlpha(40)),
                       ),
                       child: const Icon(
                         Icons.close_rounded,
-                        size:  16,
-                        color: Colors.white,
+                        size: 16,
+                        color: AppColors.onDark,
                       ),
                     ),
                   ),
@@ -1226,7 +1272,7 @@ class _PreviewSheet extends StatelessWidget {
                   center: Alignment.center,
                   radius: 0.85,
                   colors: [
-                    Colors.white.withAlpha(isDark ? 30 : 80),
+                    AppColors.onDark.withAlpha(isDark ? 30 : 80),
                     isDark ? AppColors.slate950 : AppColors.slate200,
                   ],
                 ),
@@ -1249,9 +1295,10 @@ class _PreviewSheet extends StatelessWidget {
                 children: [
                   // Color swatch
                   Container(
-                    width: 40, height: 40,
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
-                      color:        teamColor,
+                      color: teamColor,
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -1266,10 +1313,10 @@ class _PreviewSheet extends StatelessWidget {
                         Text(
                           color.hexValue.toUpperCase(),
                           style: TextStyle(
-                            fontSize:   16,
+                            fontSize: 16,
                             fontWeight: FontWeight.w700,
-                            fontFamily: 'monospace',
-                            color: isDark ? Colors.white : AppColors.slate900,
+                            color:
+                                isDark ? AppColors.onDark : AppColors.slate900,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -1277,7 +1324,9 @@ class _PreviewSheet extends StatelessWidget {
                           color.name,
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDark ? AppColors.slate400 : AppColors.slate500,
+                            color: isDark
+                                ? AppColors.slate400
+                                : AppColors.slate500,
                           ),
                         ),
                       ],
@@ -1287,13 +1336,13 @@ class _PreviewSheet extends StatelessWidget {
                   color.isActive
                       ? const _Badge(
                           label: 'Ativo',
-                          bg:    Color(0xFFecfdf5),
-                          fg:    Color(0xFF059669),
+                          bg: AppColors.emerald50,
+                          fg: AppColors.primaryPressed,
                         )
                       : _Badge(
                           label: 'Inativo',
-                          bg:    isDark ? AppColors.slate800 : AppColors.slate100,
-                          fg:    isDark ? AppColors.slate400 : AppColors.slate500,
+                          bg: isDark ? AppColors.slate800 : AppColors.slate100,
+                          fg: isDark ? AppColors.slate400 : AppColors.slate500,
                         ),
                 ],
               ),
@@ -1308,10 +1357,10 @@ class _PreviewSheet extends StatelessWidget {
 // ── Edit / Create sheet ───────────────────────────────────────────────────────
 
 class _EditSheet extends StatefulWidget {
-  final String                   groupId;
-  final TeamColor?               existing;
-  final bool                     isDark;
-  final VoidCallback             onSaved;
+  final String groupId;
+  final TeamColor? existing;
+  final bool isDark;
+  final VoidCallback onSaved;
   final TeamColorRemoteDataSource ds;
 
   const _EditSheet({
@@ -1333,7 +1382,7 @@ class _EditSheetState extends State<_EditSheet> {
 
   bool get _isEdit => widget.existing != null;
 
-  Color get _liveColor => _parseHex(_hexCtrl.text) ?? const Color(0xFFe2e8f0);
+  Color get _liveColor => _parseHex(_hexCtrl.text) ?? AppColors.lightBorder;
 
   static Color? _parseHex(String hex) {
     try {
@@ -1360,7 +1409,7 @@ class _EditSheetState extends State<_EditSheet> {
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.existing?.name ?? '');
-    _hexCtrl  = TextEditingController(
+    _hexCtrl = TextEditingController(
       text: widget.existing?.hexValue ?? '#3b82f6',
     );
   }
@@ -1374,7 +1423,7 @@ class _EditSheetState extends State<_EditSheet> {
 
   Future<void> _save() async {
     final name = _nameCtrl.text.trim();
-    final hex  = _hexCtrl.text.trim();
+    final hex = _hexCtrl.text.trim();
 
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1426,8 +1475,9 @@ class _EditSheetState extends State<_EditSheet> {
           ),
           child: Container(
             decoration: BoxDecoration(
-              color:        isDark ? AppColors.slate900 : Colors.white,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              color: isDark ? AppColors.slate900 : AppColors.onDark,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(20)),
             ),
             child: SafeArea(
               top: false,
@@ -1437,11 +1487,11 @@ class _EditSheetState extends State<_EditSheet> {
                   // Colored top strip
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    height:   3,
+                    height: 3,
                     decoration: BoxDecoration(
-                      color:        liveC,
-                      borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(20)),
+                      color: liveC,
+                      borderRadius:
+                          const BorderRadius.vertical(top: Radius.circular(20)),
                     ),
                   ),
 
@@ -1450,27 +1500,29 @@ class _EditSheetState extends State<_EditSheet> {
                     padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        begin:  Alignment.topLeft,
-                        end:    Alignment.bottomRight,
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                         colors: [
-                          const Color(0xFF0f172a),
-                          Color.lerp(const Color(0xFF1e293b), liveC, 0.2)!,
+                          AppColors.slate900,
+                          Color.lerp(AppColors.darkCard, liveC, 0.2)!,
                         ],
                       ),
                     ),
                     child: Row(
                       children: [
                         Container(
-                          width: 36, height: 36,
+                          width: 36,
+                          height: 36,
                           decoration: BoxDecoration(
-                            color:        Colors.white.withAlpha(20),
+                            color: AppColors.onDark.withAlpha(20),
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.white.withAlpha(40)),
+                            border: Border.all(
+                                color: AppColors.onDark.withAlpha(40)),
                           ),
                           child: const Icon(
                             Icons.palette_rounded,
-                            size:  18,
-                            color: Colors.white,
+                            size: 18,
+                            color: AppColors.onDark,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -1481,9 +1533,9 @@ class _EditSheetState extends State<_EditSheet> {
                               Text(
                                 _isEdit ? 'EDITAR COR' : 'NOVA COR',
                                 style: const TextStyle(
-                                  fontSize:      11,
-                                  fontWeight:    FontWeight.w500,
-                                  color:         Color(0xFF94A3B8),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.lightPlaceholder,
                                   letterSpacing: 0.5,
                                 ),
                               ),
@@ -1493,9 +1545,9 @@ class _EditSheetState extends State<_EditSheet> {
                                     ? (_isEdit ? 'Editar cor' : 'Nova cor')
                                     : _nameCtrl.text,
                                 style: const TextStyle(
-                                  fontSize:   18,
+                                  fontSize: 18,
                                   fontWeight: FontWeight.w800,
-                                  color:      Colors.white,
+                                  color: AppColors.onDark,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -1506,16 +1558,18 @@ class _EditSheetState extends State<_EditSheet> {
                         GestureDetector(
                           onTap: () => Navigator.pop(context),
                           child: Container(
-                            width: 32, height: 32,
+                            width: 32,
+                            height: 32,
                             decoration: BoxDecoration(
-                              color:  Colors.white.withAlpha(20),
-                              shape:  BoxShape.circle,
-                              border: Border.all(color: Colors.white.withAlpha(40)),
+                              color: AppColors.onDark.withAlpha(20),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                  color: AppColors.onDark.withAlpha(40)),
                             ),
                             child: const Icon(
                               Icons.close_rounded,
-                              size:  16,
-                              color: Colors.white,
+                              size: 16,
+                              color: AppColors.onDark,
                             ),
                           ),
                         ),
@@ -1536,7 +1590,9 @@ class _EditSheetState extends State<_EditSheet> {
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
-                                color: isDark ? AppColors.slate700 : AppColors.slate200,
+                                color: isDark
+                                    ? AppColors.slate700
+                                    : AppColors.slate200,
                               ),
                             ),
                             child: ClipRRect(
@@ -1548,9 +1604,12 @@ class _EditSheetState extends State<_EditSheet> {
                                     child: Container(
                                       decoration: const BoxDecoration(
                                         gradient: LinearGradient(
-                                          begin:  Alignment.topCenter,
-                                          end:    Alignment.bottomCenter,
-                                          colors: [Color(0xFF4B5563), Color(0xFF111827)],
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [
+                                            AppColors.lightTextSecondary,
+                                            AppColors.lightText
+                                          ],
                                         ),
                                       ),
                                       child: Center(
@@ -1566,18 +1625,25 @@ class _EditSheetState extends State<_EditSheet> {
                                   ),
                                   // Info sidebar
                                   Container(
-                                    color: isDark ? AppColors.slate800 : AppColors.slate50,
+                                    color: isDark
+                                        ? AppColors.slate800
+                                        : AppColors.slate50,
                                     padding: const EdgeInsets.all(14),
                                     child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         AnimatedContainer(
-                                          duration: const Duration(milliseconds: 200),
-                                          width: 28, height: 28,
+                                          duration:
+                                              const Duration(milliseconds: 200),
+                                          width: 28,
+                                          height: 28,
                                           decoration: BoxDecoration(
-                                            color:        liveC,
-                                            borderRadius: BorderRadius.circular(8),
+                                            color: liveC,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
                                             border: Border.all(
                                               color: isDark
                                                   ? AppColors.slate600
@@ -1589,8 +1655,7 @@ class _EditSheetState extends State<_EditSheet> {
                                         Text(
                                           _hexCtrl.text.toUpperCase(),
                                           style: TextStyle(
-                                            fontSize:   11,
-                                            fontFamily: 'monospace',
+                                            fontSize: 11,
                                             fontWeight: FontWeight.w600,
                                             color: isDark
                                                 ? AppColors.slate300
@@ -1623,21 +1688,23 @@ class _EditSheetState extends State<_EditSheet> {
                           Text(
                             'ESCOLHER COR',
                             style: TextStyle(
-                              fontSize:      11,
-                              fontWeight:    FontWeight.w600,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
                               letterSpacing: 0.5,
-                              color: isDark ? AppColors.slate500 : AppColors.slate400,
+                              color: isDark
+                                  ? AppColors.slate500
+                                  : AppColors.slate400,
                             ),
                           ),
                           const SizedBox(height: 8),
                           ColorPicker(
-                            pickerColor:             liveC,
-                            onColorChanged:          _onPickerColorChanged,
-                            enableAlpha:             false,
-                            displayThumbColor:       true,
+                            pickerColor: liveC,
+                            onColorChanged: _onPickerColorChanged,
+                            enableAlpha: false,
+                            displayThumbColor: true,
                             pickerAreaHeightPercent: 0.45,
-                            hexInputBar:             false,
-                            labelTypes:              const [],
+                            hexInputBar: false,
+                            labelTypes: const [],
                           ),
 
                           const SizedBox(height: 12),
@@ -1647,8 +1714,8 @@ class _EditSheetState extends State<_EditSheet> {
                           const SizedBox(height: 6),
                           _field(
                             controller: _nameCtrl,
-                            hint:       'Ex: Azul Royal',
-                            isDark:     isDark,
+                            hint: 'Ex: Azul Royal',
+                            isDark: isDark,
                           ),
 
                           const SizedBox(height: 14),
@@ -1661,16 +1728,17 @@ class _EditSheetState extends State<_EditSheet> {
                               Expanded(
                                 child: _field(
                                   controller: _hexCtrl,
-                                  hint:       '#rrggbb',
-                                  isDark:     isDark,
+                                  hint: '#rrggbb',
+                                  isDark: isDark,
                                 ),
                               ),
                               const SizedBox(width: 10),
                               AnimatedContainer(
                                 duration: const Duration(milliseconds: 200),
-                                width: 40, height: 40,
+                                width: 40,
+                                height: 40,
                                 decoration: BoxDecoration(
-                                  color:        liveC,
+                                  color: liveC,
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
                                     color: isDark
@@ -1689,7 +1757,9 @@ class _EditSheetState extends State<_EditSheet> {
                                 : 'Cria uma nova cor no grupo.',
                             style: TextStyle(
                               fontSize: 12,
-                              color: isDark ? AppColors.slate500 : AppColors.slate400,
+                              color: isDark
+                                  ? AppColors.slate500
+                                  : AppColors.slate400,
                             ),
                           ),
 
@@ -1710,7 +1780,8 @@ class _EditSheetState extends State<_EditSheet> {
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(14),
                                     ),
-                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14),
                                   ),
                                   child: Text(
                                     'Cancelar',
@@ -1728,21 +1799,25 @@ class _EditSheetState extends State<_EditSheet> {
                                 child: FilledButton(
                                   onPressed: _saving ? null : _save,
                                   style: FilledButton.styleFrom(
-                                    backgroundColor:
-                                        isDark ? Colors.white : AppColors.slate900,
-                                    foregroundColor:
-                                        isDark ? AppColors.slate900 : Colors.white,
+                                    backgroundColor: isDark
+                                        ? AppColors.onDark
+                                        : AppColors.slate900,
+                                    foregroundColor: isDark
+                                        ? AppColors.slate900
+                                        : AppColors.onDark,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(14),
                                     ),
-                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14),
                                   ),
                                   child: _saving
                                       ? const SizedBox(
-                                          width: 20, height: 20,
+                                          width: 20,
+                                          height: 20,
                                           child: CircularProgressIndicator(
                                             strokeWidth: 2,
-                                            color: Colors.white,
+                                            color: AppColors.onDark,
                                           ),
                                         )
                                       : const Text(
@@ -1771,8 +1846,8 @@ class _EditSheetState extends State<_EditSheet> {
   Widget _label(String text, bool isDark) => Text(
         text,
         style: TextStyle(
-          fontSize:      12,
-          fontWeight:    FontWeight.w600,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
           color: isDark ? AppColors.slate400 : AppColors.slate500,
           letterSpacing: .3,
         ),
@@ -1780,19 +1855,20 @@ class _EditSheetState extends State<_EditSheet> {
 
   Widget _field({
     required TextEditingController controller,
-    required String                hint,
-    required bool                  isDark,
+    required String hint,
+    required bool isDark,
   }) {
     return TextField(
-      controller:   controller,
+      controller: controller,
       style: TextStyle(
         fontSize: 14,
         color: isDark ? AppColors.slate200 : AppColors.slate800,
       ),
       decoration: InputDecoration(
-        hintText:  hint,
-        hintStyle: TextStyle(color: isDark ? AppColors.slate600 : AppColors.slate400),
-        filled:    true,
+        hintText: hint,
+        hintStyle:
+            TextStyle(color: isDark ? AppColors.slate600 : AppColors.slate400),
+        filled: true,
         fillColor: isDark ? AppColors.slate800 : AppColors.slate50,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -1813,7 +1889,8 @@ class _EditSheetState extends State<_EditSheet> {
             width: 1.5,
           ),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       ),
     );
   }
@@ -1832,7 +1909,7 @@ class _EmptyState extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 48),
         decoration: BoxDecoration(
-          color:        isDark ? AppColors.slate900 : Colors.white,
+          color: isDark ? AppColors.slate900 : AppColors.onDark,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isDark ? AppColors.slate700 : AppColors.slate200,
@@ -1844,14 +1921,14 @@ class _EmptyState extends StatelessWidget {
           children: [
             Icon(
               Icons.palette_outlined,
-              size:  36,
+              size: 36,
               color: isDark ? AppColors.slate600 : AppColors.slate300,
             ),
             const SizedBox(height: 12),
             Text(
               'Nenhuma cor cadastrada.',
               style: TextStyle(
-                fontSize:   14,
+                fontSize: 14,
                 fontWeight: FontWeight.w500,
                 color: isDark ? AppColors.slate400 : AppColors.slate500,
               ),
@@ -1886,7 +1963,7 @@ class _NoGroupState extends StatelessWidget {
         children: [
           Icon(
             Icons.group_outlined,
-            size:  40,
+            size: 40,
             color: isDark ? AppColors.slate600 : AppColors.slate300,
           ),
           const SizedBox(height: 12),
@@ -1916,9 +1993,9 @@ class _CarouselSkeleton extends StatelessWidget {
       child: Column(
         children: [
           Container(
-            height:       290,
+            height: 290,
             decoration: BoxDecoration(
-              color:        isDark ? AppColors.slate800 : AppColors.slate100,
+              color: isDark ? AppColors.slate800 : AppColors.slate100,
               borderRadius: BorderRadius.circular(14),
             ),
           ),
@@ -1928,11 +2005,11 @@ class _CarouselSkeleton extends StatelessWidget {
             children: List.generate(
               3,
               (i) => Container(
-                width:  i == 1 ? 20 : 6,
+                width: i == 1 ? 20 : 6,
                 height: 6,
                 margin: const EdgeInsets.symmetric(horizontal: 3),
                 decoration: BoxDecoration(
-                  color:        isDark ? AppColors.slate700 : AppColors.slate200,
+                  color: isDark ? AppColors.slate700 : AppColors.slate200,
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -1948,8 +2025,8 @@ class _CarouselSkeleton extends StatelessWidget {
 
 class _Badge extends StatelessWidget {
   final String label;
-  final Color  bg;
-  final Color  fg;
+  final Color bg;
+  final Color fg;
 
   const _Badge({required this.label, required this.bg, required this.fg});
 
@@ -1958,16 +2035,16 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color:        bg,
+        color: bg,
         borderRadius: BorderRadius.circular(99),
-        border:       Border.all(color: fg.withAlpha(80)),
+        border: Border.all(color: fg.withAlpha(80)),
       ),
       child: Text(
         label,
         style: TextStyle(
-          fontSize:   10,
+          fontSize: 10,
           fontWeight: FontWeight.w600,
-          color:      fg,
+          color: fg,
         ),
       ),
     );

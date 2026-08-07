@@ -9,9 +9,7 @@ class JwtHelper {
       final parts = token.split('.');
       if (parts.length != 3) return null;
 
-      var payload = parts[1]
-          .replaceAll('-', '+')
-          .replaceAll('_', '/');
+      var payload = parts[1].replaceAll('-', '+').replaceAll('_', '/');
 
       switch (payload.length % 4) {
         case 2:
@@ -29,8 +27,7 @@ class JwtHelper {
     }
   }
 
-  static String? getUserId(String token) =>
-      decode(token)?['sub'] as String?;
+  static String? getUserId(String token) => decode(token)?['sub'] as String?;
 
   /// Lê roles do claim "role", "roles" ou do ClaimTypes.Role do ASP.NET Identity.
   static List<String> getRoles(String token) {
@@ -41,13 +38,12 @@ class JwtHelper {
         'http://schemas.microsoft.com/ws/2008/06/identity/claims/role';
 
     // Tenta todas as variações conhecidas do claim de roles.
-    final raw = payload['role']
-        ?? payload['roles']
-        ?? payload[msRoleClaim];
+    final raw = payload['role'] ?? payload['roles'] ?? payload[msRoleClaim];
 
     if (raw == null) {
       // Imprime o payload completo para diagnóstico caso não encontre roles.
-      debugPrint('⚠ JwtHelper — nenhum claim de role encontrado. Claims: ${payload.keys.toList()}');
+      debugPrint(
+          '⚠ JwtHelper — nenhum claim de role encontrado. Claims: ${payload.keys.toList()}');
       return [];
     }
     if (raw is List) return raw.map((e) => e.toString()).toList();

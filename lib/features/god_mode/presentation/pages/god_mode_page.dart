@@ -69,43 +69,48 @@ class _GodModePageState extends ConsumerState<GodModePage>
     }
 
     return Scaffold(
-      body: NestedScrollView(
-        headerSliverBuilder: (ctx, _) => [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: _buildHeader(isDark),
-            ),
-          ),
-        ],
-        body: Column(
-          children: [
-            Container(
-              color: isDark ? AppColors.slate900 : Colors.white,
-              child: TabBar(
-                controller: _tabCtrl,
-                tabs: const [
-                  Tab(text: 'Usuarios'),
-                  Tab(text: 'Grupos'),
-                ],
-                labelColor: isDark ? Colors.white : AppColors.slate900,
-                unselectedLabelColor:
-                    isDark ? AppColors.slate500 : AppColors.slate400,
-                indicatorColor: isDark ? Colors.white : AppColors.slate900,
-                labelStyle: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-            ),
-            Expanded(
-              child: TabBarView(
-                controller: _tabCtrl,
-                children: const [
-                  _UsersTab(),
-                  _GroupsTab(),
-                ],
+      // Rota do shell sem AppBar: precisa respeitar o inset da status bar.
+      body: SafeArea(
+        bottom: false,
+        child: NestedScrollView(
+          headerSliverBuilder: (ctx, _) => [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: _buildHeader(isDark),
               ),
             ),
           ],
+          body: Column(
+            children: [
+              Container(
+                color: isDark ? AppColors.slate900 : AppColors.onDark,
+                child: TabBar(
+                  controller: _tabCtrl,
+                  tabs: const [
+                    Tab(text: 'Usuarios'),
+                    Tab(text: 'Grupos'),
+                  ],
+                  labelColor: isDark ? AppColors.onDark : AppColors.slate900,
+                  unselectedLabelColor:
+                      isDark ? AppColors.slate500 : AppColors.slate400,
+                  indicatorColor:
+                      isDark ? AppColors.onDark : AppColors.slate900,
+                  labelStyle: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+              ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabCtrl,
+                  children: const [
+                    _UsersTab(),
+                    _GroupsTab(),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -116,14 +121,18 @@ class _GodModePageState extends ConsumerState<GodModePage>
       width: double.infinity,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A)],
+          colors: [
+            AppColors.lightText,
+            AppColors.darkCard,
+            AppColors.lightText
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: .18),
+            color: AppColors.darkApp.withValues(alpha: .18),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -135,24 +144,24 @@ class _GodModePageState extends ConsumerState<GodModePage>
           width: 52,
           height: 52,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: .1),
+            color: AppColors.onDark.withValues(alpha: .1),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white.withValues(alpha: .2)),
+            border: Border.all(color: AppColors.onDark.withValues(alpha: .2)),
           ),
-          child:
-              const Icon(Icons.admin_panel_settings, size: 26, color: Colors.white),
+          child: const Icon(Icons.admin_panel_settings,
+              size: 26, color: AppColors.onDark),
         ),
         const SizedBox(width: 14),
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('God Mode',
               style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.onDark,
                   fontSize: 18,
                   fontWeight: FontWeight.w900)),
           Text(
             'Painel de super-administrador',
             style: TextStyle(
-                color: Colors.white.withValues(alpha: .5), fontSize: 12),
+                color: AppColors.onDark.withValues(alpha: .5), fontSize: 12),
           ),
         ]),
       ]),
@@ -218,7 +227,8 @@ class _UsersTabState extends ConsumerState<_UsersTab> {
             child: Text(
               activate ? 'Ativar' : 'Inativar',
               style: TextStyle(
-                  color: activate ? AppColors.green600 : AppColors.rose500),
+                  color:
+                      activate ? AppColors.primaryPressed : AppColors.rose500),
             ),
           ),
         ],
@@ -307,10 +317,8 @@ class _UsersTabState extends ConsumerState<_UsersTab> {
                 child: const Text('Cancelar')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    isDark ? Colors.white : AppColors.slate900,
-                foregroundColor:
-                    isDark ? AppColors.slate900 : Colors.white,
+                backgroundColor: isDark ? AppColors.onDark : AppColors.slate900,
+                foregroundColor: isDark ? AppColors.slate900 : AppColors.onDark,
               ),
               onPressed: () async {
                 final np = newPassCtrl.text.trim();
@@ -323,7 +331,8 @@ class _UsersTabState extends ConsumerState<_UsersTab> {
                       currentPassword: cp, newPassword: np);
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Senha alterada com sucesso')),
+                      const SnackBar(
+                          content: Text('Senha alterada com sucesso')),
                     );
                   }
                 } catch (e) {
@@ -405,7 +414,7 @@ class _UsersTabState extends ConsumerState<_UsersTab> {
                 selected: filter.status == UserStatusFilter.active,
                 isDark: isDark,
                 onTap: () => _setStatus(UserStatusFilter.active),
-                activeColor: AppColors.green600,
+                activeColor: AppColors.primaryPressed,
               ),
               const SizedBox(width: 8),
               _FilterChip(
@@ -422,8 +431,7 @@ class _UsersTabState extends ConsumerState<_UsersTab> {
         // ── List ──────────────────────────────────────────────────────────────
         Expanded(
           child: usersAsync.when(
-            loading: () =>
-                const Center(child: CircularProgressIndicator()),
+            loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => _ErrorState(extractDioError(e), isDark: isDark),
             data: (paged) {
               if (paged.items.isEmpty) {
@@ -457,8 +465,7 @@ class _UsersTabState extends ConsumerState<_UsersTab> {
                     return _UserCard(
                       user: user,
                       isDark: isDark,
-                      onToggleActive: () =>
-                          _confirmToggleUser(context, user),
+                      onToggleActive: () => _confirmToggleUser(context, user),
                       onChangePassword: () =>
                           _showChangePasswordDialog(context, user),
                     );
@@ -505,7 +512,7 @@ class _UserCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final borderColor = isDark ? AppColors.slate700 : AppColors.slate200;
-    final bgColor = isDark ? AppColors.slate900 : Colors.white;
+    final bgColor = isDark ? AppColors.slate900 : AppColors.onDark;
     final initials = _initials(user.fullName);
     final gradient = AppColors.gradientForName(user.fullName);
 
@@ -524,7 +531,8 @@ class _UserCard extends StatelessWidget {
           height: 44,
           decoration: BoxDecoration(
             gradient: LinearGradient(
-                colors: gradient, begin: Alignment.topLeft,
+                colors: gradient,
+                begin: Alignment.topLeft,
                 end: Alignment.bottomRight),
             shape: BoxShape.circle,
           ),
@@ -532,7 +540,7 @@ class _UserCard extends StatelessWidget {
             child: Text(
               initials,
               style: const TextStyle(
-                  color: Colors.white,
+                  color: AppColors.onDark,
                   fontSize: 14,
                   fontWeight: FontWeight.w700),
             ),
@@ -542,7 +550,8 @@ class _UserCard extends StatelessWidget {
 
         // Info
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Flexible(
                 child: Text(
@@ -550,7 +559,7 @@ class _UserCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white : AppColors.slate900,
+                    color: isDark ? AppColors.onDark : AppColors.slate900,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -594,7 +603,9 @@ class _UserCard extends StatelessWidget {
                       ? Icons.person_off_outlined
                       : Icons.person_outlined,
                   size: 18,
-                  color: user.isActive ? AppColors.rose500 : AppColors.green600,
+                  color: user.isActive
+                      ? AppColors.rose500
+                      : AppColors.primaryPressed,
                 ),
                 const SizedBox(width: 8),
                 Text(user.isActive ? 'Inativar' : 'Ativar'),
@@ -641,8 +652,7 @@ class _GroupsTab extends ConsumerStatefulWidget {
 class _GroupsTabState extends ConsumerState<_GroupsTab> {
   void _refresh() => ref.invalidate(godModeGroupsProvider);
 
-  Future<void> _confirmToggleGroup(
-      BuildContext ctx, GroupDto group) async {
+  Future<void> _confirmToggleGroup(BuildContext ctx, GroupDto group) async {
     final activate = !group.isActive;
     final ok = await showDialog<bool>(
       context: ctx,
@@ -662,7 +672,8 @@ class _GroupsTabState extends ConsumerState<_GroupsTab> {
             child: Text(
               activate ? 'Ativar' : 'Inativar',
               style: TextStyle(
-                  color: activate ? AppColors.green600 : AppColors.rose500),
+                  color:
+                      activate ? AppColors.primaryPressed : AppColors.rose500),
             ),
           ),
         ],
@@ -750,7 +761,7 @@ class _GroupCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final borderColor = isDark ? AppColors.slate700 : AppColors.slate200;
-    final bgColor = isDark ? AppColors.slate900 : Colors.white;
+    final bgColor = isDark ? AppColors.slate900 : AppColors.onDark;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -766,9 +777,7 @@ class _GroupCard extends StatelessWidget {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: isDark
-                ? AppColors.slate800
-                : AppColors.slate100,
+            color: isDark ? AppColors.slate800 : AppColors.slate100,
             borderRadius: BorderRadius.circular(12),
           ),
           child: const Icon(Icons.shield_outlined,
@@ -778,7 +787,8 @@ class _GroupCard extends StatelessWidget {
 
         // Info
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Flexible(
                 child: Text(
@@ -786,7 +796,7 @@ class _GroupCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white : AppColors.slate900,
+                    color: isDark ? AppColors.onDark : AppColors.slate900,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -816,8 +826,7 @@ class _GroupCard extends StatelessWidget {
                   _fmtDate(group.createdAt!),
                   style: TextStyle(
                       fontSize: 12,
-                      color:
-                          isDark ? AppColors.slate500 : AppColors.slate400),
+                      color: isDark ? AppColors.slate500 : AppColors.slate400),
                 ),
               ],
             ]),
@@ -840,8 +849,9 @@ class _GroupCard extends StatelessWidget {
                       ? Icons.do_not_disturb_outlined
                       : Icons.check_circle_outline,
                   size: 18,
-                  color:
-                      group.isActive ? AppColors.rose500 : AppColors.green600,
+                  color: group.isActive
+                      ? AppColors.rose500
+                      : AppColors.primaryPressed,
                 ),
                 const SizedBox(width: 8),
                 Text(group.isActive ? 'Inativar' : 'Ativar'),
@@ -888,7 +898,7 @@ class _StatusBadge extends StatelessWidget {
           style: TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.w600,
-            color: isActive ? AppColors.green700 : AppColors.rose500,
+            color: isActive ? AppColors.primaryPressed : AppColors.rose500,
           ),
         ),
       );
@@ -906,12 +916,12 @@ class _RoleChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: isGodMode
-            ? const Color(0xFF7C3AED).withValues(alpha: .12)
+            ? AppColors.info.withValues(alpha: .12)
             : (isDark ? AppColors.slate800 : AppColors.slate100),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
           color: isGodMode
-              ? const Color(0xFF7C3AED).withValues(alpha: .4)
+              ? AppColors.info.withValues(alpha: .4)
               : (isDark ? AppColors.slate700 : AppColors.slate200),
         ),
       ),
@@ -921,7 +931,7 @@ class _RoleChip extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w600,
           color: isGodMode
-              ? const Color(0xFF7C3AED)
+              ? AppColors.info
               : (isDark ? AppColors.slate400 : AppColors.slate600),
         ),
       ),
@@ -946,7 +956,8 @@ class _FilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final active = activeColor ?? (isDark ? Colors.white : AppColors.slate900);
+    final active =
+        activeColor ?? (isDark ? AppColors.onDark : AppColors.slate900);
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -992,8 +1003,7 @@ class _LoadMoreButton extends StatelessWidget {
             style: OutlinedButton.styleFrom(
               side: BorderSide(
                   color: isDark ? AppColors.slate600 : AppColors.slate300),
-              foregroundColor:
-                  isDark ? AppColors.slate300 : AppColors.slate600,
+              foregroundColor: isDark ? AppColors.slate300 : AppColors.slate600,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
             ),

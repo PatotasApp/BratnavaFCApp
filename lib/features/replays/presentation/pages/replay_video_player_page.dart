@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/replay_clip.dart';
 import '../providers/replays_provider.dart';
 
@@ -296,7 +297,7 @@ class _ReplayVideoPlayerPageState extends ConsumerState<ReplayVideoPlayerPage> {
     if (_clip.clipId.isEmpty) return;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       isScrollControlled: true,
       builder: (_) => _LikersSheet(
         future: ref
@@ -319,16 +320,16 @@ class _ReplayVideoPlayerPageState extends ConsumerState<ReplayVideoPlayerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF06101F),
+      backgroundColor: AppColors.darkApp,
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF06101F),
-              Color(0xFF0F172A),
-              Color(0xFF08111F),
+              AppColors.darkApp,
+              AppColors.lightText,
+              AppColors.darkApp,
             ],
           ),
         ),
@@ -355,17 +356,17 @@ class _ReplayVideoPlayerPageState extends ConsumerState<ReplayVideoPlayerPage> {
                 borderRadius: BorderRadius.circular(_isFullscreen ? 0 : 24),
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: Colors.black,
+                    color: AppColors.darkApp,
                     border: Border.all(
                       color: _isFullscreen
-                          ? Colors.transparent
-                          : Colors.white.withAlpha(28),
+                          ? AppColors.transparent
+                          : AppColors.onDark.withAlpha(28),
                     ),
                     boxShadow: _isFullscreen
                         ? const []
                         : const [
                             BoxShadow(
-                              color: Color(0x66000000),
+                              color: AppColors.shadow40,
                               blurRadius: 24,
                               offset: Offset(0, 14),
                             ),
@@ -374,7 +375,7 @@ class _ReplayVideoPlayerPageState extends ConsumerState<ReplayVideoPlayerPage> {
                   child: GestureDetector(
                     onTap: () => setState(() => _showControls = !_showControls),
                     child: Stack(alignment: Alignment.center, children: [
-                      Container(color: Colors.black),
+                      Container(color: AppColors.darkApp),
 
                       if (_initialised)
                         AspectRatio(
@@ -383,7 +384,8 @@ class _ReplayVideoPlayerPageState extends ConsumerState<ReplayVideoPlayerPage> {
                         ),
 
                       if (!_initialised && !_hasError)
-                        const CircularProgressIndicator(color: Colors.white),
+                        const CircularProgressIndicator(
+                            color: AppColors.onDark),
 
                       if (_hasError)
                         _ErrorOverlay(
@@ -475,14 +477,14 @@ class _TopBar extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       padding: const EdgeInsets.fromLTRB(6, 8, 14, 8),
       decoration: BoxDecoration(
-        color: Colors.white.withAlpha(20),
+        color: AppColors.onDark.withAlpha(20),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withAlpha(25)),
+        border: Border.all(color: AppColors.onDark.withAlpha(25)),
       ),
       child: Row(children: [
         CircleIconButton(
           onPressed: onBack,
-          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.onDark),
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -494,22 +496,21 @@ class _TopBar extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: type == 'GOL'
-                        ? const Color(0xFF10B981)
-                        : const Color(0xFF2563EB),
+                    color:
+                        type == 'GOL' ? AppColors.accent : AppColors.infoLight,
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(type,
                       style: const TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
-                          color: Colors.white)),
+                          color: AppColors.onDark)),
                 ),
                 const SizedBox(width: 6),
                 Flexible(
                   child: Text(label,
                       style: const TextStyle(
-                          color: Colors.white,
+                          color: AppColors.onDark,
                           fontSize: 13,
                           fontWeight: FontWeight.w700),
                       maxLines: 1,
@@ -524,7 +525,7 @@ class _TopBar extends StatelessWidget {
                   if (clip.teamName?.isNotEmpty == true) clip.teamName!,
                   if (clip.matchPlace.isNotEmpty) clip.matchPlace,
                 ].join('  |  '),
-                style: const TextStyle(color: Colors.white60, fontSize: 11),
+                style: const TextStyle(color: AppColors.onDark60, fontSize: 11),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -600,9 +601,9 @@ class _SocialDock extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: Colors.white.withAlpha(24),
+          color: AppColors.onDark.withAlpha(24),
           borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: Colors.white.withAlpha(28)),
+          border: Border.all(color: AppColors.onDark.withAlpha(28)),
         ),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Row(children: [
@@ -614,7 +615,7 @@ class _SocialDock extends StatelessWidget {
                 label: clip.isLiked ? 'Curtido' : 'Curtir',
                 value: clip.likeCount > 0 ? '${clip.likeCount}' : null,
                 active: clip.isLiked,
-                activeColor: const Color(0xFFFF4D6D),
+                activeColor: AppColors.prototypeDanger,
                 onTap: busy ? null : onLike,
               ),
             ),
@@ -626,7 +627,7 @@ class _SocialDock extends StatelessWidget {
                     : Icons.bookmark_border_rounded,
                 label: clip.isFavorited ? 'Salvo' : 'Salvar',
                 active: clip.isFavorited,
-                activeColor: const Color(0xFFF59E0B),
+                activeColor: AppColors.warning,
                 onTap: busy ? null : onFavorite,
               ),
             ),
@@ -636,7 +637,7 @@ class _SocialDock extends StatelessWidget {
                 icon: Icons.ios_share_rounded,
                 label: 'Link',
                 active: false,
-                activeColor: const Color(0xFF38BDF8),
+                activeColor: AppColors.info,
                 onTap: onCopy,
               ),
             ),
@@ -644,7 +645,7 @@ class _SocialDock extends StatelessWidget {
           if (clip.likeCount > 0) ...[
             const SizedBox(height: 8),
             Material(
-              color: Colors.white.withAlpha(16),
+              color: AppColors.onDark.withAlpha(16),
               borderRadius: BorderRadius.circular(18),
               child: InkWell(
                 onTap: onShowLikers,
@@ -662,7 +663,7 @@ class _SocialDock extends StatelessWidget {
                               ? '1 pessoa curtiu este replay'
                               : '${clip.likeCount} pessoas curtiram este replay',
                           style: const TextStyle(
-                            color: Colors.white,
+                            color: AppColors.onDark,
                             fontSize: 12,
                             fontWeight: FontWeight.w800,
                           ),
@@ -670,7 +671,7 @@ class _SocialDock extends StatelessWidget {
                         ),
                       ),
                       const Icon(Icons.keyboard_arrow_up_rounded,
-                          color: Colors.white70, size: 18),
+                          color: AppColors.onDark70, size: 18),
                     ],
                   ),
                 ),
@@ -702,9 +703,10 @@ class _SocialPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? activeColor : Colors.white70;
+    final color = active ? activeColor : AppColors.onDark70;
     return Material(
-      color: active ? activeColor.withAlpha(32) : Colors.white.withAlpha(18),
+      color:
+          active ? activeColor.withAlpha(32) : AppColors.onDark.withAlpha(18),
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         onTap: onTap,
@@ -776,14 +778,14 @@ class _LikerStack extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: [
-                    const Color(0xFFFF4D6D),
-                    const Color(0xFF8B5CF6),
-                    const Color(0xFF38BDF8),
+                    AppColors.prototypeDanger,
+                    AppColors.info,
+                    AppColors.info,
                   ][i],
-                  border: Border.all(color: const Color(0xFF06101F), width: 2),
+                  border: Border.all(color: AppColors.darkApp, width: 2),
                 ),
                 child: const Icon(Icons.favorite_rounded,
-                    size: 13, color: Colors.white),
+                    size: 13, color: AppColors.onDark),
               ),
             ),
         ],
@@ -819,7 +821,7 @@ class _LikersSheet extends StatelessWidget {
       builder: (context, controller) {
         return Container(
           decoration: const BoxDecoration(
-            color: Color(0xFF0F172A),
+            color: AppColors.lightText,
             borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           ),
           child: Column(
@@ -829,7 +831,7 @@ class _LikersSheet extends StatelessWidget {
                 width: 42,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.white24,
+                  color: AppColors.onDark24,
                   borderRadius: BorderRadius.circular(999),
                 ),
               ),
@@ -841,11 +843,11 @@ class _LikersSheet extends StatelessWidget {
                       width: 40,
                       height: 40,
                       decoration: const BoxDecoration(
-                        color: Color(0xFFFF4D6D),
+                        color: AppColors.prototypeDanger,
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.favorite_rounded,
-                          color: Colors.white),
+                          color: AppColors.onDark),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -855,7 +857,7 @@ class _LikersSheet extends StatelessWidget {
                           const Text(
                             'Curtido por',
                             style: TextStyle(
-                              color: Colors.white,
+                              color: AppColors.onDark,
                               fontSize: 18,
                               fontWeight: FontWeight.w900,
                             ),
@@ -865,7 +867,7 @@ class _LikersSheet extends StatelessWidget {
                                 ? '1 curtida neste replay'
                                 : '$likeCount curtidas neste replay',
                             style: const TextStyle(
-                              color: Colors.white60,
+                              color: AppColors.onDark60,
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
                             ),
@@ -882,14 +884,15 @@ class _LikersSheet extends StatelessWidget {
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(
-                        child: CircularProgressIndicator(color: Colors.white),
+                        child:
+                            CircularProgressIndicator(color: AppColors.onDark),
                       );
                     }
                     if (snapshot.hasError) {
                       return const Center(
                         child: Text(
                           'Nao foi possivel carregar as curtidas.',
-                          style: TextStyle(color: Colors.white70),
+                          style: TextStyle(color: AppColors.onDark70),
                         ),
                       );
                     }
@@ -899,7 +902,7 @@ class _LikersSheet extends StatelessWidget {
                       return const Center(
                         child: Text(
                           'Ainda nao ha curtidas neste replay.',
-                          style: TextStyle(color: Colors.white70),
+                          style: TextStyle(color: AppColors.onDark70),
                         ),
                       );
                     }
@@ -909,7 +912,7 @@ class _LikersSheet extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
                       itemCount: likers.length,
                       separatorBuilder: (_, __) => Divider(
-                        color: Colors.white.withAlpha(18),
+                        color: AppColors.onDark.withAlpha(18),
                         height: 1,
                       ),
                       itemBuilder: (context, index) {
@@ -918,11 +921,11 @@ class _LikersSheet extends StatelessWidget {
                           contentPadding: EdgeInsets.zero,
                           leading: CircleAvatar(
                             radius: 22,
-                            backgroundColor: const Color(0xFF1D4ED8),
+                            backgroundColor: AppColors.infoLight,
                             child: Text(
                               _initials(liker.userName),
                               style: const TextStyle(
-                                color: Colors.white,
+                                color: AppColors.onDark,
                                 fontWeight: FontWeight.w900,
                               ),
                             ),
@@ -930,7 +933,7 @@ class _LikersSheet extends StatelessWidget {
                           title: Text(
                             liker.userName,
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: AppColors.onDark,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
@@ -938,11 +941,11 @@ class _LikersSheet extends StatelessWidget {
                             width: 34,
                             height: 34,
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFF4D6D).withAlpha(28),
+                              color: AppColors.prototypeDanger.withAlpha(28),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(Icons.favorite_rounded,
-                                color: Color(0xFFFF4D6D), size: 18),
+                                color: AppColors.prototypeDanger, size: 18),
                           ),
                         );
                       },
@@ -967,7 +970,7 @@ class CircleIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withAlpha(20),
+      color: AppColors.onDark.withAlpha(20),
       shape: const CircleBorder(),
       child: IconButton(
         onPressed: onPressed,
@@ -1025,10 +1028,10 @@ class _ControlsOverlay extends StatelessWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Color(0xAA000000),
-            Color(0x00000000),
-            Color(0x00000000),
-            Color(0xAA000000),
+            AppColors.shadow67,
+            AppColors.transparent,
+            AppColors.transparent,
+            AppColors.shadow67,
           ],
           stops: [0.0, 0.25, 0.75, 1.0],
         ),
@@ -1055,7 +1058,7 @@ class _ControlsOverlay extends StatelessWidget {
                     width: 60,
                     height: 60,
                     child: CircularProgressIndicator(
-                        color: Colors.white, strokeWidth: 3))
+                        color: AppColors.onDark, strokeWidth: 3))
                 : _CtrlBtn(
                     icon: isPlaying
                         ? Icons.pause_rounded
@@ -1128,9 +1131,9 @@ class _SpeedBar extends StatelessWidget {
     return Container(
       height: 30,
       decoration: BoxDecoration(
-        color: const Color(0x55000000),
+        color: AppColors.shadow34,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white24),
+        border: Border.all(color: AppColors.onDark24),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         for (final s in _kSpeeds)
@@ -1140,7 +1143,7 @@ class _SpeedBar extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 9),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: speed == s ? Colors.white : Colors.transparent,
+                color: speed == s ? AppColors.onDark : AppColors.transparent,
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
@@ -1148,7 +1151,7 @@ class _SpeedBar extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: speed == s ? const Color(0xFF0F172A) : Colors.white70,
+                  color: speed == s ? AppColors.lightText : AppColors.onDark70,
                 ),
               ),
             ),
@@ -1183,11 +1186,10 @@ class _CtrlBtn extends StatelessWidget {
           width: size + 18,
           height: size + 18,
           decoration: BoxDecoration(
-            color:
-                highlighted ? const Color(0xAA34D399) : const Color(0x55000000),
+            color: highlighted ? AppColors.success67 : AppColors.shadow34,
             shape: BoxShape.circle,
           ),
-          child: Icon(icon, color: Colors.white, size: size),
+          child: Icon(icon, color: AppColors.onDark, size: size),
         ),
       ),
     );
@@ -1204,7 +1206,7 @@ class _ProgressBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFF0F172A),
+      color: AppColors.lightText,
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
       child: Row(children: [
         // Só o texto de posição precisa atualizar por tick.
@@ -1212,9 +1214,9 @@ class _ProgressBar extends StatelessWidget {
           valueListenable: ctrl,
           builder: (_, v, __) => Text(fmt(v.position),
               style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 11,
-                  fontFamily: 'monospace')),
+                color: AppColors.onDark54,
+                fontSize: 11,
+              )),
         ),
         Expanded(
           child: Padding(
@@ -1223,9 +1225,9 @@ class _ProgressBar extends StatelessWidget {
               ctrl,
               allowScrubbing: true,
               colors: const VideoProgressColors(
-                playedColor: Color(0xFF34D399),
-                bufferedColor: Colors.white24,
-                backgroundColor: Colors.white12,
+                playedColor: AppColors.primaryHover,
+                bufferedColor: AppColors.onDark24,
+                backgroundColor: AppColors.onDark12,
               ),
               padding: const EdgeInsets.symmetric(vertical: 8),
             ),
@@ -1233,7 +1235,9 @@ class _ProgressBar extends StatelessWidget {
         ),
         Text(fmt(ctrl.value.duration),
             style: const TextStyle(
-                color: Colors.white54, fontSize: 11, fontFamily: 'monospace')),
+              color: AppColors.onDark54,
+              fontSize: 11,
+            )),
       ]),
     );
   }
@@ -1248,17 +1252,17 @@ class _ErrorOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      const Icon(Icons.error_outline, color: Colors.white54, size: 48),
+      const Icon(Icons.error_outline, color: AppColors.onDark54, size: 48),
       const SizedBox(height: 12),
       const Text('Não foi possível carregar o vídeo.',
-          style: TextStyle(color: Colors.white70, fontSize: 13),
+          style: TextStyle(color: AppColors.onDark70, fontSize: 13),
           textAlign: TextAlign.center),
       const SizedBox(height: 8),
       TextButton.icon(
         onPressed: onRetry,
-        icon: const Icon(Icons.refresh, color: Colors.white70),
+        icon: const Icon(Icons.refresh, color: AppColors.onDark70),
         label: const Text('Tentar novamente',
-            style: TextStyle(color: Colors.white70)),
+            style: TextStyle(color: AppColors.onDark70)),
       ),
     ]);
   }

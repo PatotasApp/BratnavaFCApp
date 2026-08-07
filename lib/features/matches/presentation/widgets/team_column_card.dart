@@ -6,7 +6,7 @@ import '../../domain/entities/match_models.dart';
 
 /// Card de coluna de time exibido no MatchMaking (Step 3).
 class TeamColumnCard extends StatelessWidget {
-  final String teamLabel;        // "TIME A" / "TIME B"
+  final String teamLabel; // "TIME A" / "TIME B"
   final TeamColorInfo? color;
   final List<MatchPlayerInfo> players;
   final bool isAdmin;
@@ -27,9 +27,9 @@ class TeamColumnCard extends StatelessWidget {
     required this.teamLabel,
     required this.players,
     this.color,
-    this.isAdmin      = false,
-    this.loading      = false,
-    this.icons        = GroupIcons.defaults,
+    this.isAdmin = false,
+    this.loading = false,
+    this.icons = GroupIcons.defaults,
     this.onMoveToOther,
     this.onSwapSelect,
     this.swapCandidateId,
@@ -50,17 +50,23 @@ class TeamColumnCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
             decoration: BoxDecoration(
               color: teamColor.withValues(alpha: 0.15),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(12)),
               border: Border(bottom: BorderSide(color: teamColor, width: 2)),
             ),
             child: Row(
               children: [
-                Container(width: 12, height: 12, decoration: BoxDecoration(color: teamColor, shape: BoxShape.circle)),
+                Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                        color: teamColor, shape: BoxShape.circle)),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     color?.name ?? teamLabel,
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 13),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -92,13 +98,17 @@ class TeamColumnCard extends StatelessWidget {
             )
           else
             ...players.map((p) => _PlayerRow(
-              player:          p,
-              isAdmin:         isAdmin,
-              icons:           icons,
-              isSwapCandidate: swapCandidateId == p.playerId,
-              onMoveToOther:   onMoveToOther != null ? () => onMoveToOther!(p.playerId) : null,
-              onSwapSelect:    onSwapSelect  != null ? () => onSwapSelect!(p.playerId)  : null,
-            )),
+                  player: p,
+                  isAdmin: isAdmin,
+                  icons: icons,
+                  isSwapCandidate: swapCandidateId == p.playerId,
+                  onMoveToOther: onMoveToOther != null
+                      ? () => onMoveToOther!(p.playerId)
+                      : null,
+                  onSwapSelect: onSwapSelect != null
+                      ? () => onSwapSelect!(p.playerId)
+                      : null,
+                )),
         ],
       ),
     );
@@ -135,13 +145,14 @@ class _PlayerRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  player.playerName,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                  overflow: TextOverflow.ellipsis,
+                PlayerNameWithIcon(
+                  name: player.playerName,
+                  isGoalkeeper: player.isGoalkeeper,
+                  icons: icons,
+                  iconSize: 13,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w500),
                 ),
-                if (player.isGoalkeeper)
-                  renderGroupIcon(icons.goalkeeper, size: 12, color: AppColors.slate400),
               ],
             ),
           ),
@@ -149,7 +160,8 @@ class _PlayerRow extends StatelessWidget {
             // Botão mover para outro time
             if (onMoveToOther != null)
               IconButton(
-                icon: const Icon(Icons.swap_horiz, size: 18, color: AppColors.blue500),
+                icon: const Icon(Icons.swap_horiz,
+                    size: 18, color: AppColors.blue500),
                 onPressed: onMoveToOther,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),

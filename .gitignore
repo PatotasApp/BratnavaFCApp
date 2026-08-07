@@ -59,3 +59,9 @@ ios/Runner/GeneratedPluginRegistrant.*
 # ---------------------------
 .DS_Store
 Thumbs.db
+
+# Runtime/compiler crash and diagnostic dumps
+flutter_*.log
+**/hs_err_pid*.log
+**/replay_pid*.log
+**/java_pid*.hprof

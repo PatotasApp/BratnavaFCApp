@@ -236,7 +236,8 @@ class InlineGoalTracker extends StatelessWidget {
                                     width: 16,
                                     height: 16,
                                     child: CircularProgressIndicator(
-                                        strokeWidth: 2, color: Colors.white),
+                                        strokeWidth: 2,
+                                        color: AppColors.onDark),
                                   )
                                 : Text(isEditing
                                     ? 'Atualizar gol'
@@ -364,7 +365,7 @@ class _PlayerColumn extends StatelessWidget {
                       isSelected ? AppColors.emerald50 : AppColors.slate50,
                     ),
                     foregroundColor: WidgetStateProperty.all(
-                      isSelected ? AppColors.emerald700 : Colors.black,
+                      isSelected ? AppColors.emerald700 : AppColors.darkApp,
                     ),
                     overlayColor: WidgetStateProperty.all(
                       AppColors.emerald50.withValues(alpha: 0.55),
@@ -388,17 +389,18 @@ class _PlayerColumn extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       Expanded(
-                        child: Text(
-                          playerName,
+                        child: PlayerNameWithIcon(
+                          name: playerName,
+                          isGoalkeeper: p.isGoalkeeper,
+                          icons: icons,
+                          iconSize: 12,
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.left,
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                             color: isSelected
                                 ? AppColors.emerald700
-                                : Colors.black,
+                                : AppColors.darkApp,
                           ),
                         ),
                       ),
@@ -442,7 +444,7 @@ class _AssistGrid extends StatelessWidget {
               border: Border.all(
                   color:
                       isSelected ? AppColors.emerald500 : AppColors.slate200),
-              color: isSelected ? AppColors.emerald50 : Colors.white,
+              color: isSelected ? AppColors.emerald50 : AppColors.onDark,
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,

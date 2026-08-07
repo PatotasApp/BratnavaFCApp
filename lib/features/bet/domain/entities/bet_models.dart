@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
 
 // ── Category labels & multipliers ────────────────────────────────────────────
@@ -27,6 +28,7 @@ class BetPlayer {
   final String name;
   final int team; // 0=unassigned, 1=TeamA, 2=TeamB
   final bool isGuest;
+  final bool isGoalkeeper;
   final bool hasBet;
   final int? totalFichasWagered;
 
@@ -36,6 +38,7 @@ class BetPlayer {
     required this.name,
     required this.team,
     required this.isGuest,
+    this.isGoalkeeper = false,
     required this.hasBet,
     this.totalFichasWagered,
   });
@@ -46,6 +49,7 @@ class BetPlayer {
         name: j['name'] as String? ?? '',
         team: (j['team'] as num?)?.toInt() ?? 0,
         isGuest: j['isGuest'] as bool? ?? false,
+        isGoalkeeper: j['isGoalkeeper'] as bool? ?? false,
         hasBet: j['hasBet'] as bool? ?? false,
         totalFichasWagered: (j['totalFichasWagered'] as num?)?.toInt(),
       );
@@ -446,8 +450,8 @@ String formatSelectionValue(String category, String? value) {
 }
 
 Color fichasColor(int? v) {
-  if (v == null) return const Color(0xFF94A3B8); // slate-400
+  if (v == null) return AppColors.lightPlaceholder; // slate-400
   if (v > 0) return const Color(0xFF34D399); // emerald-400
-  if (v < 0) return const Color(0xFFF87171); // red-400
-  return const Color(0xFFFBBF24); // amber-400
+  if (v < 0) return AppColors.prototypeDanger; // red-400
+  return AppColors.warning; // amber-400
 }

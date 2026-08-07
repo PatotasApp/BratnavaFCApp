@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import '../../../../core/api/api_constants.dart';
@@ -19,6 +19,12 @@ class PaymentsRemoteDataSource {
   List<dynamic> _unwrapList(dynamic data) {
     final d = _unwrap(data);
     if (d is List) return d;
+    // Cobranças extras são paginadas pela API e chegam como
+    // `{ items: [...], page, pageSize, total }`.
+    if (d is Map) {
+      final items = d['items'] ?? d['Items'];
+      if (items is List) return items;
+    }
     return [];
   }
 
@@ -31,7 +37,7 @@ class PaymentsRemoteDataSource {
   /// Extrai o campo "message" da resposta de forma segura.
   /// Suporta: Map { "message": "..." }, String direta, ou null.
   String? _message(dynamic data) {
-    if (data is Map)    return data['message'] as String?;
+    if (data is Map) return data['message'] as String?;
     if (data is String) return data.isNotEmpty ? data : null;
     return null;
   }
@@ -43,7 +49,8 @@ class PaymentsRemoteDataSource {
     return MonthlyGrid.fromJson(_unwrapMap(res.data)!);
   }
 
-  Future<String?> upsertMonthly(String groupId, Map<String, dynamic> dto) async {
+  Future<String?> upsertMonthly(
+      String groupId, Map<String, dynamic> dto) async {
     final res = await _dio.put(ApiConstants.upsertMonthly(groupId), data: dto);
     _throwIfError(res.data);
     return _message(res.data);
@@ -51,8 +58,8 @@ class PaymentsRemoteDataSource {
 
   Future<Map<String, dynamic>?> getMonthlyProof(
       String groupId, String playerId, int year, int month) async {
-    final res = await _dio.get(
-        ApiConstants.monthlyProof(groupId, playerId, year, month));
+    final res = await _dio
+        .get(ApiConstants.monthlyProof(groupId, playerId, year, month));
     return _unwrapMap(res.data);
   }
 
@@ -76,8 +83,7 @@ class PaymentsRemoteDataSource {
 
   Future<String?> createExtraCharge(
       String groupId, Map<String, dynamic> dto) async {
-    final res =
-        await _dio.post(ApiConstants.extraCharges(groupId), data: dto);
+    final res = await _dio.post(ApiConstants.extraCharges(groupId), data: dto);
     _throwIfError(res.data);
     return _message(res.data);
   }
@@ -92,14 +98,14 @@ class PaymentsRemoteDataSource {
   Future<String?> bulkDiscountExtraCharge(
       String groupId, String chargeId, Map<String, dynamic> dto) async {
     final res = await _dio.post(
-        ApiConstants.extraChargeBulkDiscount(groupId, chargeId), data: dto);
+        ApiConstants.extraChargeBulkDiscount(groupId, chargeId),
+        data: dto);
     _throwIfError(res.data);
     return _message(res.data);
   }
 
-  Future<String?> upsertExtraChargePayment(
-      String groupId, String chargeId, String playerId,
-      Map<String, dynamic> dto) async {
+  Future<String?> upsertExtraChargePayment(String groupId, String chargeId,
+      String playerId, Map<String, dynamic> dto) async {
     final res = await _dio.put(
         ApiConstants.extraChargePayment(groupId, chargeId, playerId),
         data: dto);
@@ -109,8 +115,8 @@ class PaymentsRemoteDataSource {
 
   Future<Map<String, dynamic>?> getExtraChargeProof(
       String groupId, String chargeId, String playerId) async {
-    final res = await _dio.get(
-        ApiConstants.extraChargeProof(groupId, chargeId, playerId));
+    final res = await _dio
+        .get(ApiConstants.extraChargeProof(groupId, chargeId, playerId));
     return _unwrapMap(res.data);
   }
 
@@ -136,8 +142,10 @@ class PaymentsRemoteDataSource {
 
   // Initiate monthly payment collection for a given month
   // POST /api/groups/{groupId}/payments/monthly/{year}/{month}/initiate
-  Future<Map<String, dynamic>?> initiateMonth(String groupId, int year, int month) async {
-    final res = await _dio.post(ApiConstants.initiateMonth(groupId, year, month));
+  Future<Map<String, dynamic>?> initiateMonth(
+      String groupId, int year, int month) async {
+    final res =
+        await _dio.post(ApiConstants.initiateMonth(groupId, year, month));
     _throwIfError(res.data);
     return _unwrapMap(res.data);
   }
@@ -145,7 +153,8 @@ class PaymentsRemoteDataSource {
   // Check if month has been initiated
   // GET /api/groups/{groupId}/payments/monthly/{year}/{month}/is-initiated
   Future<bool> isMonthInitiated(String groupId, int year, int month) async {
-    final res = await _dio.get(ApiConstants.isMonthInitiated(groupId, year, month));
+    final res =
+        await _dio.get(ApiConstants.isMonthInitiated(groupId, year, month));
     final d = _unwrapMap(res.data);
     return d?['isInitiated'] as bool? ?? false;
   }
@@ -167,8 +176,10 @@ class PaymentsRemoteDataSource {
 
   // Get payment summary for a specific player (admin/financeiro)
   // GET /api/groups/{groupId}/payments/summary/{playerId}
-  Future<PaymentSummary?> getPlayerSummary(String groupId, String playerId) async {
-    final res = await _dio.get(ApiConstants.paymentSummaryByPlayer(groupId, playerId));
+  Future<PaymentSummary?> getPlayerSummary(
+      String groupId, String playerId) async {
+    final res =
+        await _dio.get(ApiConstants.paymentSummaryByPlayer(groupId, playerId));
     final d = _unwrapMap(res.data);
     if (d == null) return null;
     return PaymentSummary.fromJson(d);
@@ -190,8 +201,8 @@ class PaymentsRemoteDataSource {
   static Future<({String base64, String fileName, String mimeType})>
       fileToBase64(String path, String name) async {
     final bytes = await File(path).readAsBytes();
-    final b64   = base64Encode(bytes);
-    final mime  = _guessMime(name);
+    final b64 = base64Encode(bytes);
+    final mime = _guessMime(name);
     return (base64: b64, fileName: name, mimeType: mime);
   }
 
@@ -206,10 +217,14 @@ class PaymentsRemoteDataSource {
     final ext = name.split('.').last.toLowerCase();
     switch (ext) {
       case 'jpg':
-      case 'jpeg': return 'image/jpeg';
-      case 'png':  return 'image/png';
-      case 'pdf':  return 'application/pdf';
-      default:     return 'image/jpeg';
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'pdf':
+        return 'application/pdf';
+      default:
+        return 'image/jpeg';
     }
   }
 }

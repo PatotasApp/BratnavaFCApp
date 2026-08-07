@@ -24,14 +24,17 @@ class DashboardRemoteDataSource {
 
   Future<CurrentMatch?> fetchCurrentMatch(String groupId) async {
     try {
-      // Step 1 — lightweight endpoint returns only id, dates, colorIds.
-      final res  = await _dio.get(ApiConstants.currentMatch(groupId));
-      final stub = unwrapMap(res.data);
-      if (stub == null) return null;
+      // Passo 1 — `upcoming` devolve os headers das partidas em aberto num
+      // payload pequeno. Antes usávamos `/current`, que retorna o
+      // MatchDetailsDto inteiro só para descobrirmos o id — e ainda assim
+      // buscávamos `/details` logo depois. Eram dois payloads gordos para
+      // montar um card. É o mesmo caminho do site.
+      final res = await _dio.get(ApiConstants.upcomingMatches(groupId));
+      final headers = unwrapList(res.data);
+      if (headers.isEmpty) return null;
 
-      // The stub uses "id", not "matchId".
-      final matchId =
-          stub['id'] as String? ?? stub['matchId'] as String? ?? '';
+      final stub = headers.first as Map<String, dynamic>;
+      final matchId = stub['matchId'] as String? ?? stub['id'] as String? ?? '';
       if (matchId.isEmpty) return null;
 
       // Step 2 — full details: teamAColor / teamBColor objects, players, status.

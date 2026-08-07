@@ -29,13 +29,13 @@ final myProfileProvider = FutureProvider.autoDispose<AppUser>((ref) async {
     // Fallback: construct AppUser from account data
     final parts = account.name.trim().split(' ');
     return AppUser(
-      id:        account.userId,
+      id: account.userId,
       firstName: parts.isNotEmpty ? parts.first : '',
-      lastName:  parts.length > 1 ? parts.skip(1).join(' ') : '',
-      email:     account.email,
-      userName:  account.email.split('@').first,
-      roles:     account.roles,
-      isActive:  true,
+      lastName: parts.length > 1 ? parts.skip(1).join(' ') : '',
+      email: account.email,
+      userName: account.email.split('@').first,
+      roles: account.roles,
+      isActive: true,
     );
   }
 });

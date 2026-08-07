@@ -200,8 +200,14 @@ final _pollsDsProvider = Provider<PollsRemoteDataSource>(
 /// Não usa autoDispose — precisa sobreviver à navegação entre abas para que
 /// Histórico, Replays e outras telas encontrem o grupo do jogador sem refetch.
 final myPlayersProvider = FutureProvider<List<MyPlayer>>((ref) {
-  // Re-fetch sempre que a conta ativa mudar.
-  ref.watch(accountStoreProvider.select((s) => s.activeAccountId));
+  // Re-fetch também quando a mesma conta recebe uma nova sessão. Observar só
+  // o userId mantinha em cache o erro/resultado vazio obtido com token vencido
+  // quando o usuário fazia login novamente na mesma conta.
+  ref.watch(
+    accountStoreProvider.select(
+      (s) => (s.activeAccountId, s.activeAccount?.accessToken),
+    ),
+  );
   final ds = ref.watch(_dashboardDsProvider);
   return ds.fetchMyPlayers();
 });
@@ -245,15 +251,39 @@ final activePlayerProvider = Provider<MyPlayer?>((ref) {
   final players = playersAsync.valueOrNull ?? [];
   if (players.isEmpty) return null;
 
+  // Restringe ao grupo ativo antes de qualquer coisa.
+  //
+  // Esta é a correção do bug de "meia patota": o dashboard resolve o grupo por
+  // `account.activeGroupId`, mas o jogador vinha de `activePlayerIdProvider`,
+  // que sobrevive à troca de patota de propósito. Quem participa de mais de
+  // uma acabava com a identidade e as estatísticas de uma patota ao lado da
+  // partida e dos pagamentos de outra — cada metade da tela vinda de um lugar.
+  final activeGroupId = _normalizeId(accountActive?.activeGroupId);
+  final inGroup = activeGroupId.isEmpty
+      ? const <MyPlayer>[]
+      : players.where((p) => _normalizeId(p.groupId) == activeGroupId).toList();
+
+  // Sem ninguém no grupo ativo, cai na lista inteira em vez de devolver `null`.
+  // A primeira versão desta correção retornava null aqui e derrubava o app
+  // todo para "Nenhuma patota ativa" — o `activeGroupId` da conta nem sempre
+  // corresponde a um jogador em `myPlayers`. Quem resolve a incoerência é o
+  // consumidor, tirando o grupo do próprio jogador.
+  final scoped = inGroup.isNotEmpty ? inGroup : players;
+
   final explicitId = manualId ?? accountActive?.activePlayerId;
   if (explicitId != null) {
-    final matches = players.where((p) => p.playerId == explicitId);
-    return matches.isEmpty ? null : matches.first;
+    final matches = scoped.where((p) => p.playerId == explicitId);
+    // O id explícito pode ser de outra patota (seleção antiga). Nesse caso
+    // cai no primeiro do escopo, em vez de devolver null.
+    if (matches.isNotEmpty) return matches.first;
   }
 
-  // Sem ID explícito salvo: usa o primeiro jogador disponível.
-  return players.first;
+  return scoped.first;
 });
+
+/// GUIDs chegam com caixa e chaves diferentes conforme o endpoint.
+String _normalizeId(String? id) =>
+    (id ?? '').trim().toLowerCase().replaceAll(RegExp(r'[{}]'), '');
 
 // ── Próximas partidas: headers simples ────────────────────────────────────────
 
@@ -270,8 +300,17 @@ final upcomingMatchesFullProvider = FutureProvider.autoDispose
   final pollsDs = ref.read(_pollsDsProvider);
   final headers = await matchDs.fetchUpcomingMatches(groupId);
   if (headers.isEmpty) return [];
-  return Future.wait(
-      headers.map((h) => _loadMatchDetails(matchDs, pollsDs, h)));
+
+  // O site usa `Promise.allSettled` aqui, e por um motivo: `Future.wait`
+  // rejeita no primeiro erro. Uma única partida cujo `/details` falha
+  // derrubava o card inteiro para "Não foi possível carregar", mesmo com as
+  // outras carregadas. Agora cada partida falha sozinha e sai da lista.
+  final results = await Future.wait(
+    headers.map((h) => _loadMatchDetails(matchDs, pollsDs, h)
+        .then<UpcomingMatchDetails?>((v) => v)
+        .catchError((_) => null)),
+  );
+  return results.whereType<UpcomingMatchDetails>().toList();
 });
 
 // ── Próximos eventos (dashboard carrossel) ────────────────────────────────────

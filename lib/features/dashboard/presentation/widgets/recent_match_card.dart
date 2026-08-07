@@ -38,7 +38,7 @@ class RecentMatchCard extends ConsumerWidget {
           'Vitória',
           AppColors.emerald700,
           AppColors.emerald50,
-          const Color(0xFFA7F3D0)
+          AppColors.emerald200
         ),
       MatchOutcome.draw => (
           'Empate',
@@ -50,7 +50,7 @@ class RecentMatchCard extends ConsumerWidget {
           'Derrota',
           AppColors.rose600,
           AppColors.rose50,
-          const Color(0xFFFFCDD2)
+          AppColors.rose200
         ),
     };
 
@@ -69,7 +69,7 @@ class RecentMatchCard extends ConsumerWidget {
       onTap: () => context.push('/app/history/$groupId/${match.matchId}'),
       child: Container(
         decoration: BoxDecoration(
-          color: isDark ? AppColors.slate900 : Colors.white,
+          color: isDark ? AppColors.slate900 : AppColors.onDark,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: borderColor),
         ),
@@ -218,7 +218,7 @@ class RecentMatchCard extends ConsumerWidget {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 7, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFFFBEB),
+                                  color: AppColors.amber50,
                                   borderRadius: BorderRadius.circular(20),
                                   border: Border.all(color: AppColors.amber200),
                                 ),
@@ -312,7 +312,7 @@ class RecentMatchCard extends ConsumerWidget {
                               Text(
                                 '${match.myTeamGoals}',
                                 style: const TextStyle(
-                                  color: Colors.white,
+                                  color: AppColors.onDark,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -330,7 +330,7 @@ class RecentMatchCard extends ConsumerWidget {
                               Text(
                                 '${match.opponentGoals}',
                                 style: const TextStyle(
-                                  color: Colors.white,
+                                  color: AppColors.onDark,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -384,8 +384,9 @@ class _ColorDot extends StatelessWidget {
         shape: BoxShape.circle,
         color: color,
         border: Border.all(
-          color:
-              isWhite ? AppColors.slate300 : Colors.white.withValues(alpha: .3),
+          color: isWhite
+              ? AppColors.slate300
+              : AppColors.onDark.withValues(alpha: .3),
           width: 1,
         ),
       ),

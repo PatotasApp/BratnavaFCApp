@@ -1,6 +1,7 @@
 import 'dart:math' show min;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
@@ -21,9 +22,9 @@ double _normalizeWR(double v) {
 
 /// Green ≥60 · Amber 45–59 · Red <45  (mirrors site's wrColor)
 Color _wrColor(double v) {
-  if (v >= 60) return const Color(0xFF16A34A);
-  if (v >= 45) return const Color(0xFFD97706);
-  return const Color(0xFFDC2626);
+  if (v >= 60) return AppColors.primaryPressed;
+  if (v >= 45) return AppColors.warningLight;
+  return AppColors.prototypeDanger;
 }
 
 String _pct(double v) => '${v.toStringAsFixed(0)}%';
@@ -172,7 +173,10 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
   Widget build(BuildContext context) {
     final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
-    final groupId = account?.activeGroupId ?? activePlayer?.groupId;
+    // O jogador manda no grupo: `activeGroupId` da conta pode apontar
+    // para uma patota sem jogador nosso, e aí toda rota por grupo
+    // responde 403. Ver dashboard_page para o diagnóstico completo.
+    final groupId = activePlayer?.groupId ?? account?.activeGroupId;
 
     // Enquanto myPlayersProvider carrega, mostra spinner em vez de "sem grupo"
     if (groupId == null || groupId.isEmpty) {
@@ -180,7 +184,13 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
       if (playersAsync.isLoading) {
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       }
-      return const Scaffold(body: _NoGroupState());
+      return Scaffold(
+        appBar: AppBar(
+          leading: const BackButton(),
+          title: const Text('Estatísticas'),
+        ),
+        body: const _NoGroupState(),
+      );
     }
 
     final async = ref.watch(visualStatsProvider(groupId));
@@ -256,7 +266,7 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
                               showModalBottomSheet(
                                 context: context,
                                 isScrollControlled: true,
-                                backgroundColor: Colors.transparent,
+                                backgroundColor: AppColors.transparent,
                                 builder: (_) => _PlayerDetailSheet(
                                   player: player,
                                   icons: icons,
@@ -311,7 +321,11 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A)],
+          colors: [
+            AppColors.lightText,
+            AppColors.darkCard,
+            AppColors.lightText
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -325,71 +339,98 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
             children: [
               Row(
                 children: [
+                  // O iconButtonTheme do app pinta fundo `surface` + borda, que
+                  // no tema claro é branco. Sobre esta faixa escura o botão
+                  // virava um quadrado branco com o ícone branco por cima —
+                  // invisível. Aqui a faixa é sempre escura, então o botão
+                  // precisa ser transparente com ícone claro.
+                  IconButton(
+                    onPressed: () {
+                      if (context.canPop()) {
+                        context.pop();
+                      } else {
+                        context.go('/app');
+                      }
+                    },
+                    tooltip: 'Voltar',
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppColors.onDark.withAlpha(20),
+                      foregroundColor: AppColors.onDark,
+                      side: BorderSide(color: AppColors.onDark.withAlpha(40)),
+                    ),
+                    icon: const Icon(Icons.arrow_back_rounded),
+                  ),
+                  const SizedBox(width: 8),
                   Container(
-                    width: 52,
-                    height: 52,
+                    width: 44,
+                    height: 44,
                     decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(25),
+                      color: AppColors.onDark.withAlpha(25),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withAlpha(50)),
+                      border: Border.all(color: AppColors.onDark.withAlpha(50)),
                     ),
                     child: const Icon(Icons.bar_chart_rounded,
-                        size: 24, color: Colors.white),
+                        size: 24, color: AppColors.onDark),
                   ),
                   const SizedBox(width: 14),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Estatísticas',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.5,
-                          )),
-                      const SizedBox(height: 2),
-                      Text(subtitle,
-                          style: TextStyle(
-                              color: Colors.white.withAlpha(128),
-                              fontSize: 12)),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Estatísticas',
+                            style: TextStyle(
+                              color: AppColors.onDark,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.5,
+                            )),
+                        const SizedBox(height: 2),
+                        Text(subtitle,
+                            style: TextStyle(
+                                color: AppColors.onDark.withAlpha(128),
+                                fontSize: 12)),
+                      ],
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 14),
               // Tab buttons
-              Row(
-                children: [
-                  if (showGeneral) ...[
-                    _tabBtn('Geral', Icons.bar_chart_rounded,
-                        selected: _viewMode == _StatsViewMode.general,
-                        onTap: () => setState(() {
-                              _viewMode = _StatsViewMode.general;
-                              if (_sortKey == _SortKey.points) {
-                                _sortKey = _SortKey.winRate;
-                              }
-                            })),
-                    const SizedBox(width: 6),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    if (showGeneral) ...[
+                      _tabBtn('Geral', Icons.bar_chart_rounded,
+                          selected: _viewMode == _StatsViewMode.general,
+                          onTap: () => setState(() {
+                                _viewMode = _StatsViewMode.general;
+                                if (_sortKey == _SortKey.points) {
+                                  _sortKey = _SortKey.winRate;
+                                }
+                              })),
+                      const SizedBox(width: 6),
+                    ],
+                    if (showPerMatch) ...[
+                      _tabBtn('Por partida', Icons.person_outline_rounded,
+                          selected: _viewMode == _StatsViewMode.perMatch,
+                          onTap: () => setState(() {
+                                _viewMode = _StatsViewMode.perMatch;
+                                if (_sortKey == _SortKey.points) {
+                                  _sortKey = _SortKey.winRate;
+                                }
+                              })),
+                      const SizedBox(width: 6),
+                    ],
+                    if (showClassification)
+                      _tabBtn('Classificação', Icons.leaderboard_outlined,
+                          selected: _viewMode == _StatsViewMode.classification,
+                          onTap: () => setState(() {
+                                _viewMode = _StatsViewMode.classification;
+                                _sortKey = _SortKey.points;
+                              })),
                   ],
-                  if (showPerMatch) ...[
-                    _tabBtn('Por partida', Icons.person_outline_rounded,
-                        selected: _viewMode == _StatsViewMode.perMatch,
-                        onTap: () => setState(() {
-                              _viewMode = _StatsViewMode.perMatch;
-                              if (_sortKey == _SortKey.points) {
-                                _sortKey = _SortKey.winRate;
-                              }
-                            })),
-                    const SizedBox(width: 6),
-                  ],
-                  if (showClassification)
-                    _tabBtn('Classificacao', Icons.leaderboard_outlined,
-                        selected: _viewMode == _StatsViewMode.classification,
-                        onTap: () => setState(() {
-                              _viewMode = _StatsViewMode.classification;
-                              _sortKey = _SortKey.points;
-                            })),
-                ],
+                ),
               ),
             ],
           ),
@@ -405,8 +446,9 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          constraints: const BoxConstraints(minHeight: 44),
           decoration: BoxDecoration(
-            color: selected ? Colors.white : Colors.white.withAlpha(25),
+            color: selected ? AppColors.onDark : AppColors.onDark.withAlpha(25),
             borderRadius: BorderRadius.circular(9),
           ),
           child: Row(
@@ -416,7 +458,7 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
                   size: 13,
                   color: selected
                       ? AppColors.slate900
-                      : Colors.white.withAlpha(200)),
+                      : AppColors.onDark.withAlpha(200)),
               const SizedBox(width: 5),
               Text(label,
                   style: TextStyle(
@@ -424,7 +466,7 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
                     fontWeight: FontWeight.w600,
                     color: selected
                         ? AppColors.slate900
-                        : Colors.white.withAlpha(200),
+                        : AppColors.onDark.withAlpha(200),
                   )),
             ],
           ),
@@ -661,7 +703,7 @@ class _RankingTable extends StatelessWidget {
             return GestureDetector(
               onTap: () => onTap(p.playerId),
               child: Container(
-                color: Colors.transparent,
+                color: AppColors.transparent,
                 child: Column(
                   children: [
                     Container(
@@ -694,14 +736,16 @@ class _RankingTable extends StatelessWidget {
                             child: Padding(
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               child: Row(children: [
-                                if (p.isGoalkeeper) ...[
-                                  renderGroupIcon(icons.goalkeeper,
-                                      size: 12,
-                                      color: isDark
-                                          ? AppColors.slate400
-                                          : AppColors.slate500),
-                                  const SizedBox(width: 4),
-                                ],
+                                renderGroupIcon(
+                                  p.isGoalkeeper
+                                      ? icons.goalkeeper
+                                      : icons.player,
+                                  size: 12,
+                                  color: isDark
+                                      ? AppColors.slate400
+                                      : AppColors.slate500,
+                                ),
+                                const SizedBox(width: 4),
                                 Flexible(
                                     child: Text(
                                   p.name,
@@ -710,13 +754,13 @@ class _RankingTable extends StatelessWidget {
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
                                       color: isDark
-                                          ? Colors.white
+                                          ? AppColors.onDark
                                           : AppColors.slate900),
                                 )),
                                 if (p.mvps > 0) ...[
                                   const SizedBox(width: 3),
                                   renderGroupIcon(icons.mvp,
-                                      size: 10, color: const Color(0xFFFBBF24)),
+                                      size: 10, color: AppColors.warning),
                                 ],
                                 if (!p.isActive) ...[
                                   const SizedBox(width: 4),
@@ -759,7 +803,7 @@ class _RankingTable extends StatelessWidget {
                                 TextSpan(
                                     text: '${p.wins}',
                                     style: const TextStyle(
-                                        color: Color(0xFF16A34A),
+                                        color: AppColors.primaryPressed,
                                         fontWeight: FontWeight.w700)),
                                 TextSpan(
                                     text: '/',
@@ -782,7 +826,7 @@ class _RankingTable extends StatelessWidget {
                                 TextSpan(
                                     text: '${p.losses}',
                                     style: const TextStyle(
-                                        color: Color(0xFFEF4444),
+                                        color: AppColors.prototypeDanger,
                                         fontWeight: FontWeight.w700)),
                               ],
                             ))),
@@ -805,13 +849,13 @@ class _RankingTable extends StatelessWidget {
                                       children: [
                                           renderGroupIcon(icons.mvp,
                                               size: 11,
-                                              color: const Color(0xFFF59E0B)),
+                                              color: AppColors.warning),
                                           const SizedBox(width: 2),
                                           Text('${p.mvps}',
                                               style: const TextStyle(
                                                 fontSize: 11,
                                                 fontWeight: FontWeight.w600,
-                                                color: Color(0xFFF59E0B),
+                                                color: AppColors.warning,
                                                 fontFeatures: [
                                                   FontFeature.tabularFigures()
                                                 ],
@@ -869,7 +913,7 @@ class _RankingTable extends StatelessWidget {
                                         style: const TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.w600,
-                                            color: Color(0xFFEF4444),
+                                            color: AppColors.prototypeDanger,
                                             fontFeatures: [
                                               FontFeature.tabularFigures()
                                             ]))
@@ -912,12 +956,12 @@ class _RankingListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final wr = _normalizeWR(player.winRate);
-    final medal = rank == 1
-        ? '🥇'
+    final rankIcon = rank == 1
+        ? icons.rank1
         : rank == 2
-            ? '🥈'
+            ? icons.rank2
             : rank == 3
-                ? '🥉'
+                ? icons.rank3
                 : null;
 
     return InkWell(
@@ -953,9 +997,9 @@ class _RankingListItem extends StatelessWidget {
               // Medal (top 3) or blank space
               SizedBox(
                 width: 18,
-                child: medal != null
-                    ? Text(medal, style: const TextStyle(fontSize: 13))
-                    : null,
+                child: rankIcon == null
+                    ? null
+                    : renderGroupIcon(rankIcon, size: 13),
               ),
               const SizedBox(width: 6),
               // Name + inline stats
@@ -964,14 +1008,12 @@ class _RankingListItem extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(children: [
-                      if (player.isGoalkeeper) ...[
-                        renderGroupIcon(icons.goalkeeper,
-                            size: 11,
-                            color: isDark
-                                ? AppColors.slate400
-                                : AppColors.slate500),
-                        const SizedBox(width: 3),
-                      ],
+                      renderGroupIcon(
+                        player.isGoalkeeper ? icons.goalkeeper : icons.player,
+                        size: 11,
+                        color: isDark ? AppColors.slate400 : AppColors.slate500,
+                      ),
+                      const SizedBox(width: 3),
                       Flexible(
                           child: Text(
                         player.name,
@@ -979,13 +1021,13 @@ class _RankingListItem extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: isDark ? Colors.white : AppColors.slate900,
+                          color: isDark ? AppColors.onDark : AppColors.slate900,
                         ),
                       )),
                       if (player.mvps > 0) ...[
                         const SizedBox(width: 4),
                         renderGroupIcon(icons.mvp,
-                            size: 11, color: const Color(0xFFFBBF24)),
+                            size: 11, color: AppColors.warning),
                       ],
                       if (!player.isActive) ...[
                         const SizedBox(width: 4),
@@ -1018,7 +1060,7 @@ class _RankingListItem extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w900,
-                          color: isDark ? Colors.white : AppColors.slate900,
+                          color: isDark ? AppColors.onDark : AppColors.slate900,
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
@@ -1048,53 +1090,111 @@ class _InlineStats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dim = isDark ? AppColors.slate500 : AppColors.slate400;
-    return RichText(
-      text: TextSpan(
-        style: TextStyle(
-          fontSize: 10,
-          color: dim,
-          fontFeatures: const [FontFeature.tabularFigures()],
+    final dim = isDark ? AppColors.slate300 : AppColors.slate600;
+    return Wrap(
+      spacing: 7,
+      runSpacing: 3,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        RichText(
+          text: TextSpan(
+            style: TextStyle(
+              fontSize: 10,
+              color: dim,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+            children: [
+              TextSpan(text: '${player.gamesPlayed}j '),
+              TextSpan(
+                text: '${player.wins}V',
+                style: const TextStyle(
+                  color: AppColors.primaryPressed,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              TextSpan(text: ' ${player.ties}E '),
+              TextSpan(
+                text: '${player.losses}D',
+                style: const TextStyle(
+                  color: AppColors.prototypeDanger,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
         ),
-        children: classificationMode
-            ? [
-                TextSpan(text: '${player.gamesPlayed}j '),
-                TextSpan(
-                    text: '${player.wins}V',
-                    style: const TextStyle(
-                        color: Color(0xFF16A34A), fontWeight: FontWeight.w600)),
-                TextSpan(text: ' ${player.ties}E '),
-                TextSpan(
-                    text: '${player.losses}D',
-                    style: const TextStyle(
-                        color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
-                TextSpan(text: ' Â· âš½${_rankText(player.goalsRank)}'),
-                TextSpan(text: ' Â· ðŸ¤${_rankText(player.assistsRank)}'),
-                TextSpan(text: ' Â· MVP ${_rankText(player.mvpsRank)}'),
-                TextSpan(text: ' Â· Votos ${_rankText(player.mvpVotesRank)}'),
-                TextSpan(
-                    text:
-                        ' Â· GC ${player.ownGoals > 0 ? _rankText(player.ownGoalsRank) : 'â€”'}'),
-              ]
-            : [
-                TextSpan(text: '${player.gamesPlayed}j '),
-                TextSpan(
-                    text: '${player.wins}V',
-                    style: const TextStyle(
-                        color: Color(0xFF16A34A), fontWeight: FontWeight.w600)),
-                TextSpan(text: ' ${player.ties}E '),
-                TextSpan(
-                    text: '${player.losses}D',
-                    style: const TextStyle(
-                        color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
-                if (player.mvps > 0) TextSpan(text: ' · 🏆${player.mvps}'),
-                if (player.goals > 0) TextSpan(text: ' · ⚽${player.goals}'),
-                if (player.assists > 0)
-                  TextSpan(text: ' · 🤝${player.assists}'),
-                if (player.mvpVotes > 0)
-                  TextSpan(text: ' · ${player.mvpVotes} votos'),
-              ],
-      ),
+        if (classificationMode) ...[
+          _InlineIconStat(
+            icon: icons.goal,
+            value: _rankText(player.goalsRank),
+            color: dim,
+          ),
+          _InlineIconStat(
+            icon: icons.assist,
+            value: _rankText(player.assistsRank),
+            color: dim,
+          ),
+          _InlineIconStat(
+            icon: icons.mvp,
+            value: _rankText(player.mvpsRank),
+            color: dim,
+          ),
+          _InlineIconStat(
+            icon: icons.ownGoal,
+            value: player.ownGoals > 0 ? _rankText(player.ownGoalsRank) : '—',
+            color: dim,
+          ),
+        ] else ...[
+          if (player.mvps > 0)
+            _InlineIconStat(
+              icon: icons.mvp,
+              value: '${player.mvps}',
+              color: dim,
+            ),
+          if (player.goals > 0)
+            _InlineIconStat(
+              icon: icons.goal,
+              value: '${player.goals}',
+              color: dim,
+            ),
+          if (player.assists > 0)
+            _InlineIconStat(
+              icon: icons.assist,
+              value: '${player.assists}',
+              color: dim,
+            ),
+          if (player.ownGoals > 0)
+            _InlineIconStat(
+              icon: icons.ownGoal,
+              value: '${player.ownGoals}',
+              color: AppColors.prototypeDanger,
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+class _InlineIconStat extends StatelessWidget {
+  final String icon;
+  final String value;
+  final Color color;
+
+  const _InlineIconStat({
+    required this.icon,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        renderGroupIcon(icon, size: 9, color: color),
+        const SizedBox(width: 2),
+        Text(value, style: TextStyle(fontSize: 10, color: color)),
+      ],
     );
   }
 }
@@ -1127,7 +1227,7 @@ class _PlayersContent extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => _PlayerDetailSheet(
         player: player,
         icons: icons,
@@ -1212,7 +1312,7 @@ class _PlayerDetailSheetState extends State<_PlayerDetailSheet> {
     return Container(
       constraints: BoxConstraints(maxHeight: maxH),
       decoration: BoxDecoration(
-        color: widget.isDark ? AppColors.slate900 : Colors.white,
+        color: widget.isDark ? AppColors.slate900 : AppColors.onDark,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
@@ -1311,13 +1411,12 @@ class _PlayerListItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(children: [
-                  if (player.isGoalkeeper) ...[
-                    renderGroupIcon(icons.goalkeeper,
-                        size: 11,
-                        color:
-                            isDark ? AppColors.slate400 : AppColors.slate500),
-                    const SizedBox(width: 4),
-                  ],
+                  renderGroupIcon(
+                    player.isGoalkeeper ? icons.goalkeeper : icons.player,
+                    size: 11,
+                    color: isDark ? AppColors.slate400 : AppColors.slate500,
+                  ),
+                  const SizedBox(width: 4),
                   Flexible(
                       child: Text(
                     player.name,
@@ -1325,7 +1424,7 @@ class _PlayerListItem extends StatelessWidget {
                     style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white : AppColors.slate900),
+                        color: isDark ? AppColors.onDark : AppColors.slate900),
                   )),
                 ]),
                 Text(
@@ -1378,7 +1477,7 @@ class _PlayerDetailCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate800 : Colors.white,
+        color: isDark ? AppColors.slate800 : AppColors.onDark,
         borderRadius: BorderRadius.circular(14),
         border:
             Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
@@ -1402,7 +1501,7 @@ class _PlayerDetailCard extends StatelessWidget {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: isDark ? Colors.white : AppColors.slate900,
+                        color: isDark ? AppColors.onDark : AppColors.slate900,
                         shape: BoxShape.circle,
                       ),
                       child: Center(
@@ -1413,7 +1512,7 @@ class _PlayerDetailCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w900,
-                          color: isDark ? AppColors.slate900 : Colors.white,
+                          color: isDark ? AppColors.slate900 : AppColors.onDark,
                         ),
                       )),
                     ),
@@ -1428,12 +1527,21 @@ class _PlayerDetailCard extends StatelessWidget {
                           runSpacing: 4,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
+                            renderGroupIcon(
+                              player.isGoalkeeper
+                                  ? icons.goalkeeper
+                                  : icons.player,
+                              size: 15,
+                              color: isDark
+                                  ? AppColors.slate300
+                                  : AppColors.slate600,
+                            ),
                             Text(player.name,
                                 style: TextStyle(
                                   fontSize: 17,
                                   fontWeight: FontWeight.w800,
                                   color: isDark
-                                      ? Colors.white
+                                      ? AppColors.onDark
                                       : AppColors.slate900,
                                   letterSpacing: -0.3,
                                 )),
@@ -1441,9 +1549,9 @@ class _PlayerDetailCard extends StatelessWidget {
                               _pillBadge(
                                 label: 'Goleiro',
                                 icon: Icons.shield_outlined,
-                                bg: const Color(0xFFFEF3C7),
-                                fg: const Color(0xFFB45309),
-                                border: const Color(0xFFFDE68A),
+                                bg: AppColors.amber50,
+                                fg: AppColors.warningLight,
+                                border: AppColors.amber200,
                               ),
                             if (!player.isActive)
                               _pillBadge(
@@ -1472,7 +1580,7 @@ class _PlayerDetailCard extends StatelessWidget {
                                     ? AppColors.slate300
                                     : AppColors.slate600),
                             _statChip(
-                                '${player.wins}V', const Color(0xFF16A34A),
+                                '${player.wins}V', AppColors.primaryPressed,
                                 bold: true),
                             _statChip(
                                 '${player.ties}E',
@@ -1480,16 +1588,16 @@ class _PlayerDetailCard extends StatelessWidget {
                                     ? AppColors.slate400
                                     : AppColors.slate500),
                             _statChip(
-                                '${player.losses}D', const Color(0xFFEF4444),
+                                '${player.losses}D', AppColors.prototypeDanger,
                                 bold: true),
                             if (player.mvps > 0)
                               Row(mainAxisSize: MainAxisSize.min, children: [
                                 renderGroupIcon(icons.mvp,
-                                    size: 11, color: const Color(0xFFF59E0B)),
+                                    size: 11, color: AppColors.warning),
                                 const SizedBox(width: 3),
                                 _statChip(
                                     '${player.mvps} MVP${player.mvps > 1 ? 's' : ''}',
-                                    const Color(0xFFF59E0B),
+                                    AppColors.warning,
                                     bold: true),
                               ]),
                             if (player.goals > 0)
@@ -1523,10 +1631,10 @@ class _PlayerDetailCard extends StatelessWidget {
                             if (player.ownGoals > 0)
                               Row(mainAxisSize: MainAxisSize.min, children: [
                                 renderGroupIcon(icons.ownGoal,
-                                    size: 11, color: const Color(0xFFEF4444)),
+                                    size: 11, color: AppColors.prototypeDanger),
                                 const SizedBox(width: 3),
                                 _statChip('${player.ownGoals} GC',
-                                    const Color(0xFFEF4444)),
+                                    AppColors.prototypeDanger),
                               ]),
                           ],
                         ),
@@ -1673,7 +1781,8 @@ class _SynergyCard extends StatelessWidget {
                       value: minTogether,
                       isDense: true,
                       underline: const SizedBox.shrink(),
-                      dropdownColor: isDark ? AppColors.slate800 : Colors.white,
+                      dropdownColor:
+                          isDark ? AppColors.slate800 : AppColors.onDark,
                       style: TextStyle(
                         fontSize: 12,
                         color: isDark ? AppColors.slate100 : AppColors.slate900,
@@ -1755,7 +1864,7 @@ class _SynergyCard extends StatelessWidget {
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
                                 color: isDark
-                                    ? Colors.white
+                                    ? AppColors.onDark
                                     : AppColors.slate900)),
                         Text('${s.matchesTogether}j · ${s.winsTogether}V',
                             style: TextStyle(
@@ -1814,7 +1923,7 @@ class _SynergyPairRow extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
-                      color: isDark ? Colors.white : AppColors.slate900))),
+                      color: isDark ? AppColors.onDark : AppColors.slate900))),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6),
             child: Text('+',
@@ -1828,7 +1937,7 @@ class _SynergyPairRow extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
-                      color: isDark ? Colors.white : AppColors.slate900))),
+                      color: isDark ? AppColors.onDark : AppColors.slate900))),
         ])),
         const SizedBox(width: 8),
         Text('${row.matches}j · ${row.wins}V',
@@ -1877,15 +1986,15 @@ class _WDLBar extends StatelessWidget {
           if (wF > 0)
             Flexible(
                 flex: (wF * 1000).round(),
-                child: Container(color: const Color(0xFF16A34A))),
+                child: Container(color: AppColors.primaryPressed)),
           if (tF > 0)
             Flexible(
                 flex: (tF * 1000).round(),
-                child: Container(color: const Color(0xFF94A3B8))),
+                child: Container(color: AppColors.lightPlaceholder)),
           if (lF > 0)
             Flexible(
                 flex: (lF * 1000).round(),
-                child: Container(color: const Color(0xFFDC2626))),
+                child: Container(color: AppColors.prototypeDanger)),
         ]),
       ),
     );
@@ -1972,68 +2081,61 @@ Widget _sortChips(
   ValueChanged<_SortKey> onSort, {
   required bool classificationMode,
 }) =>
-    SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: _SortKey.values
-            .where((k) => classificationMode || k != _SortKey.points)
-            .map((k) {
-          final active = k == current;
-          Widget label;
-          switch (k) {
-            case _SortKey.goals:
-              label = renderGroupIcon(icons.goal, size: 12);
-              break;
-            case _SortKey.assists:
-              label = renderGroupIcon(icons.assist, size: 12);
-              break;
-            case _SortKey.ownGoals:
-              label = renderGroupIcon(icons.ownGoal, size: 12);
-              break;
-            default:
-              label = Text(k.shortLabel,
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: active
-                          ? (isDark ? AppColors.slate900 : Colors.white)
-                          : (isDark
-                              ? AppColors.slate400
-                              : AppColors.slate600)));
-          }
-          return Padding(
-            padding: const EdgeInsets.only(right: 5),
-            child: GestureDetector(
-              onTap: () => onSort(k),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: active
-                      ? (isDark ? Colors.white : AppColors.slate900)
-                      : (isDark ? AppColors.slate800 : Colors.white),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
+    Wrap(
+      spacing: 5,
+      runSpacing: 6,
+      children: _SortKey.values
+          .where((k) => classificationMode || k != _SortKey.points)
+          .map((k) {
+        final active = k == current;
+        Widget label;
+        switch (k) {
+          case _SortKey.goals:
+            label = renderGroupIcon(icons.goal, size: 12);
+            break;
+          case _SortKey.assists:
+            label = renderGroupIcon(icons.assist, size: 12);
+            break;
+          case _SortKey.ownGoals:
+            label = renderGroupIcon(icons.ownGoal, size: 12);
+            break;
+          default:
+            label = Text(k.shortLabel,
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
                     color: active
-                        ? (isDark ? Colors.white : AppColors.slate900)
-                        : (isDark ? AppColors.slate700 : AppColors.slate200),
-                    width: active ? 1.5 : 1,
-                  ),
-                ),
-                child: label,
+                        ? (isDark ? AppColors.slate900 : AppColors.onDark)
+                        : (isDark ? AppColors.slate400 : AppColors.slate600)));
+        }
+        return GestureDetector(
+          onTap: () => onSort(k),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: active
+                  ? (isDark ? AppColors.onDark : AppColors.slate900)
+                  : (isDark ? AppColors.slate800 : AppColors.onDark),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: active
+                    ? (isDark ? AppColors.onDark : AppColors.slate900)
+                    : (isDark ? AppColors.slate700 : AppColors.slate200),
+                width: active ? 1.5 : 1,
               ),
             ),
-          );
-        }).toList(),
-      ),
+            child: label,
+          ),
+        );
+      }).toList(),
     );
 
 // ── Card wrapper ──────────────────────────────────────────────────────────────
 
 Widget _card(bool isDark, {required Widget child}) => Container(
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate800 : Colors.white,
+        color: isDark ? AppColors.slate800 : AppColors.onDark,
         borderRadius: BorderRadius.circular(14),
         border:
             Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
@@ -2139,12 +2241,13 @@ class _ErrorState extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFF1F2),
+            color: AppColors.rose50,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFFFCDD2)),
+            border: Border.all(color: AppColors.rose200),
           ),
           child: Text(message,
-              style: const TextStyle(fontSize: 13, color: Color(0xFF9B1239))),
+              style: const TextStyle(
+                  fontSize: 13, color: AppColors.prototypeDanger)),
         ),
       );
 }

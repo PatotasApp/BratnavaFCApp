@@ -1,19 +1,19 @@
 import 'package:equatable/equatable.dart';
 
 class PollSummary extends Equatable {
-  final String  id;
-  final String  title;
+  final String id;
+  final String title;
   final String? description;
-  final bool    allowMultipleVotes;
-  final bool    showVotes;
-  final String  status; // 'open' | 'closed'
+  final bool allowMultipleVotes;
+  final bool showVotes;
+  final String status; // 'open' | 'closed'
   final String? deadlineDate;
   final String? deadlineTime;
-  final int     optionCount;
-  final int     totalVoters;
-  final bool    hasVoted;
-  final String  createDate;
-  final String  type; // 'poll' | 'event'
+  final int optionCount;
+  final int totalVoters;
+  final bool hasVoted;
+  final String createDate;
+  final String type; // 'poll' | 'event'
   final String? eventDate;
   final String? eventTime;
   final String? eventLocation;
@@ -54,43 +54,52 @@ class PollSummary extends Equatable {
     this.allowGuests = false,
   });
 
-  bool get isOpen  => status == 'open';
-  bool get isEvent => type   == 'event';
+  bool get isOpen => status == 'open';
+  bool get isEvent => type == 'event';
 
   /// @deprecated Prefira [isAcceptingVotes] (calculado pelo servidor).
   bool get deadlinePassed {
     if (deadlineDate == null) return false;
-    final time     = deadlineTime ?? '23:59';
+    final time = deadlineTime ?? '23:59';
     final deadline = DateTime.tryParse('${deadlineDate}T$time:00');
     if (deadline == null) return false;
     return DateTime.now().isAfter(deadline);
   }
 
   factory PollSummary.fromJson(Map<String, dynamic> j) => PollSummary(
-    id:                 j['id']                 as String? ?? '',
-    title:              j['title']              as String? ?? '',
-    description:        j['description']        as String?,
-    allowMultipleVotes: j['allowMultipleVotes'] as bool?   ?? false,
-    showVotes:          j['showVotes']          as bool?   ?? false,
-    status:             j['status']             as String? ?? 'open',
-    deadlineDate:       j['deadlineDate']       as String?,
-    deadlineTime:       j['deadlineTime']       as String?,
-    optionCount:        j['optionCount']        as int?    ?? 0,
-    totalVoters:        j['totalVoters']        as int?    ?? 0,
-    hasVoted:           j['hasVoted']           as bool?   ?? false,
-    createDate:         j['createDate']         as String? ?? '',
-    type:               j['type']               as String? ?? 'poll',
-    eventDate:          j['eventDate']          as String?,
-    eventTime:          j['eventTime']          as String?,
-    eventLocation:      j['eventLocation']      as String?,
-    eventIcon:          j['eventIcon']          as String?,
-    costType:           j['costType']           as String?,
-    costAmount:         (j['costAmount'] as num?)?.toDouble(),
-    isAcceptingVotes:   j['isAcceptingVotes']   as bool?   ?? (j['status'] == 'open'),
-    linkedMatchId:      (j['linkedMatchId'] ?? j['LinkedMatchId'])?.toString(),
-    allowGuests:        j['allowGuests']        as bool?   ?? false,
-  );
+        id: j['id'] as String? ?? '',
+        title: j['title'] as String? ?? '',
+        description: j['description'] as String?,
+        allowMultipleVotes: j['allowMultipleVotes'] as bool? ?? false,
+        showVotes: j['showVotes'] as bool? ?? false,
+        status: j['status'] as String? ?? 'open',
+        deadlineDate: j['deadlineDate'] as String?,
+        deadlineTime: j['deadlineTime'] as String?,
+        optionCount: j['optionCount'] as int? ?? 0,
+        totalVoters: j['totalVoters'] as int? ?? 0,
+        hasVoted: j['hasVoted'] as bool? ?? false,
+        createDate: j['createDate'] as String? ?? '',
+        type: j['type'] as String? ?? 'poll',
+        eventDate: j['eventDate'] as String?,
+        eventTime: j['eventTime'] as String?,
+        eventLocation: j['eventLocation'] as String?,
+        eventIcon: j['eventIcon'] as String?,
+        costType: j['costType'] as String?,
+        costAmount: (j['costAmount'] as num?)?.toDouble(),
+        isAcceptingVotes:
+            j['isAcceptingVotes'] as bool? ?? (j['status'] == 'open'),
+        linkedMatchId: (j['linkedMatchId'] ?? j['LinkedMatchId'])?.toString(),
+        allowGuests: j['allowGuests'] as bool? ?? false,
+      );
 
   @override
-  List<Object?> get props => [id, status, hasVoted, totalVoters, isAcceptingVotes, linkedMatchId, allowGuests];
+  List<Object?> get props => [
+        id,
+        status,
+        hasVoted,
+        totalVoters,
+        isAcceptingVotes,
+        linkedMatchId,
+        allowGuests
+      ];
 }

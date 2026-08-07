@@ -60,6 +60,29 @@ final registerUseCaseProvider = Provider<RegisterUseCase>(
   (ref) => RegisterUseCase(ref.watch(authRepositoryProvider)),
 );
 
+String _normalizeGroupId(String? id) =>
+    (id ?? '').trim().toLowerCase().replaceAll(RegExp(r'[{}]'), '');
+
+String? _resolveActiveGroupId({
+  required String? previousGroupId,
+  required Iterable<String> candidateGroupIds,
+}) {
+  final unique = <String, String>{};
+  for (final id in candidateGroupIds) {
+    final normalized = _normalizeGroupId(id);
+    if (normalized.isNotEmpty) unique.putIfAbsent(normalized, () => id);
+  }
+
+  final previousNormalized = _normalizeGroupId(previousGroupId);
+  if (previousNormalized.isNotEmpty && unique.containsKey(previousNormalized)) {
+    return unique[previousNormalized];
+  }
+
+  // Mantém o comportamento do site: quando não há uma seleção anterior,
+  // começa pela primeira patota disponível e o seletor permite trocar depois.
+  return unique.values.firstOrNull;
+}
+
 // ── AsyncNotifier para operações de login/registro ───────────────────────────
 
 class AuthNotifier extends AsyncNotifier<void> {
@@ -75,6 +98,32 @@ class AuthNotifier extends AsyncNotifier<void> {
     state = await AsyncValue.guard(() async {
       final useCase = ref.read(loginUseCaseProvider);
       final account = await useCase(email: email, password: password);
+      final accountStore = ref.read(accountStoreProvider.notifier);
+      final previous = ref
+          .read(accountStoreProvider)
+          .accounts
+          .where((item) => item.userId == account.userId)
+          .firstOrNull;
+
+      // O AuthInterceptor obtém o token diretamente do AccountStore. Portanto,
+      // a sessão precisa ser gravada antes das consultas autenticadas de
+      // patotas e jogadores. Na ordem anterior essas chamadas saíam sem o novo
+      // token (ou com o token vencido da mesma conta) e o login terminava com
+      // uma patota aparentemente vazia.
+      final authenticated = account.copyWith(
+        activeGroupId: previous?.activeGroupId,
+        activePlayerId: previous?.activePlayerId,
+        groupAdminIds: previous?.groupAdminIds,
+        groupFinanceiroIds: previous?.groupFinanceiroIds,
+        activeGroupIsAdmin: previous?.activeGroupIsAdmin,
+        activeGroupIsFinanceiro: previous?.activeGroupIsFinanceiro,
+        keepLoggedIn: keepLoggedIn,
+      );
+      await accountStore.upsertAccount(authenticated);
+
+      // Um 401 anterior pode ter armado o guard do interceptor. A nova sessão
+      // já é válida e deve poder fazer as consultas de inicialização.
+      ref.read(authInterceptorProvider).resetUnauthorizedGuard();
 
       final dataSource = ref.read(_authDataSourceProvider);
 
@@ -84,20 +133,32 @@ class AuthNotifier extends AsyncNotifier<void> {
         dataSource.fetchMyGroupIds(),
       ).wait;
 
-      // Auto-seleciona o grupo se o usuário pertencer a apenas um.
-      final activeGroupId = groupIds.length == 1 ? groupIds.first : null;
-
-      final enriched = account.copyWith(
-        groupAdminIds:      roles['adminIds'],
-        groupFinanceiroIds: roles['financeiroIds'],
-        activeGroupId:      activeGroupId,
-        keepLoggedIn:       keepLoggedIn,
+      // Considera também patotas em que a conta é admin/financeiro. Um usuário
+      // pode administrar uma patota mesmo antes de possuir jogador vinculado.
+      final candidateGroupIds = <String>[
+        ...groupIds,
+        ...?roles?['adminIds'],
+        ...?roles?['financeiroIds'],
+      ];
+      final activeGroupId = _resolveActiveGroupId(
+        previousGroupId: authenticated.activeGroupId,
+        candidateGroupIds: candidateGroupIds,
       );
 
-      await ref.read(accountStoreProvider.notifier).upsertAccount(enriched);
+      final enriched = authenticated.copyWith(
+        groupAdminIds: roles?['adminIds'] ?? authenticated.groupAdminIds,
+        groupFinanceiroIds:
+            roles?['financeiroIds'] ?? authenticated.groupFinanceiroIds,
+        activeGroupId: activeGroupId,
+      );
 
-      // Reseta o guard de 401 para que futuros erros sejam tratados normalmente.
-      ref.read(authInterceptorProvider).resetUnauthorizedGuard();
+      await accountStore.upsertAccount(enriched);
+
+      // Confirma o papel na patota já no login. Sem isto, quem tem uma patota só
+      // entrava com activeGroupIsAdmin nulo e dependia do array de fallback.
+      if (activeGroupId != null && activeGroupId.isNotEmpty) {
+        await refreshMyGroupRoles(activeGroupId);
+      }
     });
   }
 
@@ -112,11 +173,11 @@ class AuthNotifier extends AsyncNotifier<void> {
     state = await AsyncValue.guard(() async {
       final useCase = ref.read(registerUseCaseProvider);
       await useCase(
-        userName:  userName,
+        userName: userName,
         firstName: firstName,
-        lastName:  lastName,
-        email:     email,
-        password:  password,
+        lastName: lastName,
+        email: email,
+        password: password,
       );
     });
   }
@@ -135,12 +196,15 @@ class AuthNotifier extends AsyncNotifier<void> {
     try {
       final dataSource = ref.read(_authDataSourceProvider);
       final roles = await dataSource.fetchMyGroupRoles(groupId);
+      // Falhou a consulta: não sobrescreve com `false`, senão um erro de rede
+      // rebaixa o admin e ele cai na tela "Sem acesso".
+      if (roles == null) return;
       await ref.read(accountStoreProvider.notifier).upsertAccount(
-        account.copyWith(
-          activeGroupIsAdmin:      roles.isAdmin,
-          activeGroupIsFinanceiro: roles.isFinanceiro,
-        ),
-      );
+            account.copyWith(
+              activeGroupIsAdmin: roles.isAdmin,
+              activeGroupIsFinanceiro: roles.isFinanceiro,
+            ),
+          );
     } catch (_) {
       // silencioso — UI já usa os arrays de fallback
     }
@@ -155,19 +219,28 @@ class AuthNotifier extends AsyncNotifier<void> {
     try {
       final dataSource = ref.read(_authDataSourceProvider);
       final roles = await dataSource.fetchGroupRoles(account.userId);
+      if (roles == null) {
+        return; // falha de rede não pode apagar permissão salva
+      }
       await ref.read(accountStoreProvider.notifier).upsertAccount(
-        account.copyWith(
-          groupAdminIds:      roles['adminIds'],
-          groupFinanceiroIds: roles['financeiroIds'],
-        ),
-      );
+            account.copyWith(
+              groupAdminIds: roles['adminIds'],
+              groupFinanceiroIds: roles['financeiroIds'],
+            ),
+          );
+
+      // Reconfirma o papel na patota ativa — é o valor que o isGroupAdmin usa.
+      final groupId = account.activeGroupId;
+      if (groupId != null && groupId.isNotEmpty) {
+        await refreshMyGroupRoles(groupId);
+      }
     } catch (_) {
       // Silencioso — permissões desatualizadas são melhor que crash
     }
   }
 
   /// Re-busca roles + grupos do usuário e atualiza activeGroupId se ainda não definido.
-  /// Chamado após aceitar convite de grupo ou criar nova patota.
+  /// Chamado no startup, no resume, após aceitar convite ou criar nova patota.
   Future<void> refreshGroupMembership() async {
     final account = ref.read(accountStoreProvider).activeAccount;
     if (account == null) return;
@@ -178,16 +251,33 @@ class AuthNotifier extends AsyncNotifier<void> {
         dataSource.fetchMyGroupIds(),
       ).wait;
 
-      final resolvedGroupId = account.activeGroupId ??
-          (groupIds.length == 1 ? groupIds.first : null);
+      final candidateGroupIds = <String>[
+        ...groupIds,
+        ...?roles?['adminIds'],
+        ...?roles?['financeiroIds'],
+      ];
+      final resolvedGroupId = _resolveActiveGroupId(
+            previousGroupId: account.activeGroupId,
+            candidateGroupIds: candidateGroupIds,
+          ) ??
+          account.activeGroupId;
 
+      // `roles == null` significa que a consulta falhou. Mantém o que já estava
+      // salvo em vez de zerar as permissões por causa de uma queda de rede.
       await ref.read(accountStoreProvider.notifier).upsertAccount(
-        account.copyWith(
-          groupAdminIds:      roles['adminIds'],
-          groupFinanceiroIds: roles['financeiroIds'],
-          activeGroupId:      resolvedGroupId,
-        ),
-      );
+            account.copyWith(
+              groupAdminIds: roles?['adminIds'],
+              groupFinanceiroIds: roles?['financeiroIds'],
+              activeGroupId: resolvedGroupId,
+            ),
+          );
+
+      // O flag da patota ativa é a fonte da verdade do isGroupAdmin, mas só era
+      // preenchido ao trocar de patota — num login com grupo único ele nunca
+      // chegava a ser carregado.
+      if (resolvedGroupId != null && resolvedGroupId.isNotEmpty) {
+        await refreshMyGroupRoles(resolvedGroupId);
+      }
     } catch (_) {}
   }
 
@@ -199,12 +289,12 @@ class AuthNotifier extends AsyncNotifier<void> {
     if (!JwtHelper.isExpiring(account.accessToken, bufferSeconds: 300)) return;
 
     debugPrint('🔄 proactiveRefresh: token expirando, renovando...');
-    final newToken =
-        await ref.read(authInterceptorProvider).tryRefresh();
+    final newToken = await ref.read(authInterceptorProvider).tryRefresh();
     if (newToken != null) {
       debugPrint('✅ proactiveRefresh: token renovado');
     } else {
-      debugPrint('⚠ proactiveRefresh: renovação falhou (interceptor tratará 401)');
+      debugPrint(
+          '⚠ proactiveRefresh: renovação falhou (interceptor tratará 401)');
     }
   }
 }
@@ -226,7 +316,7 @@ final tokenRefreshServiceProvider = Provider<void>((ref) {
   if (expiresAt == null) return;
 
   final refreshAt = expiresAt.subtract(const Duration(minutes: 5));
-  final delay     = refreshAt.difference(DateTime.now());
+  final delay = refreshAt.difference(DateTime.now());
 
   Timer? timer;
 

@@ -13,10 +13,10 @@ class RegisterUseCase {
     required String password,
   }) =>
       _repository.register(
-        userName:  userName,
+        userName: userName,
         firstName: firstName,
-        lastName:  lastName,
-        email:     email,
-        password:  password,
+        lastName: lastName,
+        email: email,
+        password: password,
       );
 }

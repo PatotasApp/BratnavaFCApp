@@ -15,22 +15,22 @@ const _kCategoryMatchInvite = 'MATCH_INVITE';
 
 // ─── IDs das ações — poll de evento ──────────────────────────────────────────
 
-const _kPollActionSim    = 'poll_sim';
+const _kPollActionSim = 'poll_sim';
 const _kPollActionTalvez = 'poll_talvez';
-const _kPollActionNao    = 'poll_nao';
+const _kPollActionNao = 'poll_nao';
 const _kCategoryEventPoll = 'EVENT_POLL';
 
 // ─── Canais Android ───────────────────────────────────────────────────────────
 
-const _channelId        = 'bratnavafc_high';
-const _channelName      = 'BratnavaFC';
-const _channelDesc      = 'Notificações do BratnavaFC';
+const _channelId = 'bratnavafc_high';
+const _channelName = 'BratnavaFC';
+const _channelDesc = 'Notificações do BratnavaFC';
 
-const _inviteChannelId   = 'bratnavafc_match_invite';
+const _inviteChannelId = 'bratnavafc_match_invite';
 const _inviteChannelName = 'Convites de Partida';
 const _inviteChannelDesc = 'Convites para participar de partidas';
 
-const _pollChannelId   = 'bratnavafc_event_poll';
+const _pollChannelId = 'bratnavafc_event_poll';
 const _pollChannelName = 'Votações de Evento';
 const _pollChannelDesc = 'Lembretes de votação com botões de resposta rápida';
 
@@ -39,7 +39,8 @@ const _pollChannelDesc = 'Lembretes de votação com botões de resposta rápida
 /// Chamado quando o usuário toca em SIM/NÃO (partida) ou SIM/TALVEZ/NÃO (poll)
 /// com o app em background ou terminado.
 @pragma('vm:entry-point')
-Future<void> onNotificationActionBackground(NotificationResponse response) async {
+Future<void> onNotificationActionBackground(
+    NotificationResponse response) async {
   final actionId = response.actionId;
   if (actionId == null) return;
 
@@ -55,7 +56,7 @@ Future<void> onNotificationActionBackground(NotificationResponse response) async
     if (accessToken == null) return;
 
     final isAccept = actionId == _kActionAccept;
-    final path     = isAccept
+    final path = isAccept
         ? ApiConstants.matchMyInviteAccept(groupId, matchId)
         : ApiConstants.matchMyInviteReject(groupId, matchId);
 
@@ -69,17 +70,17 @@ Future<void> onNotificationActionBackground(NotificationResponse response) async
       actionId == _kPollActionTalvez ||
       actionId == _kPollActionNao) {
     if (parts.length < 5) return;
-    final groupId      = parts[0];
-    final pollId       = parts[1];
-    final optionSimId  = parts[2];
+    final groupId = parts[0];
+    final pollId = parts[1];
+    final optionSimId = parts[2];
     final optionTalvez = parts[3];
-    final optionNaoId  = parts[4];
+    final optionNaoId = parts[4];
 
     final optionId = switch (actionId) {
-      _kPollActionSim    => optionSimId,
+      _kPollActionSim => optionSimId,
       _kPollActionTalvez => optionTalvez,
-      _kPollActionNao    => optionNaoId,
-      _                  => null,
+      _kPollActionNao => optionNaoId,
+      _ => null,
     };
     if (optionId == null) return;
 
@@ -87,7 +88,9 @@ Future<void> onNotificationActionBackground(NotificationResponse response) async
     if (accessToken == null) return;
 
     final path = ApiConstants.castVote(groupId, pollId);
-    final body = jsonEncode({ 'optionIds': [optionId] });
+    final body = jsonEncode({
+      'optionIds': [optionId]
+    });
     await _callApi('POST', path, body, accessToken);
   }
 }
@@ -96,13 +99,13 @@ Future<void> onNotificationActionBackground(NotificationResponse response) async
 
 Future<String?> _readAccessToken() async {
   try {
-    final prefs    = await SharedPreferences.getInstance();
-    final raw      = prefs.getString(AppConstants.accountsStorageKey);
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(AppConstants.accountsStorageKey);
     final activeId = prefs.getString(AppConstants.activeAccountKey);
     if (raw == null) return null;
 
     final accounts = jsonDecode(raw) as List;
-    final account  = accounts.firstWhere(
+    final account = accounts.firstWhere(
       (a) => a['userId'] == activeId,
       orElse: () => accounts.first,
     ) as Map<String, dynamic>;
@@ -112,10 +115,11 @@ Future<String?> _readAccessToken() async {
   }
 }
 
-Future<void> _callApi(String method, String path, String? body, String token) async {
+Future<void> _callApi(
+    String method, String path, String? body, String token) async {
   try {
-    final client  = HttpClient();
-    final uri     = Uri.parse('${AppConstants.apiUrl}$path');
+    final client = HttpClient();
+    final uri = Uri.parse('${AppConstants.apiUrl}$path');
     final request = await client.openUrl(method, uri);
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
     request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
@@ -145,7 +149,7 @@ class LocalNotifications {
 
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
-  static int  _nextId = 0;
+  static int _nextId = 0;
 
   /// Callback chamado quando o usuário toca no corpo do convite de partida.
   static void Function(String groupId, String matchId)? onMatchInviteTapped;
@@ -159,12 +163,13 @@ class LocalNotifications {
   /// Faz a chamada à API E navega se o usuário tocou no corpo da notificação.
   static void _onForegroundResponse(NotificationResponse response) {
     final actionId = response.actionId;
-    final parts    = response.payload?.split('::') ?? [];
+    final parts = response.payload?.split('::') ?? [];
 
-    final isMatchAction = actionId == _kActionAccept || actionId == _kActionReject;
-    final isPollAction  = actionId == _kPollActionSim ||
-                          actionId == _kPollActionTalvez ||
-                          actionId == _kPollActionNao;
+    final isMatchAction =
+        actionId == _kActionAccept || actionId == _kActionReject;
+    final isPollAction = actionId == _kPollActionSim ||
+        actionId == _kPollActionTalvez ||
+        actionId == _kPollActionNao;
 
     if (isMatchAction || isPollAction) {
       // Ação direta → chama API sem abrir o app (mesmo fluxo do background)
@@ -210,7 +215,7 @@ class LocalNotifications {
         DarwinNotificationCategory(
           _kCategoryEventPoll,
           actions: [
-            DarwinNotificationAction.plain(_kPollActionSim,    'Sim ✅'),
+            DarwinNotificationAction.plain(_kPollActionSim, 'Sim ✅'),
             DarwinNotificationAction.plain(_kPollActionTalvez, 'Talvez 🤷'),
             DarwinNotificationAction.plain(
               _kPollActionNao,
@@ -226,15 +231,17 @@ class LocalNotifications {
 
     await _plugin.initialize(
       InitializationSettings(android: android, iOS: ios),
-      onDidReceiveNotificationResponse:           _onForegroundResponse,
-      onDidReceiveBackgroundNotificationResponse: onNotificationActionBackground,
+      onDidReceiveNotificationResponse: _onForegroundResponse,
+      onDidReceiveBackgroundNotificationResponse:
+          onNotificationActionBackground,
     );
 
-    final androidPlugin = _plugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
 
     // Canal padrão (alta prioridade)
-    await androidPlugin?.createNotificationChannel(const AndroidNotificationChannel(
+    await androidPlugin
+        ?.createNotificationChannel(const AndroidNotificationChannel(
       _channelId,
       _channelName,
       description: _channelDesc,
@@ -243,7 +250,8 @@ class LocalNotifications {
     ));
 
     // Canal dedicado para convites com botões de ação
-    await androidPlugin?.createNotificationChannel(const AndroidNotificationChannel(
+    await androidPlugin
+        ?.createNotificationChannel(const AndroidNotificationChannel(
       _inviteChannelId,
       _inviteChannelName,
       description: _inviteChannelDesc,
@@ -252,7 +260,8 @@ class LocalNotifications {
     ));
 
     // Canal dedicado para polls de evento com botões Sim/Talvez/Não
-    await androidPlugin?.createNotificationChannel(const AndroidNotificationChannel(
+    await androidPlugin
+        ?.createNotificationChannel(const AndroidNotificationChannel(
       _pollChannelId,
       _pollChannelName,
       description: _pollChannelDesc,
@@ -272,9 +281,9 @@ class LocalNotifications {
       _channelName,
       channelDescription: _channelDesc,
       importance: Importance.high,
-      priority:   Priority.high,
-      playSound:  true,
-      icon:       '@drawable/ic_notification',
+      priority: Priority.high,
+      playSound: true,
+      icon: '@drawable/ic_notification',
     );
     const iosDetails = DarwinNotificationDetails(
       presentAlert: true,
@@ -304,16 +313,17 @@ class LocalNotifications {
     required String optionTalvezId,
     required String optionNaoId,
   }) async {
-    final payload = '$groupId::$pollId::$optionSimId::$optionTalvezId::$optionNaoId';
+    final payload =
+        '$groupId::$pollId::$optionSimId::$optionTalvezId::$optionNaoId';
 
     final androidDetails = AndroidNotificationDetails(
       _pollChannelId,
       _pollChannelName,
       channelDescription: _pollChannelDesc,
       importance: Importance.high,
-      priority:   Priority.high,
-      playSound:  true,
-      icon:       '@drawable/ic_notification',
+      priority: Priority.high,
+      playSound: true,
+      icon: '@drawable/ic_notification',
       actions: const [
         AndroidNotificationAction(
           _kPollActionSim,
@@ -336,9 +346,9 @@ class LocalNotifications {
       ],
     );
     const iosDetails = DarwinNotificationDetails(
-      presentAlert:       true,
-      presentBadge:       true,
-      presentSound:       true,
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
       categoryIdentifier: _kCategoryEventPoll,
     );
 
@@ -366,9 +376,9 @@ class LocalNotifications {
       _inviteChannelName,
       channelDescription: _inviteChannelDesc,
       importance: Importance.high,
-      priority:   Priority.high,
-      playSound:  true,
-      icon:       '@drawable/ic_notification',
+      priority: Priority.high,
+      playSound: true,
+      icon: '@drawable/ic_notification',
       actions: const [
         AndroidNotificationAction(
           _kActionAccept,
@@ -385,10 +395,10 @@ class LocalNotifications {
       ],
     );
     const iosDetails = DarwinNotificationDetails(
-      presentAlert:         true,
-      presentBadge:         true,
-      presentSound:         true,
-      categoryIdentifier:   _kCategoryMatchInvite,
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+      categoryIdentifier: _kCategoryMatchInvite,
     );
 
     await _plugin.show(

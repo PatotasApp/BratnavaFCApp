@@ -94,10 +94,10 @@ void main() {
   group('PlayerRow.fromJson', () {
     test('isGoalkeeper is true when set', () {
       final json = {
-        'playerId':    'abc',
-        'playerName':  'Felipe GK',
+        'playerId': 'abc',
+        'playerName': 'Felipe GK',
         'isGoalkeeper': true,
-        'months':      <dynamic>[],
+        'months': <dynamic>[],
       };
 
       final row = PlayerRow.fromJson(json);
@@ -107,9 +107,9 @@ void main() {
 
     test('isGoalkeeper defaults to false when absent', () {
       final json = {
-        'playerId':   'def',
+        'playerId': 'def',
         'playerName': 'Caio',
-        'months':     <dynamic>[],
+        'months': <dynamic>[],
       };
 
       final row = PlayerRow.fromJson(json);
@@ -119,10 +119,10 @@ void main() {
 
     test('isGoalkeeper is false when explicitly false', () {
       final json = {
-        'playerId':    'ghi',
-        'playerName':  'Lucas',
+        'playerId': 'ghi',
+        'playerName': 'Lucas',
         'isGoalkeeper': false,
-        'months':      <dynamic>[],
+        'months': <dynamic>[],
       };
 
       final row = PlayerRow.fromJson(json);
@@ -132,13 +132,13 @@ void main() {
 
     test('parses months list', () {
       final json = {
-        'playerId':   'abc',
+        'playerId': 'abc',
         'playerName': 'P',
         'months': [
           {
-            'month':   5,
-            'status':  0,
-            'amount':  60.0,
+            'month': 5,
+            'status': 0,
+            'amount': 60.0,
             'discount': 0,
             'hasProof': false,
           },
@@ -150,6 +150,31 @@ void main() {
       expect(row.months.length, 1);
       expect(row.months[0].month, 5);
       expect(row.months[0].amount, 60.0);
+    });
+  });
+
+  group('ExtraChargePayment.fromJson', () {
+    Map<String, dynamic> json({bool? isGoalkeeper}) => {
+          'playerId': 'player-1',
+          'playerName': 'Jogador',
+          if (isGoalkeeper != null) 'isGoalkeeper': isGoalkeeper,
+          'amount': 50.0,
+          'discount': 0,
+          'finalAmount': 50.0,
+          'status': 0,
+          'hasProof': false,
+        };
+
+    test('parses goalkeeper role when present', () {
+      final payment = ExtraChargePayment.fromJson(json(isGoalkeeper: true));
+
+      expect(payment.isGoalkeeper, isTrue);
+    });
+
+    test('defaults goalkeeper role to false when absent', () {
+      final payment = ExtraChargePayment.fromJson(json());
+
+      expect(payment.isGoalkeeper, isFalse);
     });
   });
 }

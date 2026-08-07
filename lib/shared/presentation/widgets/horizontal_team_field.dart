@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_colors.dart';
 
 // ── Data model ────────────────────────────────────────────────────────────────
 
@@ -93,8 +94,8 @@ class HorizontalTeamField extends StatelessWidget {
     super.key,
     required this.teamA,
     required this.teamB,
-    this.teamAColor = const Color(0xFF3B82F6),
-    this.teamBColor = const Color(0xFF94A3B8),
+    this.teamAColor = AppColors.info,
+    this.teamBColor = AppColors.lightPlaceholder,
     this.borderRadius,
     this.canInteract = false,
     this.sel1Id,
@@ -174,11 +175,11 @@ class _HorizontalFieldPainter extends CustomPainter {
     canvas.save();
     canvas.scale(scaleX, scaleY);
 
-    final grass = Paint()..color = const Color(0xFF166534);
+    final grass = Paint()..color = AppColors.primaryPressed;
     canvas.drawRect(const Rect.fromLTWH(0, 0, 300, 200), grass);
 
     // Alternating stripes
-    final stripeLight = Paint()..color = const Color(0x0AFFFFFF);
+    final stripeLight = Paint()..color = AppColors.onDark04;
     for (var i = 0; i < 6; i++) {
       if (i.isOdd) {
         canvas.drawRect(Rect.fromLTWH(i * 50, 0, 50, 200), stripeLight);
@@ -186,7 +187,7 @@ class _HorizontalFieldPainter extends CustomPainter {
     }
 
     final line = Paint()
-      ..color = Colors.white.withValues(alpha: 0.55)
+      ..color = AppColors.onDark.withValues(alpha: 0.55)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.9;
 
@@ -199,7 +200,7 @@ class _HorizontalFieldPainter extends CustomPainter {
     // Center circle
     canvas.drawCircle(const Offset(150, 100), 28, line);
     canvas.drawCircle(const Offset(150, 100), 1.5,
-        Paint()..color = Colors.white.withValues(alpha: 0.55));
+        Paint()..color = AppColors.onDark.withValues(alpha: 0.55));
 
     // Left penalty area (Team A side)
     canvas.drawRect(const Rect.fromLTWH(8, 52, 54, 96), line);
@@ -207,10 +208,10 @@ class _HorizontalFieldPainter extends CustomPainter {
     canvas.drawRect(const Rect.fromLTWH(8, 72, 22, 56), line);
     // Left penalty spot
     canvas.drawCircle(const Offset(44, 100), 1.5,
-        Paint()..color = Colors.white.withValues(alpha: 0.55));
+        Paint()..color = AppColors.onDark.withValues(alpha: 0.55));
     // Left goalpost
     final goalPost = Paint()
-      ..color = Colors.white.withValues(alpha: 0.8)
+      ..color = AppColors.onDark.withValues(alpha: 0.8)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
     canvas.drawRect(const Rect.fromLTWH(3, 82, 5, 36), goalPost);
@@ -221,7 +222,7 @@ class _HorizontalFieldPainter extends CustomPainter {
     canvas.drawRect(const Rect.fromLTWH(270, 72, 22, 56), line);
     // Right penalty spot
     canvas.drawCircle(const Offset(256, 100), 1.5,
-        Paint()..color = Colors.white.withValues(alpha: 0.55));
+        Paint()..color = AppColors.onDark.withValues(alpha: 0.55));
     // Right goalpost
     canvas.drawRect(const Rect.fromLTWH(292, 82, 5, 36), goalPost);
 
@@ -280,14 +281,16 @@ class _PlayerPin extends StatelessWidget {
 
     final uiColor = dimmed
         ? color.withValues(alpha: 0.35)
-        : (color.computeLuminance() > 0.8 ? const Color(0xFF64748B) : color);
+        : (color.computeLuminance() > 0.8
+            ? AppColors.lightTextSecondary
+            : color);
 
     final textColor =
-        dimmed ? Colors.white.withValues(alpha: 0.35) : Colors.white;
+        dimmed ? AppColors.onDark.withValues(alpha: 0.35) : AppColors.onDark;
 
     final borderColor = isSelected
-        ? const Color(0xFFF59E0B) // amber — "selected" ring
-        : Colors.white.withValues(alpha: dimmed ? 0.2 : 0.7);
+        ? AppColors.warning // amber — "selected" ring
+        : AppColors.onDark.withValues(alpha: dimmed ? 0.2 : 0.7);
     final borderWidth = isSelected ? 2.0 : 1.5;
 
     Widget pin = Column(
@@ -298,13 +301,13 @@ class _PlayerPin extends StatelessWidget {
           height: pinD,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: isSelected ? const Color(0xFFF59E0B) : uiColor,
+            color: isSelected ? AppColors.warning : uiColor,
             border: Border.all(color: borderColor, width: borderWidth),
             boxShadow: dimmed
                 ? []
                 : [
                     BoxShadow(
-                      color: (isSelected ? const Color(0xFFF59E0B) : uiColor)
+                      color: (isSelected ? AppColors.warning : uiColor)
                           .withValues(alpha: 0.6),
                       blurRadius: isSelected ? 8 : 4,
                       offset: const Offset(0, 1),
@@ -328,8 +331,8 @@ class _PlayerPin extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
           decoration: BoxDecoration(
             color: isSelected
-                ? const Color(0xFFF59E0B).withValues(alpha: 0.85)
-                : Colors.black.withValues(alpha: dimmed ? 0.25 : 0.55),
+                ? AppColors.warning.withValues(alpha: 0.85)
+                : AppColors.darkApp.withValues(alpha: dimmed ? 0.25 : 0.55),
             borderRadius: BorderRadius.circular(3),
           ),
           child: Text(
@@ -337,7 +340,7 @@ class _PlayerPin extends StatelessWidget {
             style: TextStyle(
               fontSize: 8.0,
               fontWeight: FontWeight.w700,
-              color: Colors.white.withValues(alpha: dimmed ? 0.45 : 1.0),
+              color: AppColors.onDark.withValues(alpha: dimmed ? 0.45 : 1.0),
               height: 1.15,
             ),
             maxLines: 2,

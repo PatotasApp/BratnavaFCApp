@@ -5,16 +5,15 @@ import '../../domain/entities/absence.dart';
 // ── Absence type options (mirrors absenceIcons.ts) ────────────────────────────
 
 const _kAbsenceTypes = [
-  (1, 'Viagem',          Icons.flight_outlined),
-  (2, 'Dept. Médico',    Icons.local_hospital_outlined),
-  (3, 'Pessoal',         Icons.favorite_border),
-  (4, 'Outros',          Icons.more_horiz_outlined),
+  (1, 'Viagem', Icons.flight_outlined),
+  (2, 'Dept. Médico', Icons.local_hospital_outlined),
+  (3, 'Pessoal', Icons.favorite_border),
+  (4, 'Outros', Icons.more_horiz_outlined),
 ];
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
-String _toApiDate(DateTime d) =>
-    '${d.year.toString().padLeft(4, '0')}-'
+String _toApiDate(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
     '${d.month.toString().padLeft(2, '0')}-'
     '${d.day.toString().padLeft(2, '0')}';
 
@@ -22,11 +21,11 @@ DateTime? _fromApiDate(String? s) {
   if (s == null || s.isEmpty) return null;
   final parts = s.split('-');
   if (parts.length != 3) return null;
-  return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+  return DateTime(
+      int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
 }
 
-String _displayDate(DateTime d) =>
-    '${d.day.toString().padLeft(2, '0')}/'
+String _displayDate(DateTime d) => '${d.day.toString().padLeft(2, '0')}/'
     '${d.month.toString().padLeft(2, '0')}/'
     '${d.year}';
 
@@ -34,7 +33,7 @@ String _displayDate(DateTime d) =>
 
 class AbsenceFormSheet extends StatefulWidget {
   /// Pass null for create mode; pass existing dto for edit mode.
-  final AbsenceDto?                             initial;
+  final AbsenceDto? initial;
   final Future<void> Function(CreateAbsenceDto) onSave;
 
   const AbsenceFormSheet({super.key, this.initial, required this.onSave});
@@ -46,9 +45,9 @@ class AbsenceFormSheet extends StatefulWidget {
 class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
   DateTime? _startDate;
   DateTime? _endDate;
-  int       _absenceType = 1;
-  final     _descCtrl    = TextEditingController();
-  bool      _saving      = false;
+  int _absenceType = 1;
+  final _descCtrl = TextEditingController();
+  bool _saving = false;
 
   bool get _isEdit => widget.initial != null;
 
@@ -57,8 +56,8 @@ class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
     super.initState();
     final init = widget.initial;
     if (init != null) {
-      _startDate   = _fromApiDate(init.startDate);
-      _endDate     = _fromApiDate(init.endDate);
+      _startDate = _fromApiDate(init.startDate);
+      _endDate = _fromApiDate(init.endDate);
       _absenceType = init.absenceType;
       _descCtrl.text = init.description ?? '';
     }
@@ -72,15 +71,14 @@ class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
 
   Future<void> _pickDate({required bool isStart}) async {
     final now = DateTime.now();
-    final initial = isStart
-        ? (_startDate ?? now)
-        : (_endDate ?? _startDate ?? now);
+    final initial =
+        isStart ? (_startDate ?? now) : (_endDate ?? _startDate ?? now);
 
     final picked = await showDatePicker(
-      context:      context,
-      initialDate:  initial,
-      firstDate:    DateTime(now.year - 2),
-      lastDate:     DateTime(now.year + 2),
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(now.year - 2),
+      lastDate: DateTime(now.year + 2),
     );
     if (picked == null) return;
     setState(() {
@@ -96,17 +94,18 @@ class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
 
   Future<void> _submit() async {
     if (_startDate == null || _endDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Informe o período.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Informe o período.')));
       return;
     }
     setState(() => _saving = true);
     try {
       await widget.onSave(CreateAbsenceDto(
-        startDate:   _toApiDate(_startDate!),
-        endDate:     _toApiDate(_endDate!),
+        startDate: _toApiDate(_startDate!),
+        endDate: _toApiDate(_endDate!),
         absenceType: _absenceType,
-        description: _descCtrl.text.trim().isNotEmpty ? _descCtrl.text.trim() : null,
+        description:
+            _descCtrl.text.trim().isNotEmpty ? _descCtrl.text.trim() : null,
       ));
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -116,11 +115,11 @@ class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final mq     = MediaQuery.of(context);
+    final mq = MediaQuery.of(context);
 
     return Container(
       decoration: BoxDecoration(
-        color:        isDark ? AppColors.slate900 : Colors.white,
+        color: isDark ? AppColors.slate900 : AppColors.onDark,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
@@ -132,7 +131,8 @@ class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
             // ── drag handle ──────────────────────────────────────────────
             const SizedBox(height: 8),
             Container(
-              width: 36, height: 4,
+              width: 36,
+              height: 4,
               decoration: BoxDecoration(
                 color: AppColors.slate300,
                 borderRadius: BorderRadius.circular(2),
@@ -147,14 +147,14 @@ class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
                   child: Text(
                     _isEdit ? 'Editar ausência' : 'Nova ausência',
                     style: TextStyle(
-                      fontSize:   16,
+                      fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color:      isDark ? Colors.white : AppColors.slate900,
+                      color: isDark ? AppColors.onDark : AppColors.slate900,
                     ),
                   ),
                 ),
                 IconButton(
-                  icon:      const Icon(Icons.close),
+                  icon: const Icon(Icons.close),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ]),
@@ -167,21 +167,22 @@ class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-
                     // Período
                     Row(children: [
-                      Expanded(child: _DatePickerTile(
-                        label:   'De',
-                        date:    _startDate,
-                        isDark:  isDark,
-                        onTap:   () => _pickDate(isStart: true),
+                      Expanded(
+                          child: _DatePickerTile(
+                        label: 'De',
+                        date: _startDate,
+                        isDark: isDark,
+                        onTap: () => _pickDate(isStart: true),
                       )),
                       const SizedBox(width: 12),
-                      Expanded(child: _DatePickerTile(
-                        label:   'Até',
-                        date:    _endDate,
-                        isDark:  isDark,
-                        onTap:   () => _pickDate(isStart: false),
+                      Expanded(
+                          child: _DatePickerTile(
+                        label: 'Até',
+                        date: _endDate,
+                        isDark: isDark,
+                        onTap: () => _pickDate(isStart: false),
                       )),
                     ]),
 
@@ -189,18 +190,19 @@ class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
 
                     // Motivo
                     Text('Motivo',
-                      style: TextStyle(
-                        fontSize:   12,
-                        fontWeight: FontWeight.w600,
-                        color:      isDark ? AppColors.slate300 : AppColors.slate600,
-                      )),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color:
+                              isDark ? AppColors.slate300 : AppColors.slate600,
+                        )),
                     const SizedBox(height: 8),
                     GridView.count(
-                      crossAxisCount:   2,
-                      shrinkWrap:       true,
-                      physics:          const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 2,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
                       crossAxisSpacing: 8,
-                      mainAxisSpacing:  8,
+                      mainAxisSpacing: 8,
                       childAspectRatio: 3.2,
                       children: _kAbsenceTypes.map((t) {
                         final selected = _absenceType == t.$1;
@@ -211,13 +213,21 @@ class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
                             duration: const Duration(milliseconds: 150),
                             decoration: BoxDecoration(
                               color: selected
-                                  ? (isDark ? Colors.white : AppColors.slate900)
-                                  : (isDark ? AppColors.slate800 : Colors.white),
+                                  ? (isDark
+                                      ? AppColors.onDark
+                                      : AppColors.slate900)
+                                  : (isDark
+                                      ? AppColors.slate800
+                                      : AppColors.onDark),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
                                 color: selected
-                                    ? (isDark ? Colors.white : AppColors.slate900)
-                                    : (isDark ? AppColors.slate700 : AppColors.slate200),
+                                    ? (isDark
+                                        ? AppColors.onDark
+                                        : AppColors.slate900)
+                                    : (isDark
+                                        ? AppColors.slate700
+                                        : AppColors.slate200),
                               ),
                             ),
                             child: Row(
@@ -225,22 +235,32 @@ class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
                               children: [
                                 Icon(
                                   t.$3,
-                                  size:  15,
+                                  size: 15,
                                   color: selected
-                                      ? (isDark ? AppColors.slate900 : Colors.white)
+                                      ? (isDark
+                                          ? AppColors.slate900
+                                          : AppColors.onDark)
                                       : isMedical
                                           ? AppColors.rose500
-                                          : (isDark ? AppColors.slate400 : AppColors.slate500),
+                                          : (isDark
+                                              ? AppColors.slate400
+                                              : AppColors.slate500),
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
                                   t.$2,
                                   style: TextStyle(
-                                    fontSize:   12,
-                                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                                    fontSize: 12,
+                                    fontWeight: selected
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
                                     color: selected
-                                        ? (isDark ? AppColors.slate900 : Colors.white)
-                                        : (isDark ? AppColors.slate300 : AppColors.slate700),
+                                        ? (isDark
+                                            ? AppColors.slate900
+                                            : AppColors.onDark)
+                                        : (isDark
+                                            ? AppColors.slate300
+                                            : AppColors.slate700),
                                   ),
                                 ),
                               ],
@@ -254,30 +274,36 @@ class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
 
                     // Descrição
                     Text('Descrição (opcional)',
-                      style: TextStyle(
-                        fontSize:   12,
-                        fontWeight: FontWeight.w600,
-                        color:      isDark ? AppColors.slate300 : AppColors.slate600,
-                      )),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color:
+                              isDark ? AppColors.slate300 : AppColors.slate600,
+                        )),
                     const SizedBox(height: 6),
                     TextField(
                       controller: _descCtrl,
-                      maxLines:   3,
+                      maxLines: 3,
                       decoration: InputDecoration(
-                        hintText:        'Ex: Férias em família…',
-                        isDense:         true,
-                        contentPadding:  const EdgeInsets.all(12),
-                        filled:          true,
-                        fillColor:       isDark ? AppColors.slate800 : AppColors.slate50,
+                        hintText: 'Ex: Férias em família…',
+                        isDense: true,
+                        contentPadding: const EdgeInsets.all(12),
+                        filled: true,
+                        fillColor:
+                            isDark ? AppColors.slate800 : AppColors.slate50,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide(
-                              color: isDark ? AppColors.slate700 : AppColors.slate200),
+                              color: isDark
+                                  ? AppColors.slate700
+                                  : AppColors.slate200),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide(
-                              color: isDark ? AppColors.slate700 : AppColors.slate200),
+                              color: isDark
+                                  ? AppColors.slate700
+                                  : AppColors.slate200),
                         ),
                       ),
                     ),
@@ -297,18 +323,21 @@ class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
                         child: ElevatedButton(
                           onPressed: _saving ? null : _submit,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: isDark ? Colors.white : AppColors.slate900,
-                            foregroundColor: isDark ? AppColors.slate900 : Colors.white,
-                            disabledBackgroundColor:
-                                isDark ? Colors.white.withAlpha(100) : AppColors.slate400,
+                            backgroundColor:
+                                isDark ? AppColors.onDark : AppColors.slate900,
+                            foregroundColor:
+                                isDark ? AppColors.slate900 : AppColors.onDark,
+                            disabledBackgroundColor: isDark
+                                ? AppColors.onDark.withAlpha(100)
+                                : AppColors.slate400,
                           ),
                           child: _saving
                               ? const SizedBox(
-                                  width:  16,
+                                  width: 16,
                                   height: 16,
-                                  child:  CircularProgressIndicator(
+                                  child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color:       Colors.white,
+                                    color: AppColors.onDark,
                                   ),
                                 )
                               : const Text('Salvar'),
@@ -329,9 +358,9 @@ class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
 // ── Date tile ─────────────────────────────────────────────────────────────────
 
 class _DatePickerTile extends StatelessWidget {
-  final String    label;
+  final String label;
   final DateTime? date;
-  final bool      isDark;
+  final bool isDark;
   final VoidCallback onTap;
 
   const _DatePickerTile({
@@ -347,11 +376,11 @@ class _DatePickerTile extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-          style: TextStyle(
-            fontSize:   12,
-            fontWeight: FontWeight.w600,
-            color:      isDark ? AppColors.slate300 : AppColors.slate600,
-          )),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: isDark ? AppColors.slate300 : AppColors.slate600,
+            )),
         const SizedBox(height: 6),
         GestureDetector(
           onTap: onTap,
@@ -365,15 +394,15 @@ class _DatePickerTile extends StatelessWidget {
             ),
             child: Row(children: [
               Icon(Icons.calendar_today_outlined,
-                  size:  14,
+                  size: 14,
                   color: isDark ? AppColors.slate400 : AppColors.slate500),
               const SizedBox(width: 8),
               Text(
                 date != null ? _displayDate(date!) : 'Selecionar',
                 style: TextStyle(
                   fontSize: 13,
-                  color:    date != null
-                      ? (isDark ? Colors.white : AppColors.slate900)
+                  color: date != null
+                      ? (isDark ? AppColors.onDark : AppColors.slate900)
                       : (isDark ? AppColors.slate500 : AppColors.slate400),
                 ),
               ),

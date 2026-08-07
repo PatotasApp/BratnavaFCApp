@@ -9,6 +9,5 @@ final _spotlightDsProvider = Provider<SpotlightRemoteDataSource>(
 
 final spotlightProvider =
     FutureProvider.autoDispose.family<PlayerSpotlightReport, String>(
-  (ref, groupId) =>
-      ref.watch(_spotlightDsProvider).fetchSpotlight(groupId),
+  (ref, groupId) => ref.watch(_spotlightDsProvider).fetchSpotlight(groupId),
 );

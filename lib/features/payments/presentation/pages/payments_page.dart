@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
@@ -7,7 +8,6 @@ import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
-import '../../../members/presentation/providers/members_provider.dart';
 import '../../data/datasources/payments_remote_datasource.dart';
 import '../../data/datasources/transactions_remote_datasource.dart';
 import '../../domain/entities/payment_entities.dart';
@@ -19,8 +19,18 @@ import '../widgets/create_extra_charge_sheet.dart';
 import '../widgets/bulk_discount_sheet.dart';
 
 const _months = [
-  'Jan','Fev','Mar','Abr','Mai','Jun',
-  'Jul','Ago','Set','Out','Nov','Dez',
+  'Jan',
+  'Fev',
+  'Mar',
+  'Abr',
+  'Mai',
+  'Jun',
+  'Jul',
+  'Ago',
+  'Set',
+  'Out',
+  'Nov',
+  'Dez',
 ];
 
 class PaymentsPage extends ConsumerStatefulWidget {
@@ -31,24 +41,24 @@ class PaymentsPage extends ConsumerStatefulWidget {
 }
 
 class _PaymentsPageState extends ConsumerState<PaymentsPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late TabController _tabCtrl;
-  int  _year       = DateTime.now().year;
-  int  _extraYear  = DateTime.now().year;
-  int  _extraMonth = DateTime.now().month;
-  int  _paymentMode = 0;   // 0=Monthly, 1=PerGame
+  int _year = DateTime.now().year;
+  int _extraYear = DateTime.now().year;
+  int _extraMonth = DateTime.now().month;
+  int _paymentMode = 0; // 0=Monthly, 1=PerGame
   bool _loadingMode = true;
+  bool _loadingModeRequest = false;
 
   // ── Caixa ────────────────────────────────────────────────────────────────
-  bool   _showCaixa    = false;
-  String _caixaSubTab  = 'mes'; // 'mes' | 'geral'
-  int    _txYear       = DateTime.now().year;
-  int    _txMonth      = DateTime.now().month;
+  String _caixaSubTab = 'mes'; // 'mes' | 'geral'
+  int _txYear = DateTime.now().year;
+  int _txMonth = DateTime.now().month;
 
   String? get _groupId {
     final acc = ref.read(accountStoreProvider).activeAccount;
-    if (acc?.activeGroupId != null) return acc!.activeGroupId;
-    return ref.read(activePlayerProvider)?.groupId;
+    final player = ref.read(activePlayerProvider);
+    return player?.groupId ?? acc?.activeGroupId;
   }
 
   // Somente financeiro enxerga as pendências da patota inteira.
@@ -65,7 +75,7 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
+    _tabCtrl = TabController(length: 3, vsync: this);
     _loadPaymentMode();
   }
 
@@ -75,21 +85,44 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
     super.dispose();
   }
 
+  void _ensureTabControllerLength(int length) {
+    if (_tabCtrl.length == length) return;
+    final index = _tabCtrl.index.clamp(0, length - 1).toInt();
+    // O TabBar/TabBarView pode ainda estar finalizando a renderização com o
+    // controlador anterior. Não o descarte aqui: a instância atual será
+    // descartada normalmente no dispose da página.
+    _tabCtrl = TabController(length: length, vsync: this, initialIndex: index);
+  }
+
   Future<void> _loadPaymentMode() async {
+    if (_loadingModeRequest) return;
+    _loadingModeRequest = true;
     final gid = _groupId;
-    if (gid == null) { setState(() => _loadingMode = false); return; }
+    if (gid == null) {
+      if (mounted) setState(() => _loadingMode = false);
+      _loadingModeRequest = false;
+      return;
+    }
     try {
       final ds = ref.read(groupSettingsDsProvider);
       final settings = await ds.fetchGroupSettings(gid);
       if (mounted) {
+        final tabLength =
+            (settings.paymentMode == 0 ? 2 : 1) + (_isPaymentAdmin ? 1 : 0);
+        _ensureTabControllerLength(tabLength);
         setState(() {
           _paymentMode = settings.paymentMode;
           _loadingMode = false;
-          if (_paymentMode == 1) _tabCtrl.index = 1; // PerGame → cobranças extras
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _loadingMode = false);
+      if (mounted) {
+        _ensureTabControllerLength(
+            (_paymentMode == 0 ? 2 : 1) + (_isPaymentAdmin ? 1 : 0));
+        setState(() => _loadingMode = false);
+      }
+    } finally {
+      _loadingModeRequest = false;
     }
   }
 
@@ -107,25 +140,6 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
     ref.invalidate(myExtraChargesProvider(gid));
   }
 
-  // ── Alternar goleiro/linha ────────────────────────────────────────────────
-
-  Future<void> _toggleGoalkeeper(PlayerRow row) async {
-    try {
-      await ref.read(membersDsProvider).toggleGoalkeeper(row.playerId);
-      final gid = _groupId;
-      if (gid != null) {
-        ref.invalidate(monthlyGridProvider((groupId: gid, year: _year)));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(extractDioError(e, 'Falha ao alterar posição.')),
-          backgroundColor: AppColors.rose500,
-        ));
-      }
-    }
-  }
-
   // ── Abrir sheet de pagamento mensal ──────────────────────────────────────
 
   Future<void> _openMonthlySheet(
@@ -136,12 +150,13 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
     await showModalBottomSheet(
       context: ctx,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => MonthlyPaymentSheet(
-        row:          row,
-        month:        month,
-        isAdmin:      isPaymentAdmin,
-        onSubmit:     (dto) {
+        groupId: gid,
+        row: row,
+        month: month,
+        isAdmin: isPaymentAdmin,
+        onSubmit: (dto) {
           if (isPaymentAdmin) return _ds.upsertMonthly(gid, dto);
           return _ds.paySelected(gid, {
             'items': [
@@ -156,7 +171,7 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
           });
         },
         onSaveRating: (stars) => _ds.updatePlayerRating(row.playerId, stars),
-        onSaved:      _refreshMonthly,
+        onSaved: _refreshMonthly,
       ),
     );
   }
@@ -171,11 +186,12 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
     await showModalBottomSheet(
       context: ctx,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => ExtraPaymentSheet(
-        charge:   charge,
-        payment:  payment,
-        isAdmin:  isPaymentAdmin,
+        groupId: gid,
+        charge: charge,
+        payment: payment,
+        isAdmin: isPaymentAdmin,
         onSubmit: (dto) {
           if (isPaymentAdmin) {
             return _ds.upsertExtraChargePayment(
@@ -193,27 +209,27 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
             ],
           });
         },
-        onSaved:  _refreshExtra,
+        onSaved: _refreshExtra,
       ),
     );
   }
 
   // ── Criar cobrança extra ──────────────────────────────────────────────────
 
-  Future<void> _openCreateSheet(BuildContext ctx, List<PlayerRow> players) async {
+  Future<void> _openCreateSheet(
+      BuildContext ctx, List<PlayerRow> players) async {
     final gid = _groupId;
     if (gid == null) return;
-    final playerList = players
-        .map((p) => (id: p.playerId, name: p.playerName))
-        .toList();
+    final playerList =
+        players.map((p) => (id: p.playerId, name: p.playerName)).toList();
     await showModalBottomSheet(
       context: ctx,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => CreateExtraChargeSheet(
-        players:  playerList,
+        players: playerList,
         onSubmit: (dto) => _ds.createExtraCharge(gid, dto),
-        onSaved:  _refreshExtra,
+        onSaved: _refreshExtra,
       ),
     );
   }
@@ -226,11 +242,12 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
     await showModalBottomSheet(
       context: ctx,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => BulkDiscountSheet(
-        charge:   charge,
+        groupId: gid,
+        charge: charge,
         onSubmit: (dto) => _ds.bulkDiscountExtraCharge(gid, charge.id, dto),
-        onSaved:  _refreshExtra,
+        onSaved: _refreshExtra,
       ),
     );
   }
@@ -246,10 +263,13 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
         title: const Text('Cancelar cobrança'),
         content: const Text('Tem certeza que deseja cancelar esta cobrança?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Não')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Não')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Sim', style: TextStyle(color: AppColors.rose500)),
+            child:
+                const Text('Sim', style: TextStyle(color: AppColors.rose500)),
           ),
         ],
       ),
@@ -259,8 +279,8 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
       await _ds.cancelExtraCharge(gid, chargeId);
       _refreshExtra();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Cobrança cancelada')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Cobrança cancelada')));
       }
     } catch (e) {
       if (mounted) {
@@ -274,15 +294,18 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
 
   @override
   Widget build(BuildContext context) {
-    final isDark  = Theme.of(context).brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     // ref.watch — reconstrói automaticamente quando activeGroupId muda
     // (ex.: AppTopBar auto-seleciona o grupo logo após o login)
-    final account      = ref.watch(accountStoreProvider).activeAccount;
+    final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
     // Fallback: usa o groupId do player ativo se activeGroupId ainda não foi
     // persistido (race condition logo após login com múltiplos grupos)
-    final groupId      = account?.activeGroupId ?? activePlayer?.groupId ?? '';
-    final isAdmin      = account != null && groupId.isNotEmpty
+    // O jogador manda no grupo: `activeGroupId` da conta pode apontar
+    // para uma patota sem jogador nosso, e aí toda rota por grupo
+    // responde 403. Ver dashboard_page para o diagnóstico completo.
+    final groupId = activePlayer?.groupId ?? account?.activeGroupId ?? '';
+    final isAdmin = account != null && groupId.isNotEmpty
         ? account.isGroupFinanceiro(groupId)
         : false;
 
@@ -297,7 +320,8 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
         body: Center(
           child: Text(
             'Crie ou entre em um grupo',
-            style: TextStyle(color: isDark ? AppColors.slate400 : AppColors.slate500),
+            style: TextStyle(
+                color: isDark ? AppColors.slate400 : AppColors.slate500),
           ),
         ),
       );
@@ -311,71 +335,80 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
       body: NestedScrollView(
         headerSliverBuilder: (ctx, _) => [
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: _buildHeader(isDark),
-            ),
+            child: _buildHeader(),
           ),
         ],
         body: Column(
+          key: ValueKey(_tabCtrl),
           children: [
-            // Tab bar (oculto quando Caixa está ativo)
-            if (!_showCaixa)
-              Container(
-                color: isDark ? AppColors.slate900 : Colors.white,
-                child: TabBar(
-                  controller: _tabCtrl,
-                  tabs: [
-                    if (_paymentMode == 0)
-                      const Tab(text: '📅 Mensalidades'),
-                    const Tab(text: '💰 Cobranças extras'),
-                  ],
-                  labelColor:        isDark ? Colors.white : AppColors.slate900,
-                  unselectedLabelColor: isDark ? AppColors.slate500 : AppColors.slate400,
-                  indicatorColor:    isDark ? Colors.white : AppColors.slate900,
-                  labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                ),
-              ),
-
-            Expanded(
-              child: _showCaixa
-                  ? _CaixaView(
-                      groupId:    groupId,
-                      isDark:     isDark,
-                      subTab:     _caixaSubTab,
-                      txYear:     _txYear,
-                      txMonth:    _txMonth,
-                      onSubTab:   (s) => setState(() => _caixaSubTab = s),
-                      onTxYear:   (y) => setState(() => _txYear = y),
-                      onTxMonth:  (m) => setState(() => _txMonth = m),
-                    )
-                  : TabBarView(
-                      controller: _tabCtrl,
-                      children: [
-                        if (_paymentMode == 0)
-                          _MonthlyTab(
-                            groupId: groupId, year: _year, isAdmin: isAdmin,
-                            onYearChanged:        (y) => setState(() => _year = y),
-                            onOpenSheet:          (ctx, row, month) =>
-                                _openMonthlySheet(ctx, row, month),
-                            onToggleGoalkeeper:   isAdmin ? _toggleGoalkeeper : null,
-                          ),
-                        _ExtraTab(
-                          groupId:     groupId,
-                          year:        _extraYear,
-                          month:       _extraMonth,
-                          isAdmin:     isAdmin,
-                          onYearChanged: (y) => setState(() => _extraYear = y),
-                          onMonthChanged: (m) => setState(() => _extraMonth = m),
-                          onOpenExtraSheet: (ctx, c, p) => _openExtraSheet(ctx, c, p),
-                          onCreateSheet:    (ctx, players) =>
-                              _openCreateSheet(ctx, players),
-                          onBulkSheet:      (ctx, c) => _openBulkSheet(ctx, c),
-                          onCancel:         (ctx, id) => _cancelCharge(ctx, id),
-                          onRefresh:        _refreshExtra,
-                        ),
-                      ],
+            Container(
+              color: isDark ? AppColors.slate900 : AppColors.onDark,
+              child: TabBar(
+                controller: _tabCtrl,
+                tabs: [
+                  if (_paymentMode == 0)
+                    const Tab(
+                      icon: Icon(Icons.calendar_month_outlined, size: 18),
+                      text: 'Mensalidades',
                     ),
+                  const Tab(
+                    icon: Icon(Icons.receipt_long_outlined, size: 18),
+                    text: 'Cobranças extras',
+                  ),
+                  if (isAdmin)
+                    const Tab(
+                      icon: Icon(Icons.account_balance_outlined, size: 18),
+                      text: 'Caixa',
+                    ),
+                ],
+                labelColor: isDark ? AppColors.onDark : AppColors.slate900,
+                unselectedLabelColor:
+                    isDark ? AppColors.slate500 : AppColors.slate400,
+                indicatorColor: isDark ? AppColors.onDark : AppColors.slate900,
+                labelStyle:
+                    const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              ),
+            ),
+            Expanded(
+              child: TabBarView(
+                controller: _tabCtrl,
+                children: [
+                  if (_paymentMode == 0)
+                    _MonthlyTab(
+                      groupId: groupId,
+                      year: _year,
+                      isAdmin: isAdmin,
+                      onYearChanged: (y) => setState(() => _year = y),
+                      onOpenSheet: (ctx, row, month) =>
+                          _openMonthlySheet(ctx, row, month),
+                    ),
+                  _ExtraTab(
+                    groupId: groupId,
+                    year: _extraYear,
+                    month: _extraMonth,
+                    isAdmin: isAdmin,
+                    onYearChanged: (y) => setState(() => _extraYear = y),
+                    onMonthChanged: (m) => setState(() => _extraMonth = m),
+                    onOpenExtraSheet: (ctx, c, p) => _openExtraSheet(ctx, c, p),
+                    onCreateSheet: (ctx, players) =>
+                        _openCreateSheet(ctx, players),
+                    onBulkSheet: (ctx, c) => _openBulkSheet(ctx, c),
+                    onCancel: (ctx, id) => _cancelCharge(ctx, id),
+                    onRefresh: _refreshExtra,
+                  ),
+                  if (isAdmin)
+                    _CaixaView(
+                      groupId: groupId,
+                      isDark: isDark,
+                      subTab: _caixaSubTab,
+                      txYear: _txYear,
+                      txMonth: _txMonth,
+                      onSubTab: (s) => setState(() => _caixaSubTab = s),
+                      onTxYear: (y) => setState(() => _txYear = y),
+                      onTxMonth: (m) => setState(() => _txMonth = m),
+                    ),
+                ],
+              ),
             ),
           ],
         ),
@@ -383,69 +416,63 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
     );
   }
 
-  Widget _buildHeader(bool isDark) {
+  Widget _buildHeader() {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A)],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color:      Colors.black.withValues(alpha: .18),
-            blurRadius: 12,
-            offset:     const Offset(0, 4),
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant,
           ),
-        ],
+        ),
       ),
-      padding: const EdgeInsets.all(20),
-      child: Row(children: [
-        Container(
-          width: 52, height: 52,
-          decoration: BoxDecoration(
-            color:        Colors.white.withValues(alpha: .1),
-            borderRadius: BorderRadius.circular(14),
-            border:       Border.all(color: Colors.white.withValues(alpha: .2)),
-          ),
-          child: const Icon(Icons.payments_outlined, size: 26, color: Colors.white),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Pagamentos',
-                style: TextStyle(
-                    color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
-            Text('Mensalidades e cobranças extras',
-                style: TextStyle(
-                    color: Colors.white.withValues(alpha: .5), fontSize: 12)),
-          ]),
-        ),
-        // Botão Caixa (só financeiro/admin)
-        if (_isPaymentAdmin)
-          GestureDetector(
-            onTap: () => setState(() => _showCaixa = !_showCaixa),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: _showCaixa
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: .15),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                    color: Colors.white.withValues(alpha: _showCaixa ? 1 : .3)),
-              ),
-              child: Text('🏦 Caixa',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: _showCaixa ? const Color(0xFF0F172A) : Colors.white,
-                  )),
+      child: SafeArea(
+        bottom: false,
+        child: SizedBox(
+          height: 72,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                IconButton(
+                  onPressed: () {
+                    if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      context.go('/app');
+                    }
+                  },
+                  tooltip: 'Voltar',
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
+                const SizedBox(width: 8),
+                const Icon(Icons.payments_outlined, size: 24),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Pagamentos',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Mensalidades, cobranças e caixa',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-      ]),
+        ),
+      ),
     );
   }
 }
@@ -455,30 +482,61 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
 // ══════════════════════════════════════════════════════════════════════════════
 
 const _kMonthNames = [
-  'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro',
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
 ];
 const _kMonthShort = [
-  'Jan','Fev','Mar','Abr','Mai','Jun',
-  'Jul','Ago','Set','Out','Nov','Dez',
+  'Jan',
+  'Fev',
+  'Mar',
+  'Abr',
+  'Mai',
+  'Jun',
+  'Jul',
+  'Ago',
+  'Set',
+  'Out',
+  'Nov',
+  'Dez',
 ];
 const _kCategoryNames = [
-  'Aluguel','Bola','Colete','Árbitro','Transporte','Lanche','Outro',
+  'Aluguel',
+  'Bola',
+  'Colete',
+  'Árbitro',
+  'Transporte',
+  'Lanche',
+  'Outro',
 ];
 
 class _CaixaView extends ConsumerStatefulWidget {
-  final String   groupId;
-  final bool     isDark;
-  final String   subTab;
-  final int      txYear, txMonth;
+  final String groupId;
+  final bool isDark;
+  final String subTab;
+  final int txYear, txMonth;
   final void Function(String) onSubTab;
-  final void Function(int)    onTxYear;
-  final void Function(int)    onTxMonth;
+  final void Function(int) onTxYear;
+  final void Function(int) onTxMonth;
 
   const _CaixaView({
-    required this.groupId, required this.isDark,
-    required this.subTab,  required this.txYear, required this.txMonth,
-    required this.onSubTab, required this.onTxYear, required this.onTxMonth,
+    required this.groupId,
+    required this.isDark,
+    required this.subTab,
+    required this.txYear,
+    required this.txMonth,
+    required this.onSubTab,
+    required this.onTxYear,
+    required this.onTxMonth,
   });
 
   @override
@@ -486,12 +544,10 @@ class _CaixaView extends ConsumerStatefulWidget {
 }
 
 class _CaixaViewState extends ConsumerState<_CaixaView> {
-  List<TransactionDto>             _transactions = [];
-  List<TransactionMonthSummaryDto> _summaries    = [];
-  PendingTotalsDto?                _pending;
-  bool   _loading  = false;
-  bool   _syncing  = false;
-  bool   _clearing = false;
+  List<TransactionDto> _transactions = [];
+  List<TransactionMonthSummaryDto> _summaries = [];
+  PendingTotalsDto? _pending;
+  bool _loading = false;
   String? _error;
 
   TransactionsRemoteDataSource get _ds => ref.read(transactionsDsProvider);
@@ -514,26 +570,31 @@ class _CaixaViewState extends ConsumerState<_CaixaView> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       if (widget.subTab == 'mes') {
         final results = await Future.wait([
           _ds.getByMonth(widget.groupId, widget.txYear, widget.txMonth),
           _ds.getPendingTotals(widget.groupId),
         ]);
-        if (mounted) setState(() {
-          _transactions = results[0] as List<TransactionDto>;
-          _pending      = results[1] as PendingTotalsDto?;
-        });
+        if (mounted)
+          setState(() {
+            _transactions = results[0] as List<TransactionDto>;
+            _pending = results[1] as PendingTotalsDto?;
+          });
       } else {
         final results = await Future.wait([
           _ds.getMonthlySummaries(widget.groupId),
           _ds.getPendingTotals(widget.groupId),
         ]);
-        if (mounted) setState(() {
-          _summaries = results[0] as List<TransactionMonthSummaryDto>;
-          _pending   = results[1] as PendingTotalsDto?;
-        });
+        if (mounted)
+          setState(() {
+            _summaries = results[0] as List<TransactionMonthSummaryDto>;
+            _pending = results[1] as PendingTotalsDto?;
+          });
       }
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -542,56 +603,15 @@ class _CaixaViewState extends ConsumerState<_CaixaView> {
     }
   }
 
-  Future<void> _sync() async {
-    setState(() => _syncing = true);
-    try {
-      await _ds.syncTransactions(widget.groupId);
-      await _load();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Caixa sincronizado!')));
-      }
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: $e'), backgroundColor: AppColors.rose500));
-    } finally {
-      if (mounted) setState(() => _syncing = false);
-    }
-  }
-
-  Future<void> _clearCaixa() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Limpar caixa'),
-        content: const Text('Remove todos os lançamentos para re-sincronizar do zero.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.rose500),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Limpar'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    setState(() => _clearing = true);
-    try {
-      await _ds.clearAllTransactions(widget.groupId);
-      await _load();
-    } catch (_) {} finally {
-      if (mounted) setState(() => _clearing = false);
-    }
-  }
-
   Future<void> _addTransaction(int type) async {
-    final isDark = widget.isDark;
-    final amtCtrl  = TextEditingController();
+    final amtCtrl = TextEditingController();
     final descCtrl = TextEditingController();
+    var selectedDate = DateTime.now();
     final dateCtrl = TextEditingController(
-        text: '${widget.txYear}-${widget.txMonth.toString().padLeft(2,'0')}-01');
+        text:
+            '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}');
     int? category;
+    String? validationMessage;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -600,36 +620,87 @@ class _CaixaViewState extends ConsumerState<_CaixaView> {
           title: Text(type == 0 ? '+ Entrada' : '- Saída'),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(controller: amtCtrl,
+              TextField(
+                  controller: amtCtrl,
                   keyboardType: TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
                       labelText: 'Valor (R\$)', prefixText: 'R\$ ')),
               const SizedBox(height: 12),
-              TextField(controller: descCtrl,
+              TextField(
+                  controller: descCtrl,
                   decoration: const InputDecoration(labelText: 'Descrição')),
               const SizedBox(height: 12),
-              TextField(controller: dateCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Data', hintText: 'AAAA-MM-DD')),
+              TextField(
+                controller: dateCtrl,
+                readOnly: true,
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: ctx,
+                    initialDate: selectedDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(DateTime.now().year + 5),
+                  );
+                  if (picked == null) return;
+                  setS(() {
+                    selectedDate = picked;
+                    dateCtrl.text =
+                        '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                  });
+                },
+                decoration: const InputDecoration(
+                  labelText: 'Data',
+                  suffixIcon: Icon(Icons.calendar_today_outlined),
+                ),
+              ),
               if (type == 1) ...[
                 const SizedBox(height: 12),
                 DropdownButtonFormField<int>(
                   decoration: const InputDecoration(labelText: 'Categoria'),
                   value: category,
-                  items: List.generate(_kCategoryNames.length, (i) =>
-                      DropdownMenuItem(value: i, child: Text(_kCategoryNames[i]))),
+                  items: List.generate(
+                      _kCategoryNames.length,
+                      (i) => DropdownMenuItem(
+                          value: i, child: Text(_kCategoryNames[i]))),
                   onChanged: (v) => setS(() => category = v),
+                ),
+              ],
+              if (validationMessage != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  validationMessage!,
+                  style: const TextStyle(
+                    color: AppColors.rose500,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
                 child: const Text('Cancelar')),
             FilledButton(
               style: FilledButton.styleFrom(
-                  backgroundColor: type == 0 ? AppColors.green600 : AppColors.rose500),
-              onPressed: () => Navigator.pop(ctx, true),
+                  backgroundColor:
+                      type == 0 ? AppColors.primaryPressed : AppColors.rose500),
+              onPressed: () {
+                final amount =
+                    double.tryParse(amtCtrl.text.trim().replaceAll(',', '.'));
+                final message = amount == null || amount <= 0
+                    ? 'Informe um valor maior que zero.'
+                    : descCtrl.text.trim().isEmpty
+                        ? 'Informe uma descrição para o lançamento.'
+                        : type == 1 && category == null
+                            ? 'Selecione uma categoria para a saída.'
+                            : null;
+                if (message != null) {
+                  setS(() => validationMessage = message);
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
               child: const Text('Salvar'),
             ),
           ],
@@ -643,17 +714,20 @@ class _CaixaViewState extends ConsumerState<_CaixaView> {
     if (descCtrl.text.trim().isEmpty) return;
 
     try {
-      await _ds.createTransaction(widget.groupId, CreateTransactionDto(
-        type:        type,
-        amount:      amount,
-        description: descCtrl.text.trim(),
-        date:        dateCtrl.text.trim(),
-        category:    type == 1 ? category : null,
-      ));
+      await _ds.createTransaction(
+          widget.groupId,
+          CreateTransactionDto(
+            type: type,
+            amount: amount,
+            description: descCtrl.text.trim(),
+            date: dateCtrl.text.trim(),
+            category: type == 1 ? category : null,
+          ));
       await _load();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: $e'), backgroundColor: AppColors.rose500));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Erro: $e'), backgroundColor: AppColors.rose500));
     }
   }
 
@@ -674,89 +748,91 @@ class _CaixaViewState extends ConsumerState<_CaixaView> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-
           // ── Pendências em aberto ─────────────────────────────────────
           if (p != null && p.grandTotal > 0)
             Container(
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color:        isDark ? const Color(0xFF3D2E00) : const Color(0xFFFFFBEB),
+                color: isDark ? AppColors.warning : AppColors.amber50,
                 borderRadius: BorderRadius.circular(12),
-                border:       Border.all(color: AppColors.amber200),
+                border: Border.all(color: AppColors.amber200),
               ),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  const Icon(Icons.account_balance_wallet_outlined,
-                      size: 15, color: AppColors.amber500),
-                  const SizedBox(width: 6),
-                  Text('Pendências em aberto',
-                      style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w600,
-                        color: AppColors.amber500,
-                      )),
-                ]),
-                const SizedBox(height: 8),
-                Row(children: [
-                  if (p.totalMonthlyPending > 0)
-                    Expanded(child: _PendItem(
-                        label: 'Mensalidades',
-                        value: p.totalMonthlyPending)),
-                  if (p.totalExtraChargesPending > 0)
-                    Expanded(child: _PendItem(
-                        label: 'Cobranças extras',
-                        value: p.totalExtraChargesPending)),
-                  Expanded(child: _PendItem(
-                      label: 'Total pendente',
-                      value: p.grandTotal,
-                      bold: true)),
-                ]),
-              ]),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      const Icon(Icons.account_balance_wallet_outlined,
+                          size: 15, color: AppColors.amber500),
+                      const SizedBox(width: 6),
+                      Text('Pendências em aberto',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.amber500,
+                          )),
+                    ]),
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      if (p.totalMonthlyPending > 0)
+                        Expanded(
+                            child: _PendItem(
+                                label: 'Mensalidades',
+                                value: p.totalMonthlyPending)),
+                      if (p.totalExtraChargesPending > 0)
+                        Expanded(
+                            child: _PendItem(
+                                label: 'Cobranças extras',
+                                value: p.totalExtraChargesPending)),
+                      Expanded(
+                          child: _PendItem(
+                              label: 'Total pendente',
+                              value: p.grandTotal,
+                              bold: true)),
+                    ]),
+                  ]),
             ),
 
           // ── Sub-tabs + ações ──────────────────────────────────────────
           Row(children: [
-            _SubTabBtn('📅 Mês',     'mes',   widget.subTab, isDark,
+            _SubTabBtn('📅 Mês', 'mes', widget.subTab, isDark,
                 () => widget.onSubTab('mes')),
             const SizedBox(width: 6),
-            _SubTabBtn('📊 Geral',   'geral', widget.subTab, isDark,
+            _SubTabBtn('📊 Geral', 'geral', widget.subTab, isDark,
                 () => widget.onSubTab('geral')),
-            const Spacer(),
-            _IconBtn(icon: Icons.refresh_rounded,
-                label: 'Sync', loading: _syncing,
-                onTap: _syncing || _clearing ? null : _sync,
-                isDark: isDark),
-            const SizedBox(width: 4),
-            _IconBtn(icon: Icons.delete_outline_rounded,
-                label: 'Limpar', loading: _clearing,
-                color: AppColors.rose500,
-                onTap: _syncing || _clearing ? null : _clearCaixa,
-                isDark: isDark),
           ]),
           const SizedBox(height: 16),
 
           // ── Sub-tab: Mês ─────────────────────────────────────────────
           if (widget.subTab == 'mes') ...[
             // Navegação ano/mês
-            _YearRow(year: widget.txYear, isDark: isDark,
+            _YearRow(
+                year: widget.txYear,
+                isDark: isDark,
                 onPrev: () => widget.onTxYear(widget.txYear - 1),
                 onNext: () => widget.onTxYear(widget.txYear + 1)),
             const SizedBox(height: 8),
-            _MonthRow(month: widget.txMonth, isDark: isDark,
+            _MonthRow(
+                month: widget.txMonth,
+                isDark: isDark,
                 onMonth: widget.onTxMonth),
             const SizedBox(height: 12),
 
             // Botões add entrada/saída
             Row(children: [
-              Expanded(child: FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: AppColors.green600),
+              Expanded(
+                  child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primaryPressed),
                 icon: const Icon(Icons.arrow_upward_rounded, size: 16),
                 label: const Text('Entrada'),
                 onPressed: () => _addTransaction(0),
               )),
               const SizedBox(width: 8),
-              Expanded(child: FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: AppColors.rose500),
+              Expanded(
+                  child: FilledButton.icon(
+                style:
+                    FilledButton.styleFrom(backgroundColor: AppColors.rose500),
                 icon: const Icon(Icons.arrow_downward_rounded, size: 16),
                 label: const Text('Saída'),
                 onPressed: () => _addTransaction(1),
@@ -765,11 +841,13 @@ class _CaixaViewState extends ConsumerState<_CaixaView> {
             const SizedBox(height: 12),
 
             if (_loading)
-              const Center(child: Padding(
-                  padding: EdgeInsets.all(32),
-                  child: CircularProgressIndicator()))
+              const Center(
+                  child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: CircularProgressIndicator()))
             else if (_transactions.isEmpty)
-              _EmptyCaixa(isDark: isDark,
+              _EmptyCaixa(
+                  isDark: isDark,
                   msg: 'Nenhum lançamento em '
                       '${_kMonthNames[widget.txMonth - 1]}/${widget.txYear}.')
             else ...[
@@ -778,19 +856,21 @@ class _CaixaViewState extends ConsumerState<_CaixaView> {
               const SizedBox(height: 12),
               // Lista
               ..._transactions.map((tx) => _TxRow(
-                tx:      tx,
-                isDark:  isDark,
-                onDelete: tx.isAutomatic ? null : () => _deleteTransaction(tx.id),
-              )),
+                    tx: tx,
+                    isDark: isDark,
+                    onDelete:
+                        tx.isAutomatic ? null : () => _deleteTransaction(tx.id),
+                  )),
             ],
           ],
 
           // ── Sub-tab: Geral ───────────────────────────────────────────
           if (widget.subTab == 'geral') ...[
             if (_loading)
-              const Center(child: Padding(
-                  padding: EdgeInsets.all(32),
-                  child: CircularProgressIndicator()))
+              const Center(
+                  child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: CircularProgressIndicator()))
             else if (_summaries.isEmpty)
               _EmptyCaixa(isDark: isDark, msg: 'Nenhum dado disponível.')
             else
@@ -807,29 +887,32 @@ class _CaixaViewState extends ConsumerState<_CaixaView> {
 class _PendItem extends StatelessWidget {
   final String label;
   final double value;
-  final bool   bold;
-  const _PendItem({required this.label, required this.value, this.bold = false});
+  final bool bold;
+  const _PendItem(
+      {required this.label, required this.value, this.bold = false});
 
   @override
   Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(label, style: const TextStyle(fontSize: 10, color: AppColors.amber500)),
-      Text('R\$ ${value.toStringAsFixed(2)}',
-          style: TextStyle(
-            fontSize: bold ? 15 : 13,
-            fontWeight: bold ? FontWeight.w900 : FontWeight.w700,
-            color: AppColors.amber500,
-          )),
-    ],
-  );
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: const TextStyle(fontSize: 10, color: AppColors.amber500)),
+          Text('R\$ ${value.toStringAsFixed(2)}',
+              style: TextStyle(
+                fontSize: bold ? 15 : 13,
+                fontWeight: bold ? FontWeight.w900 : FontWeight.w700,
+                color: AppColors.amber500,
+              )),
+        ],
+      );
 }
 
 class _SubTabBtn extends StatelessWidget {
   final String label, value, current;
-  final bool   isDark;
+  final bool isDark;
   final VoidCallback onTap;
-  const _SubTabBtn(this.label, this.value, this.current, this.isDark, this.onTap);
+  const _SubTabBtn(
+      this.label, this.value, this.current, this.isDark, this.onTap);
 
   @override
   Widget build(BuildContext context) {
@@ -841,19 +924,20 @@ class _SubTabBtn extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
           color: active
-              ? (isDark ? Colors.white : AppColors.slate900)
-              : (isDark ? AppColors.slate800 : Colors.white),
+              ? (isDark ? AppColors.onDark : AppColors.slate900)
+              : (isDark ? AppColors.slate800 : AppColors.onDark),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
               color: active
-                  ? Colors.transparent
+                  ? AppColors.transparent
                   : (isDark ? AppColors.slate700 : AppColors.slate200)),
         ),
         child: Text(label,
             style: TextStyle(
-              fontSize: 12, fontWeight: FontWeight.w700,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
               color: active
-                  ? (isDark ? AppColors.slate900 : Colors.white)
+                  ? (isDark ? AppColors.slate900 : AppColors.onDark)
                   : (isDark ? AppColors.slate400 : AppColors.slate600),
             )),
       ),
@@ -861,107 +945,83 @@ class _SubTabBtn extends StatelessWidget {
   }
 }
 
-class _IconBtn extends StatelessWidget {
-  final IconData     icon;
-  final String       label;
-  final bool         loading;
-  final VoidCallback? onTap;
-  final bool         isDark;
-  final Color?       color;
-  const _IconBtn({required this.icon, required this.label, required this.loading,
-      required this.onTap, required this.isDark, this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = color ?? (isDark ? AppColors.slate400 : AppColors.slate500);
-    return GestureDetector(
-      onTap: onTap,
-      child: Opacity(
-        opacity: onTap == null ? .4 : 1,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            border:       Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            loading
-                ? SizedBox(width: 12, height: 12,
-                    child: CircularProgressIndicator(strokeWidth: 1.5, color: c))
-                : Icon(icon, size: 13, color: c),
-            const SizedBox(width: 4),
-            Text(label, style: TextStyle(fontSize: 11, color: c)),
-          ]),
-        ),
-      ),
-    );
-  }
-}
-
 class _YearRow extends StatelessWidget {
-  final int year; final bool isDark;
+  final int year;
+  final bool isDark;
   final VoidCallback onPrev, onNext;
-  const _YearRow({required this.year, required this.isDark,
-      required this.onPrev, required this.onNext});
+  const _YearRow(
+      {required this.year,
+      required this.isDark,
+      required this.onPrev,
+      required this.onNext});
 
   @override
   Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      GestureDetector(onTap: onPrev,
-          child: Icon(Icons.chevron_left_rounded, size: 20,
-              color: isDark ? AppColors.slate400 : AppColors.slate500)),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Text('$year',
-            style: TextStyle(
-              fontSize: 14, fontWeight: FontWeight.w700,
-              color: isDark ? AppColors.slate100 : AppColors.slate800,
-            )),
-      ),
-      GestureDetector(onTap: onNext,
-          child: Icon(Icons.chevron_right_rounded, size: 20,
-              color: isDark ? AppColors.slate400 : AppColors.slate500)),
-    ],
-  );
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+              onTap: onPrev,
+              child: Icon(Icons.chevron_left_rounded,
+                  size: 20,
+                  color: isDark ? AppColors.slate400 : AppColors.slate500)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text('$year',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? AppColors.slate100 : AppColors.slate800,
+                )),
+          ),
+          GestureDetector(
+              onTap: onNext,
+              child: Icon(Icons.chevron_right_rounded,
+                  size: 20,
+                  color: isDark ? AppColors.slate400 : AppColors.slate500)),
+        ],
+      );
 }
 
 class _MonthRow extends StatelessWidget {
-  final int month; final bool isDark;
+  final int month;
+  final bool isDark;
   final void Function(int) onMonth;
-  const _MonthRow({required this.month, required this.isDark, required this.onMonth});
+  const _MonthRow(
+      {required this.month, required this.isDark, required this.onMonth});
 
   @override
   Widget build(BuildContext context) => Wrap(
-    spacing: 4, runSpacing: 4,
-    children: List.generate(12, (i) {
-      final active = i + 1 == month;
-      return GestureDetector(
-        onTap: () => onMonth(i + 1),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 130),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: active
-                ? (isDark ? Colors.white : AppColors.slate900)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
+        spacing: 4,
+        runSpacing: 4,
+        children: List.generate(12, (i) {
+          final active = i + 1 == month;
+          return GestureDetector(
+            onTap: () => onMonth(i + 1),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 130),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
                 color: active
-                    ? Colors.transparent
-                    : (isDark ? AppColors.slate700 : AppColors.slate200)),
-          ),
-          child: Text(_kMonthShort[i],
-              style: TextStyle(
-                fontSize: 11, fontWeight: FontWeight.w600,
-                color: active
-                    ? (isDark ? AppColors.slate900 : Colors.white)
-                    : (isDark ? AppColors.slate400 : AppColors.slate600),
-              )),
-        ),
+                    ? (isDark ? AppColors.onDark : AppColors.slate900)
+                    : AppColors.transparent,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                    color: active
+                        ? AppColors.transparent
+                        : (isDark ? AppColors.slate700 : AppColors.slate200)),
+              ),
+              child: Text(_kMonthShort[i],
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: active
+                        ? (isDark ? AppColors.slate900 : AppColors.onDark)
+                        : (isDark ? AppColors.slate400 : AppColors.slate600),
+                  )),
+            ),
+          );
+        }),
       );
-    }),
-  );
 }
 
 class _MesSummary extends StatelessWidget {
@@ -971,101 +1031,126 @@ class _MesSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final income  = transactions.where((t) => t.isIncome).fold(0.0, (s, t) => s + t.amount);
-    final expense = transactions.where((t) => !t.isIncome).fold(0.0, (s, t) => s + t.amount);
-    final net     = income - expense;
-    return Row(children: [
-      _SummBox('Entradas', income,  AppColors.green600, isDark),
+    final income =
+        transactions.where((t) => t.isIncome).fold(0.0, (s, t) => s + t.amount);
+    final expense = transactions
+        .where((t) => !t.isIncome)
+        .fold(0.0, (s, t) => s + t.amount);
+    final net = income - expense;
+    return Row(
+        children: [
+      _SummBox('Entradas', income, AppColors.primaryPressed, isDark),
       const SizedBox(width: 8),
-      _SummBox('Saídas',   expense, AppColors.rose500,  isDark),
+      _SummBox('Saídas', expense, AppColors.rose500, isDark),
       const SizedBox(width: 8),
-      _SummBox('Saldo',    net,     net >= 0 ? AppColors.green600 : AppColors.rose500, isDark),
+      _SummBox('Saldo', net,
+          net >= 0 ? AppColors.primaryPressed : AppColors.rose500, isDark),
     ].expand((w) => [w]).toList());
   }
 }
 
 class _SummBox extends StatelessWidget {
-  final String label; final double value; final Color color; final bool isDark;
+  final String label;
+  final double value;
+  final Color color;
+  final bool isDark;
   const _SummBox(this.label, this.value, this.color, this.isDark);
 
   @override
   Widget build(BuildContext context) => Expanded(
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      decoration: BoxDecoration(
-        color:        color.withValues(alpha: .08),
-        borderRadius: BorderRadius.circular(10),
-        border:       Border.all(color: color.withValues(alpha: .2)),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label, style: TextStyle(fontSize: 10, color: color)),
-        const SizedBox(height: 2),
-        Text('R\$ ${value.toStringAsFixed(2)}',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color)),
-      ]),
-    ),
-  );
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: .08),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withValues(alpha: .2)),
+          ),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: TextStyle(fontSize: 10, color: color)),
+            const SizedBox(height: 2),
+            Text('R\$ ${value.toStringAsFixed(2)}',
+                style: TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w700, color: color)),
+          ]),
+        ),
+      );
 }
 
 class _TxRow extends StatelessWidget {
   final TransactionDto tx;
-  final bool           isDark;
-  final VoidCallback?  onDelete;
+  final bool isDark;
+  final VoidCallback? onDelete;
   const _TxRow({required this.tx, required this.isDark, this.onDelete});
 
   @override
   Widget build(BuildContext context) {
-    final isIn  = tx.isIncome;
-    final color = isIn ? AppColors.green600 : AppColors.rose500;
-    final bg    = isIn
-        ? (isDark ? const Color(0xFF0D2010) : const Color(0xFFF0FDF4))
-        : (isDark ? const Color(0xFF2D0C0C) : const Color(0xFFFFF1F2));
+    final isIn = tx.isIncome;
+    final color = isIn ? AppColors.primaryPressed : AppColors.rose500;
+    final bg = isIn
+        ? (isDark ? AppColors.successBackground : AppColors.green50)
+        : (isDark ? AppColors.dangerBackground : AppColors.rose50);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color:        bg,
+        color: bg,
         borderRadius: BorderRadius.circular(10),
-        border:       Border.all(color: color.withValues(alpha: .2)),
+        border: Border.all(color: color.withValues(alpha: .2)),
       ),
       child: Row(children: [
-        Icon(isIn ? Icons.arrow_circle_up_rounded : Icons.arrow_circle_down_rounded,
-            size: 20, color: color),
+        Icon(
+            isIn
+                ? Icons.arrow_circle_up_rounded
+                : Icons.arrow_circle_down_rounded,
+            size: 20,
+            color: color),
         const SizedBox(width: 10),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(tx.description,
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white : AppColors.slate900),
-              maxLines: 1, overflow: TextOverflow.ellipsis),
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? AppColors.onDark : AppColors.slate900),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
           Row(children: [
             Text(
-              tx.date.length >= 10
-                  ? '${tx.date.substring(8,10)}/${tx.date.substring(5,7)}/${tx.date.substring(0,4)}'
-                  : tx.date,
-              style: TextStyle(fontSize: 11,
-                  color: isDark ? AppColors.slate400 : AppColors.slate500)),
-            if (tx.category != null && tx.category! < _kCategoryNames.length) ...[
+                tx.date.length >= 10
+                    ? '${tx.date.substring(8, 10)}/${tx.date.substring(5, 7)}/${tx.date.substring(0, 4)}'
+                    : tx.date,
+                style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? AppColors.slate400 : AppColors.slate500)),
+            if (tx.category != null &&
+                tx.category! < _kCategoryNames.length) ...[
               const SizedBox(width: 6),
               Text(_kCategoryNames[tx.category!],
-                  style: TextStyle(fontSize: 11,
+                  style: TextStyle(
+                      fontSize: 11,
                       color: isDark ? AppColors.slate500 : AppColors.slate400)),
             ],
             if (tx.isAutomatic) ...[
               const SizedBox(width: 6),
-              Text('auto', style: TextStyle(fontSize: 11, color: AppColors.blue600)),
+              Text('auto',
+                  style: TextStyle(fontSize: 11, color: AppColors.infoLight)),
             ],
           ]),
         ])),
         Text(
           '${isIn ? '+' : '-'} R\$ ${tx.amount.toStringAsFixed(2)}',
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color),
+          style: TextStyle(
+              fontSize: 13, fontWeight: FontWeight.w700, color: color),
         ),
         if (onDelete != null) ...[
           const SizedBox(width: 8),
           GestureDetector(
             onTap: onDelete,
-            child: Icon(Icons.close_rounded, size: 16,
+            child: Icon(Icons.close_rounded,
+                size: 16,
                 color: isDark ? AppColors.slate500 : AppColors.slate400),
           ),
         ],
@@ -1087,30 +1172,38 @@ class _SummaryRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color:        isDark ? AppColors.slate800 : Colors.white,
+        color: isDark ? AppColors.slate800 : AppColors.onDark,
         borderRadius: BorderRadius.circular(10),
-        border:       Border.all(
-            color: isDark ? AppColors.slate700 : AppColors.slate200),
+        border:
+            Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
       ),
       child: Row(children: [
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('${_kMonthNames[summary.month - 1]} ${summary.year}',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white : AppColors.slate900)),
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? AppColors.onDark : AppColors.slate900)),
           const SizedBox(height: 3),
-          Text('Entradas: R\$ ${summary.totalIncome.toStringAsFixed(2)}   '
-               'Saídas: R\$ ${summary.totalExpense.toStringAsFixed(2)}',
-              style: TextStyle(fontSize: 11,
+          Text(
+              'Entradas: R\$ ${summary.totalIncome.toStringAsFixed(2)}   '
+              'Saídas: R\$ ${summary.totalExpense.toStringAsFixed(2)}',
+              style: TextStyle(
+                  fontSize: 11,
                   color: isDark ? AppColors.slate400 : AppColors.slate500)),
         ])),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text('R\$ ${net.toStringAsFixed(2)}',
               style: TextStyle(
-                fontSize: 13, fontWeight: FontWeight.w700,
-                color: net >= 0 ? AppColors.green600 : AppColors.rose500,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: net >= 0 ? AppColors.primaryPressed : AppColors.rose500,
               )),
           Text('Acc: R\$ ${acc.toStringAsFixed(2)}',
-              style: TextStyle(fontSize: 10,
+              style: TextStyle(
+                  fontSize: 10,
                   color: isDark ? AppColors.slate400 : AppColors.slate500)),
         ]),
       ]),
@@ -1119,22 +1212,25 @@ class _SummaryRow extends StatelessWidget {
 }
 
 class _EmptyCaixa extends StatelessWidget {
-  final bool   isDark;
+  final bool isDark;
   final String msg;
   const _EmptyCaixa({required this.isDark, required this.msg});
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 40),
-    child: Column(children: [
-      Icon(Icons.account_balance_wallet_outlined, size: 36,
-          color: isDark ? AppColors.slate600 : AppColors.slate300),
-      const SizedBox(height: 10),
-      Text(msg, style: TextStyle(fontSize: 13,
-          color: isDark ? AppColors.slate400 : AppColors.slate500),
-          textAlign: TextAlign.center),
-    ]),
-  );
+        padding: const EdgeInsets.symmetric(vertical: 40),
+        child: Column(children: [
+          Icon(Icons.account_balance_wallet_outlined,
+              size: 36,
+              color: isDark ? AppColors.slate600 : AppColors.slate300),
+          const SizedBox(height: 10),
+          Text(msg,
+              style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? AppColors.slate400 : AppColors.slate500),
+              textAlign: TextAlign.center),
+        ]),
+      );
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1142,12 +1238,11 @@ class _EmptyCaixa extends StatelessWidget {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _MonthlyTab extends ConsumerWidget {
-  final String  groupId;
-  final int     year;
-  final bool    isAdmin;
+  final String groupId;
+  final int year;
+  final bool isAdmin;
   final void Function(int) onYearChanged;
   final Future<void> Function(BuildContext, PlayerRow, int) onOpenSheet;
-  final Future<void> Function(PlayerRow)? onToggleGoalkeeper;
 
   const _MonthlyTab({
     required this.groupId,
@@ -1155,32 +1250,32 @@ class _MonthlyTab extends ConsumerWidget {
     required this.isAdmin,
     required this.onYearChanged,
     required this.onOpenSheet,
-    this.onToggleGoalkeeper,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final icons = GroupIcons.from(ref.watch(groupSettingsProvider(groupId)).valueOrNull);
+    final icons = GroupIcons.from(
+      ref.watch(groupSettingsProvider(groupId)).valueOrNull,
+    );
 
     return isAdmin
         ? _AdminMonthlyView(
-            groupId:             groupId,
-            year:                year,
-            isDark:              isDark,
-            onYearChanged:       onYearChanged,
-            onOpenSheet:         onOpenSheet,
-            onToggleGoalkeeper:  onToggleGoalkeeper,
-            icons:               icons,
-            ref:                 ref,
+            groupId: groupId,
+            year: year,
+            isDark: isDark,
+            onYearChanged: onYearChanged,
+            onOpenSheet: onOpenSheet,
+            icons: icons,
+            ref: ref,
           )
         : _UserMonthlyView(
-            groupId:       groupId,
-            year:          year,
-            isDark:        isDark,
+            groupId: groupId,
+            year: year,
+            isDark: isDark,
             onYearChanged: onYearChanged,
-            onOpenSheet:   onOpenSheet,
-            ref:           ref,
+            onOpenSheet: onOpenSheet,
+            ref: ref,
           );
   }
 }
@@ -1188,12 +1283,11 @@ class _MonthlyTab extends ConsumerWidget {
 // ── Admin: grade completa ─────────────────────────────────────────────────────
 
 class _AdminMonthlyView extends StatefulWidget {
-  final String  groupId;
-  final int     year;
-  final bool    isDark;
+  final String groupId;
+  final int year;
+  final bool isDark;
   final void Function(int) onYearChanged;
   final Future<void> Function(BuildContext, PlayerRow, int) onOpenSheet;
-  final Future<void> Function(PlayerRow)? onToggleGoalkeeper;
   final GroupIcons icons;
   final WidgetRef ref;
 
@@ -1203,7 +1297,6 @@ class _AdminMonthlyView extends StatefulWidget {
     required this.isDark,
     required this.onYearChanged,
     required this.onOpenSheet,
-    this.onToggleGoalkeeper,
     this.icons = GroupIcons.defaults,
     required this.ref,
   });
@@ -1213,23 +1306,25 @@ class _AdminMonthlyView extends StatefulWidget {
 }
 
 class _AdminMonthlyViewState extends State<_AdminMonthlyView> {
-
   @override
   Widget build(BuildContext context) {
     final gridAsync = widget.ref.watch(
         monthlyGridProvider((groupId: widget.groupId, year: widget.year)));
-    final currentMonth = widget.year < DateTime.now().year
-        ? 12
-        : DateTime.now().month;
+    final currentMonth =
+        widget.year < DateTime.now().year ? 12 : DateTime.now().month;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         // Seletor de ano + mensalidade
         Row(children: [
-          _YearPicker(year: widget.year, isDark: widget.isDark, onChanged: widget.onYearChanged),
+          _YearPicker(
+              year: widget.year,
+              isDark: widget.isDark,
+              onChanged: widget.onYearChanged),
           const SizedBox(width: 12),
-          Expanded(child: gridAsync.maybeWhen(
+          Expanded(
+              child: gridAsync.maybeWhen(
             data: (grid) => grid.monthlyFee != null
                 ? Wrap(
                     spacing: 8,
@@ -1240,7 +1335,9 @@ class _AdminMonthlyViewState extends State<_AdminMonthlyView> {
                             : 'Mensalidade: R\$ ${grid.monthlyFee!.toStringAsFixed(2)}',
                         style: TextStyle(
                           fontSize: 13,
-                          color: widget.isDark ? AppColors.slate400 : AppColors.slate500,
+                          color: widget.isDark
+                              ? AppColors.slate400
+                              : AppColors.slate500,
                         ),
                       ),
                       if (grid.goalkeeperMonthlyFee != null)
@@ -1248,21 +1345,25 @@ class _AdminMonthlyViewState extends State<_AdminMonthlyView> {
                           'Goleiro: R\$ ${grid.goalkeeperMonthlyFee!.toStringAsFixed(2)}',
                           style: TextStyle(
                             fontSize: 13,
-                            color: widget.isDark ? AppColors.slate400 : AppColors.slate500,
+                            color: widget.isDark
+                                ? AppColors.slate400
+                                : AppColors.slate500,
                           ),
                         ),
                     ],
                   )
                 : Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color:        const Color(0xFFFFFBEB),
+                      color: AppColors.amber50,
                       borderRadius: BorderRadius.circular(8),
-                      border:       Border.all(color: const Color(0xFFFDE68A)),
+                      border: Border.all(color: AppColors.amber200),
                     ),
                     child: const Text(
                       'Mensalidade não configurada',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF92400E)),
+                      style: TextStyle(
+                          fontSize: 11, color: AppColors.warningLight),
                     ),
                   ),
             orElse: () => const SizedBox.shrink(),
@@ -1271,27 +1372,29 @@ class _AdminMonthlyViewState extends State<_AdminMonthlyView> {
         const SizedBox(height: 16),
 
         gridAsync.when(
-          loading: () => const Center(child: Padding(
+          loading: () => const Center(
+              child: Padding(
             padding: EdgeInsets.all(40),
             child: CircularProgressIndicator(),
           )),
-          error: (e, _) => _ErrorState(extractDioError(e), isDark: widget.isDark),
+          error: (e, _) =>
+              _ErrorState(extractDioError(e), isDark: widget.isDark),
           data: (grid) {
             if (grid.players.isEmpty) {
               return _EmptyState(
-                icon:  Icons.group_outlined,
+                icon: Icons.group_outlined,
                 title: 'Nenhum mensalista encontrado',
-                sub:   'Jogadores sem conta vinculada ou convidados não aparecem aqui.',
+                sub:
+                    'Jogadores sem conta vinculada ou convidados não aparecem aqui.',
                 isDark: widget.isDark,
               );
             }
             return _MonthlyGrid(
-              grid:                grid,
-              currentMonth:        currentMonth,
-              isDark:              widget.isDark,
-              onTap:               (row, month) => widget.onOpenSheet(context, row, month),
-              onToggleGoalkeeper:  widget.onToggleGoalkeeper,
-              icons:               widget.icons,
+              grid: grid,
+              currentMonth: currentMonth,
+              isDark: widget.isDark,
+              onTap: (row, month) => widget.onOpenSheet(context, row, month),
+              icons: widget.icons,
             );
           },
         ),
@@ -1303,9 +1406,9 @@ class _AdminMonthlyViewState extends State<_AdminMonthlyView> {
 // ── User: só a linha do próprio jogador ──────────────────────────────────────
 
 class _UserMonthlyView extends StatelessWidget {
-  final String  groupId;
-  final int     year;
-  final bool    isDark;
+  final String groupId;
+  final int year;
+  final bool isDark;
   final void Function(int) onYearChanged;
   final Future<void> Function(BuildContext, PlayerRow, int) onOpenSheet;
   final WidgetRef ref;
@@ -1321,8 +1424,8 @@ class _UserMonthlyView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rowAsync = ref.watch(
-        myMonthlyRowProvider((groupId: groupId, year: year)));
+    final rowAsync =
+        ref.watch(myMonthlyRowProvider((groupId: groupId, year: year)));
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -1330,38 +1433,41 @@ class _UserMonthlyView extends StatelessWidget {
         Row(children: [
           Text('📅 Minhas mensalidades',
               style: TextStyle(
-                fontSize: 15, fontWeight: FontWeight.w700,
-                color: isDark ? Colors.white : AppColors.slate800,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: isDark ? AppColors.onDark : AppColors.slate800,
               )),
           const SizedBox(width: 12),
           _YearPicker(year: year, isDark: isDark, onChanged: onYearChanged),
         ]),
         const SizedBox(height: 16),
-
         rowAsync.when(
-          loading: () => const Center(child: Padding(
-            padding: EdgeInsets.all(40), child: CircularProgressIndicator())),
+          loading: () => const Center(
+              child: Padding(
+                  padding: EdgeInsets.all(40),
+                  child: CircularProgressIndicator())),
           error: (e, _) => _ErrorState(extractDioError(e), isDark: isDark),
           data: (row) {
             if (row == null) {
               return _EmptyState(
-                icon:  Icons.person_off_outlined,
+                icon: Icons.person_off_outlined,
                 title: 'Sem jogador vinculado',
-                sub:   'Você não tem um jogador vinculado nesta patota.',
+                sub: 'Você não tem um jogador vinculado nesta patota.',
                 isDark: isDark,
               );
             }
             final now = DateTime.now();
-            final visibleMonths = row.months.where((c) =>
-              year < now.year || c.month <= now.month).toList();
+            final visibleMonths = row.months
+                .where((c) => year < now.year || c.month <= now.month)
+                .toList();
 
             return GridView.builder(
-              shrinkWrap:  true,
-              physics:     const NeverScrollableScrollPhysics(),
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount:   3,
+                crossAxisCount: 3,
                 crossAxisSpacing: 8,
-                mainAxisSpacing:  8,
+                mainAxisSpacing: 8,
                 childAspectRatio: 1.1,
               ),
               itemCount: visibleMonths.length,
@@ -1372,12 +1478,12 @@ class _UserMonthlyView extends StatelessWidget {
                   onTap: () => onOpenSheet(ctx, row, cell.month),
                   child: Container(
                     decoration: BoxDecoration(
-                      color:        paid
+                      color: paid
                           ? AppColors.green50
-                          : const Color(0xFFFFF1F1),
+                          : AppColors.dangerBackgroundLight,
                       borderRadius: BorderRadius.circular(12),
-                      border:       Border.all(
-                        color: paid ? AppColors.green200 : const Color(0xFFFECACA),
+                      border: Border.all(
+                        color: paid ? AppColors.green200 : AppColors.rose200,
                       ),
                     ),
                     child: Column(
@@ -1385,12 +1491,17 @@ class _UserMonthlyView extends StatelessWidget {
                       children: [
                         Text(_months[cell.month - 1],
                             style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.w700,
-                              color: isDark ? AppColors.slate200 : AppColors.slate700,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: isDark
+                                  ? AppColors.slate200
+                                  : AppColors.slate700,
                             )),
                         const SizedBox(height: 4),
                         Icon(
-                          paid ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                          paid
+                              ? Icons.check_circle_rounded
+                              : Icons.cancel_rounded,
                           size: 20,
                           color: paid ? AppColors.green500 : AppColors.rose400,
                         ),
@@ -1400,7 +1511,9 @@ class _UserMonthlyView extends StatelessWidget {
                             'R\$ ${cell.amount.toStringAsFixed(2)}',
                             style: TextStyle(
                               fontSize: 10,
-                              color: isDark ? AppColors.slate400 : AppColors.slate500,
+                              color: isDark
+                                  ? AppColors.slate400
+                                  : AppColors.slate500,
                             ),
                           ),
                         ],
@@ -1420,11 +1533,10 @@ class _UserMonthlyView extends StatelessWidget {
 // ── Grade tabular (admin) ─────────────────────────────────────────────────────
 
 class _MonthlyGrid extends StatelessWidget {
-  final MonthlyGrid   grid;
-  final int           currentMonth;
-  final bool          isDark;
+  final MonthlyGrid grid;
+  final int currentMonth;
+  final bool isDark;
   final void Function(PlayerRow, int) onTap;
-  final Future<void> Function(PlayerRow)? onToggleGoalkeeper;
   final GroupIcons icons;
 
   const _MonthlyGrid({
@@ -1432,20 +1544,20 @@ class _MonthlyGrid extends StatelessWidget {
     required this.currentMonth,
     required this.isDark,
     required this.onTap,
-    this.onToggleGoalkeeper,
     this.icons = GroupIcons.defaults,
   });
 
   @override
   Widget build(BuildContext context) {
-    final border   = isDark ? AppColors.slate700 : AppColors.slate200;
+    final border = isDark ? AppColors.slate700 : AppColors.slate200;
     final headerBg = isDark ? AppColors.slate800 : AppColors.slate50;
-    final rowHover = isDark ? AppColors.slate800.withValues(alpha: .4) : AppColors.slate50;
+    final rowHover =
+        isDark ? AppColors.slate800.withValues(alpha: .4) : AppColors.slate50;
     final txtMuted = isDark ? AppColors.slate500 : AppColors.slate300;
 
     return Container(
       decoration: BoxDecoration(
-        border:       Border.all(color: border),
+        border: Border.all(color: border),
         borderRadius: BorderRadius.circular(12),
       ),
       child: ClipRRect(
@@ -1454,15 +1566,16 @@ class _MonthlyGrid extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           child: DataTable(
             headingRowColor: WidgetStateProperty.all(headerBg),
-            dataRowMinHeight: 38,
-            dataRowMaxHeight: 38,
+            dataRowMinHeight: 48,
+            dataRowMaxHeight: 48,
             columnSpacing: 8,
             horizontalMargin: 12,
             columns: [
               DataColumn(
                 label: Text('Jogador',
                     style: TextStyle(
-                      fontSize: 11, fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
                       color: isDark ? AppColors.slate400 : AppColors.slate600,
                     )),
               ),
@@ -1471,7 +1584,8 @@ class _MonthlyGrid extends StatelessWidget {
                   label: Text(
                     _months[i],
                     style: TextStyle(
-                      fontSize: 11, fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
                       color: i + 1 <= currentMonth
                           ? (isDark ? AppColors.slate400 : AppColors.slate500)
                           : txtMuted,
@@ -1489,51 +1603,26 @@ class _MonthlyGrid extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(row.playerName,
-                            style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.w500,
-                              color: isDark ? AppColors.slate100 : AppColors.slate800,
-                            )),
-                        if (onToggleGoalkeeper != null) ...[
-                          const SizedBox(width: 6),
-                          GestureDetector(
-                            onTap: () => onToggleGoalkeeper!(row),
-                            child: Tooltip(
-                              message: row.isGoalkeeper
-                                  ? 'Goleiro — toque para mudar para linha'
-                                  : 'Linha — toque para mudar para goleiro',
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: row.isGoalkeeper
-                                      ? AppColors.violet50
-                                      : (isDark ? AppColors.slate700 : AppColors.slate100),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: row.isGoalkeeper
-                                        ? AppColors.violet200
-                                        : (isDark ? AppColors.slate600 : AppColors.slate200),
-                                  ),
-                                ),
-                                child: renderGroupIcon(
-                                  row.isGoalkeeper ? icons.goalkeeper : icons.player,
-                                  size: 11,
-                                  color: row.isGoalkeeper
-                                      ? AppColors.violet600
-                                      : (isDark ? AppColors.slate400 : AppColors.slate500),
-                                ),
-                              ),
-                            ),
+                        PlayerNameWithIcon(
+                          name: row.playerName,
+                          icons: icons,
+                          isGoalkeeper: row.isGoalkeeper,
+                          iconSize: 11,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: isDark
+                                ? AppColors.slate100
+                                : AppColors.slate800,
                           ),
-                        ],
+                        ),
                       ],
                     ),
                   ),
                   for (var m = 1; m <= 12; m++) ...[
                     () {
-                      final cell = row.months
-                          .where((c) => c.month == m)
-                          .firstOrNull;
+                      final cell =
+                          row.months.where((c) => c.month == m).firstOrNull;
                       if (cell == null) {
                         return DataCell(
                           Text('—',
@@ -1542,27 +1631,24 @@ class _MonthlyGrid extends StatelessWidget {
                       }
                       final paid = cell.isPaid;
                       return DataCell(
-                        GestureDetector(
-                          onTap: () => onTap(row, m),
-                          child: Container(
-                            width: 28, height: 28,
-                            decoration: BoxDecoration(
-                              color: paid
-                                  ? AppColors.green100
-                                  : AppColors.rose50,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              paid
-                                  ? Icons.check_circle_rounded
-                                  : Icons.cancel_rounded,
-                              size: 16,
-                              color: paid
-                                  ? AppColors.green700
-                                  : AppColors.rose400,
-                            ),
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: paid ? AppColors.green100 : AppColors.rose50,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            paid
+                                ? Icons.check_circle_rounded
+                                : Icons.cancel_rounded,
+                            size: 16,
+                            color: paid
+                                ? AppColors.primaryPressed
+                                : AppColors.rose400,
                           ),
                         ),
+                        onTap: () => onTap(row, m),
                       );
                     }(),
                   ],
@@ -1581,13 +1667,14 @@ class _MonthlyGrid extends StatelessWidget {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _ExtraTab extends ConsumerWidget {
-  final String  groupId;
-  final int     year;
-  final int     month;
-  final bool    isAdmin;
+  final String groupId;
+  final int year;
+  final int month;
+  final bool isAdmin;
   final void Function(int) onYearChanged;
   final void Function(int) onMonthChanged;
-  final Future<void> Function(BuildContext, ExtraCharge, ExtraChargePayment) onOpenExtraSheet;
+  final Future<void> Function(BuildContext, ExtraCharge, ExtraChargePayment)
+      onOpenExtraSheet;
   final Future<void> Function(BuildContext, List<PlayerRow>) onCreateSheet;
   final Future<void> Function(BuildContext, ExtraCharge) onBulkSheet;
   final Future<void> Function(BuildContext, String) onCancel;
@@ -1610,32 +1697,36 @@ class _ExtraTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final icons = GroupIcons.from(
+      ref.watch(groupSettingsProvider(groupId)).valueOrNull,
+    );
 
     if (isAdmin) {
       final chargesAsync = ref.watch(extraChargesProvider(groupId));
       // Precisamos da grade mensal para obter a lista de jogadores
-      final gridAsync = ref.watch(monthlyGridProvider(
-          (groupId: groupId, year: DateTime.now().year)));
+      final gridAsync = ref.watch(
+          monthlyGridProvider((groupId: groupId, year: DateTime.now().year)));
 
       return chargesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error:   (e, _) => _ErrorState(extractDioError(e), isDark: isDark),
-        data:    (charges) {
+        error: (e, _) => _ErrorState(extractDioError(e), isDark: isDark),
+        data: (charges) {
           final players = gridAsync.valueOrNull?.players ?? [];
           return _AdminExtraView(
-            groupId:       groupId,
-            charges:       charges,
-            players:       players,
-            year:          year,
-            month:         month,
-            isDark:        isDark,
+            groupId: groupId,
+            charges: charges,
+            players: players,
+            year: year,
+            month: month,
+            isDark: isDark,
+            icons: icons,
             onYearChanged: onYearChanged,
             onMonthChanged: onMonthChanged,
-            onOpenSheet:   (ctx, c, p) => onOpenExtraSheet(ctx, c, p),
+            onOpenSheet: (ctx, c, p) => onOpenExtraSheet(ctx, c, p),
             onCreateSheet: (ctx) => onCreateSheet(ctx, players),
-            onBulkSheet:   (ctx, c) => onBulkSheet(ctx, c),
-            onCancel:      (ctx, id) => onCancel(ctx, id),
-            onRefresh:     onRefresh,
+            onBulkSheet: (ctx, c) => onBulkSheet(ctx, c),
+            onCancel: (ctx, id) => onCancel(ctx, id),
+            onRefresh: onRefresh,
           );
         },
       );
@@ -1643,15 +1734,15 @@ class _ExtraTab extends ConsumerWidget {
       final chargesAsync = ref.watch(myExtraChargesProvider(groupId));
       return chargesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error:   (e, _) => _ErrorState(extractDioError(e), isDark: isDark),
-        data:    (charges) => _UserExtraView(
-          charges:        charges,
-          year:           year,
-          month:          month,
-          isDark:         isDark,
-          onYearChanged:  onYearChanged,
+        error: (e, _) => _ErrorState(extractDioError(e), isDark: isDark),
+        data: (charges) => _UserExtraView(
+          charges: charges,
+          year: year,
+          month: month,
+          isDark: isDark,
+          onYearChanged: onYearChanged,
           onMonthChanged: onMonthChanged,
-          onOpenSheet:    (ctx, c, p) => onOpenExtraSheet(ctx, c, p),
+          onOpenSheet: (ctx, c, p) => onOpenExtraSheet(ctx, c, p),
         ),
       );
     }
@@ -1661,15 +1752,17 @@ class _ExtraTab extends ConsumerWidget {
 // ── Admin: lista de cobranças ─────────────────────────────────────────────────
 
 class _AdminExtraView extends StatefulWidget {
-  final String              groupId;
-  final List<ExtraCharge>   charges;
-  final List<PlayerRow>     players;
-  final int                 year;
-  final int                 month;
-  final bool                isDark;
-  final void Function(int)  onYearChanged;
-  final void Function(int)  onMonthChanged;
-  final Future<void> Function(BuildContext, ExtraCharge, ExtraChargePayment) onOpenSheet;
+  final String groupId;
+  final List<ExtraCharge> charges;
+  final List<PlayerRow> players;
+  final int year;
+  final int month;
+  final bool isDark;
+  final GroupIcons icons;
+  final void Function(int) onYearChanged;
+  final void Function(int) onMonthChanged;
+  final Future<void> Function(BuildContext, ExtraCharge, ExtraChargePayment)
+      onOpenSheet;
   final Future<void> Function(BuildContext) onCreateSheet;
   final Future<void> Function(BuildContext, ExtraCharge) onBulkSheet;
   final Future<void> Function(BuildContext, String) onCancel;
@@ -1682,6 +1775,7 @@ class _AdminExtraView extends StatefulWidget {
     required this.year,
     required this.month,
     required this.isDark,
+    required this.icons,
     required this.onYearChanged,
     required this.onMonthChanged,
     required this.onOpenSheet,
@@ -1698,56 +1792,67 @@ class _AdminExtraView extends StatefulWidget {
 class _AdminExtraViewState extends State<_AdminExtraView> {
   final Set<String> _expanded = {};
 
-  List<ExtraCharge> get _filtered => widget.charges.where((c) =>
-      c.year == widget.year && c.month == widget.month).toList();
+  List<ExtraCharge> get _filtered => widget.charges
+      .where((c) => c.year == widget.year && c.month == widget.month)
+      .toList();
 
   @override
   Widget build(BuildContext context) {
-    final filtered   = _filtered;
-    final current    = filtered.where((c) => !c.isFinalized).toList();
-    final finalized  = filtered.where((c) =>  c.isFinalized).toList();
+    final filtered = _filtered;
+    final current = filtered.where((c) => !c.isFinalized).toList();
+    final finalized = filtered.where((c) => c.isFinalized).toList();
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Toolbar: nova cobrança + seletor de ano
-        Row(children: [
-          ElevatedButton.icon(
-            onPressed: () => widget.onCreateSheet(context),
-            icon:  const Icon(Icons.add, size: 16),
-            label: const Text('Nova cobrança',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: widget.isDark ? Colors.white : AppColors.slate900,
-              foregroundColor: widget.isDark ? AppColors.slate900 : Colors.white,
-              padding:   const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              shape:     RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              elevation: 0,
-            ),
-          ),
-          const SizedBox(width: 12),
-          _YearPicker(
-              year: widget.year, isDark: widget.isDark,
-              onChanged: widget.onYearChanged),
-        ]),
+        // Nova cobrança e seletor de ano
+        Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              ElevatedButton.icon(
+                onPressed: () => widget.onCreateSheet(context),
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Nova cobrança',
+                    style:
+                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      widget.isDark ? AppColors.onDark : AppColors.slate900,
+                  foregroundColor:
+                      widget.isDark ? AppColors.slate900 : AppColors.onDark,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  elevation: 0,
+                ),
+              ),
+              _YearPicker(
+                  year: widget.year,
+                  isDark: widget.isDark,
+                  onChanged: widget.onYearChanged),
+            ]),
         const SizedBox(height: 12),
 
         // Seletor de mês
         _MonthPicker(
-          charges:  widget.charges,
-          year:     widget.year,
+          charges: widget.charges,
+          year: widget.year,
           selected: widget.month,
-          isDark:   widget.isDark,
-          isAdmin:  true,
+          isDark: widget.isDark,
+          isAdmin: true,
           onChanged: widget.onMonthChanged,
         ),
         const SizedBox(height: 16),
 
         if (current.isEmpty && finalized.isEmpty)
           _EmptyState(
-            icon:   Icons.monetization_on_outlined,
-            title:  'Nenhuma cobrança em ${_months[widget.month - 1]}/${widget.year}',
-            sub:    '',
+            icon: Icons.monetization_on_outlined,
+            title:
+                'Nenhuma cobrança em ${_months[widget.month - 1]}/${widget.year}',
+            sub: '',
             isDark: widget.isDark,
           )
         else ...[
@@ -1755,39 +1860,41 @@ class _AdminExtraViewState extends State<_AdminExtraView> {
             _SectionTitle('📌 Pendentes / Ativas', widget.isDark),
             const SizedBox(height: 8),
             ...current.map((c) => _ChargeCard(
-              charge:    c,
-              expanded:  _expanded.contains(c.id),
-              isDark:    widget.isDark,
-              onToggle:  () => setState(() {
-                _expanded.contains(c.id)
-                    ? _expanded.remove(c.id)
-                    : _expanded.add(c.id);
-              }),
-              onBulkDiscount: c.payments.isNotEmpty
-                  ? () => widget.onBulkSheet(context, c)
-                  : null,
-              onCancel:  () => widget.onCancel(context, c.id),
-              onEditPayment: (p) => widget.onOpenSheet(context, c, p),
-            )),
+                  charge: c,
+                  expanded: _expanded.contains(c.id),
+                  isDark: widget.isDark,
+                  icons: widget.icons,
+                  onToggle: () => setState(() {
+                    _expanded.contains(c.id)
+                        ? _expanded.remove(c.id)
+                        : _expanded.add(c.id);
+                  }),
+                  onBulkDiscount: c.payments.isNotEmpty
+                      ? () => widget.onBulkSheet(context, c)
+                      : null,
+                  onCancel: () => widget.onCancel(context, c.id),
+                  onEditPayment: (p) => widget.onOpenSheet(context, c, p),
+                )),
           ],
           if (finalized.isNotEmpty) ...[
             const SizedBox(height: 16),
             _SectionTitle('✅ Finalizadas', widget.isDark),
             const SizedBox(height: 8),
             ...finalized.map((c) => _ChargeCard(
-              charge:    c,
-              expanded:  _expanded.contains(c.id),
-              isDark:    widget.isDark,
-              finalized: true,
-              onToggle:  () => setState(() {
-                _expanded.contains(c.id)
-                    ? _expanded.remove(c.id)
-                    : _expanded.add(c.id);
-              }),
-              onBulkDiscount: null,
-              onCancel:  null,
-              onEditPayment: (p) => widget.onOpenSheet(context, c, p),
-            )),
+                  charge: c,
+                  expanded: _expanded.contains(c.id),
+                  isDark: widget.isDark,
+                  icons: widget.icons,
+                  finalized: true,
+                  onToggle: () => setState(() {
+                    _expanded.contains(c.id)
+                        ? _expanded.remove(c.id)
+                        : _expanded.add(c.id);
+                  }),
+                  onBulkDiscount: null,
+                  onCancel: null,
+                  onEditPayment: (p) => widget.onOpenSheet(context, c, p),
+                )),
           ],
         ],
       ],
@@ -1799,12 +1906,13 @@ class _AdminExtraViewState extends State<_AdminExtraView> {
 
 class _UserExtraView extends StatelessWidget {
   final List<ExtraCharge> charges;
-  final int  year;
-  final int  month;
+  final int year;
+  final int month;
   final bool isDark;
   final void Function(int) onYearChanged;
   final void Function(int) onMonthChanged;
-  final Future<void> Function(BuildContext, ExtraCharge, ExtraChargePayment) onOpenSheet;
+  final Future<void> Function(BuildContext, ExtraCharge, ExtraChargePayment)
+      onOpenSheet;
 
   const _UserExtraView({
     required this.charges,
@@ -1818,9 +1926,9 @@ class _UserExtraView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = charges.where(
-        (c) => c.year == year && c.month == month).toList();
-    final pending  = filtered.where((c) {
+    final filtered =
+        charges.where((c) => c.year == year && c.month == month).toList();
+    final pending = filtered.where((c) {
       if (c.isCancelled) return false;
       final p = c.payments.firstOrNull;
       return p == null || !p.isPaid;
@@ -1839,20 +1947,19 @@ class _UserExtraView extends StatelessWidget {
         ]),
         const SizedBox(height: 12),
         _MonthPicker(
-          charges:   charges,
-          year:      year,
-          selected:  month,
-          isDark:    isDark,
-          isAdmin:   false,
+          charges: charges,
+          year: year,
+          selected: month,
+          isDark: isDark,
+          isAdmin: false,
           onChanged: onMonthChanged,
         ),
         const SizedBox(height: 16),
-
         if (pending.isEmpty && paid.isEmpty)
           _EmptyState(
-            icon:  Icons.monetization_on_outlined,
+            icon: Icons.monetization_on_outlined,
             title: 'Nenhuma cobrança em ${_months[month - 1]}/$year',
-            sub:   '',
+            sub: '',
             isDark: isDark,
           )
         else ...[
@@ -1863,10 +1970,10 @@ class _UserExtraView extends StatelessWidget {
               final p = c.payments.firstOrNull;
               if (p == null) return const SizedBox.shrink();
               return _UserChargeCard(
-                charge:  c,
+                charge: c,
                 payment: p,
-                isDark:  isDark,
-                onTap:   () => onOpenSheet(context, c, p),
+                isDark: isDark,
+                onTap: () => onOpenSheet(context, c, p),
               );
             }),
           ],
@@ -1878,11 +1985,11 @@ class _UserExtraView extends StatelessWidget {
               final p = c.payments.firstOrNull;
               if (p == null) return const SizedBox.shrink();
               return _UserChargeCard(
-                charge:  c,
+                charge: c,
                 payment: p,
-                isDark:  isDark,
-                paid:    true,
-                onTap:   () => onOpenSheet(context, c, p),
+                isDark: isDark,
+                paid: true,
+                onTap: () => onOpenSheet(context, c, p),
               );
             }),
           ],
@@ -1897,7 +2004,7 @@ class _UserExtraView extends StatelessWidget {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _YearPicker extends StatelessWidget {
-  final int  year;
+  final int year;
   final bool isDark;
   final void Function(int) onChanged;
 
@@ -1915,14 +2022,14 @@ class _YearPicker extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color:        bg,
+        color: bg,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         _ArrowBtn(
-          icon:    Icons.chevron_left,
-          color:   fg,
-          onTap:   () => onChanged(year - 1),
+          icon: Icons.chevron_left,
+          color: fg,
+          onTap: () => onChanged(year - 1),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1931,9 +2038,9 @@ class _YearPicker extends StatelessWidget {
                   fontSize: 13, fontWeight: FontWeight.w700, color: txt)),
         ),
         _ArrowBtn(
-          icon:    Icons.chevron_right,
-          color:   fg,
-          onTap:   () => onChanged(year + 1),
+          icon: Icons.chevron_right,
+          color: fg,
+          onTap: () => onChanged(year + 1),
         ),
       ]),
     );
@@ -1942,27 +2049,29 @@ class _YearPicker extends StatelessWidget {
 
 class _ArrowBtn extends StatelessWidget {
   final IconData icon;
-  final Color    color;
+  final Color color;
   final VoidCallback onTap;
 
-  const _ArrowBtn({required this.icon, required this.color, required this.onTap});
+  const _ArrowBtn(
+      {required this.icon, required this.color, required this.onTap});
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      child: Icon(icon, size: 18, color: color),
-    ),
-  );
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: SizedBox.square(
+          dimension: 44,
+          child: Icon(icon, size: 18, color: color),
+        ),
+      );
 }
 
 class _MonthPicker extends StatelessWidget {
   final List<ExtraCharge> charges;
-  final int     year;
-  final int     selected;
-  final bool    isDark;
-  final bool    isAdmin;
+  final int year;
+  final int selected;
+  final bool isDark;
+  final bool isAdmin;
   final void Function(int) onChanged;
 
   const _MonthPicker({
@@ -1977,31 +2086,32 @@ class _MonthPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GridView.builder(
-      shrinkWrap:  true,
-      physics:     const NeverScrollableScrollPhysics(),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount:   6,
+        crossAxisCount: 6,
         crossAxisSpacing: 4,
-        mainAxisSpacing:  4,
+        mainAxisSpacing: 4,
         childAspectRatio: 1.3,
       ),
       itemCount: 12,
       itemBuilder: (_, i) {
         final m = i + 1;
-        final mc = charges.where(
-            (c) => c.year == year && c.month == m).toList();
+        final mc =
+            charges.where((c) => c.year == year && c.month == m).toList();
         final active = mc.where((c) => !c.isCancelled).toList();
 
         final bool allPaid;
         final bool hasPending;
         if (isAdmin) {
-          allPaid    = active.isNotEmpty && active.every((c) => c.isFinalized);
+          allPaid = active.isNotEmpty && active.every((c) => c.isFinalized);
           hasPending = active.any((c) => !c.isFinalized);
         } else {
-          allPaid = active.isNotEmpty && active.every((c) {
-            final p = c.payments.firstOrNull;
-            return p != null && p.isPaid;
-          });
+          allPaid = active.isNotEmpty &&
+              active.every((c) {
+                final p = c.payments.firstOrNull;
+                return p != null && p.isPaid;
+              });
           hasPending = active.any((c) {
             final p = c.payments.firstOrNull;
             return p == null || !p.isPaid;
@@ -2009,13 +2119,16 @@ class _MonthPicker extends StatelessWidget {
         }
 
         final isSelected = m == selected;
-        final hasAny     = mc.isNotEmpty;
+        final hasAny = mc.isNotEmpty;
 
-        Color dotColor = Colors.transparent;
+        Color dotColor = AppColors.transparent;
         if (hasAny) {
-          if (allPaid) dotColor = AppColors.green400;
-          else if (hasPending) dotColor = AppColors.rose400;
-          else dotColor = AppColors.slate300;
+          if (allPaid)
+            dotColor = AppColors.green400;
+          else if (hasPending)
+            dotColor = AppColors.rose400;
+          else
+            dotColor = AppColors.slate300;
         }
 
         return GestureDetector(
@@ -2023,11 +2136,11 @@ class _MonthPicker extends StatelessWidget {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             decoration: BoxDecoration(
-              color:        isSelected
-                  ? (isDark ? Colors.white : AppColors.slate900)
+              color: isSelected
+                  ? (isDark ? AppColors.onDark : AppColors.slate900)
                   : (isDark ? AppColors.slate800 : AppColors.slate100),
               borderRadius: BorderRadius.circular(8),
-              border:       isSelected
+              border: isSelected
                   ? null
                   : Border.all(
                       color: isDark ? AppColors.slate700 : AppColors.slate200),
@@ -2040,15 +2153,17 @@ class _MonthPicker extends StatelessWidget {
                   Text(
                     _months[i],
                     style: TextStyle(
-                      fontSize: 11, fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
                       color: isSelected
-                          ? (isDark ? AppColors.slate900 : Colors.white)
+                          ? (isDark ? AppColors.slate900 : AppColors.onDark)
                           : (isDark ? AppColors.slate200 : AppColors.slate700),
                     ),
                   ),
                   const SizedBox(height: 3),
                   Container(
-                    width: 6, height: 6,
+                    width: 6,
+                    height: 6,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: isSelected
@@ -2070,18 +2185,20 @@ class _MonthPicker extends StatelessWidget {
 
 class _ChargeCard extends StatelessWidget {
   final ExtraCharge charge;
-  final bool        expanded;
-  final bool        isDark;
-  final bool        finalized;
-  final VoidCallback        onToggle;
-  final VoidCallback?       onBulkDiscount;
-  final VoidCallback?       onCancel;
+  final bool expanded;
+  final bool isDark;
+  final bool finalized;
+  final GroupIcons icons;
+  final VoidCallback onToggle;
+  final VoidCallback? onBulkDiscount;
+  final VoidCallback? onCancel;
   final void Function(ExtraChargePayment) onEditPayment;
 
   const _ChargeCard({
     required this.charge,
     required this.expanded,
     required this.isDark,
+    required this.icons,
     this.finalized = false,
     required this.onToggle,
     this.onBulkDiscount,
@@ -2099,81 +2216,97 @@ class _ChargeCard extends StatelessWidget {
             ? AppColors.green200
             : (isDark ? AppColors.slate700 : AppColors.slate200);
     final bgColor = charge.isCancelled
-        ? (isDark ? AppColors.slate900 : Colors.white)
+        ? (isDark ? AppColors.slate900 : AppColors.onDark)
         : finalized
             ? AppColors.green50.withValues(alpha: .5)
-            : (isDark ? AppColors.slate900 : Colors.white);
+            : (isDark ? AppColors.slate900 : AppColors.onDark);
 
     return Opacity(
       opacity: charge.isCancelled ? 0.6 : 1.0,
       child: Container(
-        margin:     const EdgeInsets.only(bottom: 8),
+        margin: const EdgeInsets.only(bottom: 8),
         decoration: BoxDecoration(
-          color:        bgColor,
+          color: bgColor,
           borderRadius: BorderRadius.circular(12),
-          border:       Border.all(color: border),
+          border: Border.all(color: border),
         ),
         child: Column(children: [
           // Header
           InkWell(
-            onTap:        onToggle,
+            onTap: onToggle,
             borderRadius: BorderRadius.circular(12),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               child: Row(children: [
                 Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [
-                      Text(charge.name,
-                          style: TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.white : AppColors.slate900,
-                          )),
-                      const SizedBox(width: 6),
-                      if (charge.isCancelled)
-                        _Badge('Cancelada',
-                            bg: isDark ? AppColors.slate700 : AppColors.slate100,
-                            fg: isDark ? AppColors.slate400 : AppColors.slate500),
-                      if (finalized && !charge.isCancelled)
-                        _Badge('Finalizada',
-                            bg: AppColors.green100, fg: AppColors.green700,
-                            icon: Icons.check_circle_rounded),
-                    ]),
-                    const SizedBox(height: 2),
-                    Row(children: [
-                      Text('R\$ ${charge.amount.toStringAsFixed(2)}',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: isDark ? AppColors.slate400 : AppColors.slate500)),
-                      if (charge.dueDate != null) ...[
-                        const SizedBox(width: 8),
-                        Text('Venc. ${_fmtDate(charge.dueDate!)}',
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: isDark ? AppColors.slate400 : AppColors.slate500)),
-                      ],
-                      const SizedBox(width: 8),
-                      Text('$paidCt pago${paidCt != 1 ? 's' : ''}',
-                          style: const TextStyle(
-                              fontSize: 11, color: AppColors.green600,
-                              fontWeight: FontWeight.w600)),
-                      if (pendCt > 0) ...[
-                        const SizedBox(width: 6),
-                        Text('$pendCt pendente${pendCt != 1 ? 's' : ''}',
-                            style: const TextStyle(
-                                fontSize: 11, color: AppColors.rose500,
-                                fontWeight: FontWeight.w600)),
-                      ],
-                    ]),
-                  ]),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Text(charge.name,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? AppColors.onDark
+                                    : AppColors.slate900,
+                              )),
+                          const SizedBox(width: 6),
+                          if (charge.isCancelled)
+                            _Badge('Cancelada',
+                                bg: isDark
+                                    ? AppColors.slate700
+                                    : AppColors.slate100,
+                                fg: isDark
+                                    ? AppColors.slate400
+                                    : AppColors.slate500),
+                          if (finalized && !charge.isCancelled)
+                            _Badge('Finalizada',
+                                bg: AppColors.green100,
+                                fg: AppColors.primaryPressed,
+                                icon: Icons.check_circle_rounded),
+                        ]),
+                        const SizedBox(height: 2),
+                        Row(children: [
+                          Text('R\$ ${charge.amount.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark
+                                      ? AppColors.slate400
+                                      : AppColors.slate500)),
+                          if (charge.dueDate != null) ...[
+                            const SizedBox(width: 8),
+                            Text('Venc. ${_fmtDate(charge.dueDate!)}',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: isDark
+                                        ? AppColors.slate400
+                                        : AppColors.slate500)),
+                          ],
+                          const SizedBox(width: 8),
+                          Text('$paidCt pago${paidCt != 1 ? 's' : ''}',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.primaryPressed,
+                                  fontWeight: FontWeight.w600)),
+                          if (pendCt > 0) ...[
+                            const SizedBox(width: 6),
+                            Text('$pendCt pendente${pendCt != 1 ? 's' : ''}',
+                                style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.rose500,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ]),
+                      ]),
                 ),
                 // Actions
                 if (onBulkDiscount != null)
                   _IconTextBtn(
-                    icon:    Icons.monetization_on_outlined,
-                    label:   'Desc.',
-                    isDark:  isDark,
-                    onTap:   onBulkDiscount!,
+                    icon: Icons.monetization_on_outlined,
+                    label: 'Desc.',
+                    isDark: isDark,
+                    onTap: onBulkDiscount!,
                   ),
                 if (onCancel != null)
                   GestureDetector(
@@ -2182,7 +2315,8 @@ class _ChargeCard extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       child: Icon(Icons.delete_outline,
                           size: 18,
-                          color: isDark ? AppColors.slate500 : AppColors.slate400),
+                          color:
+                              isDark ? AppColors.slate500 : AppColors.slate400),
                     ),
                   ),
                 Icon(
@@ -2196,7 +2330,8 @@ class _ChargeCard extends StatelessWidget {
 
           // Expandido: lista de jogadores
           if (expanded) ...[
-            Divider(height: 1,
+            Divider(
+                height: 1,
                 color: isDark ? AppColors.slate800 : AppColors.slate100),
             if (charge.payments.isEmpty)
               Padding(
@@ -2204,15 +2339,17 @@ class _ChargeCard extends StatelessWidget {
                 child: Text('Nenhum jogador atribuído.',
                     style: TextStyle(
                         fontSize: 12,
-                        color: isDark ? AppColors.slate400 : AppColors.slate500)),
+                        color:
+                            isDark ? AppColors.slate400 : AppColors.slate500)),
               )
             else
               ...charge.payments.map((p) => _PaymentRow(
-                payment:  p,
-                isDark:   isDark,
-                isCancelled: charge.isCancelled,
-                onEdit:   () => onEditPayment(p),
-              )),
+                    payment: p,
+                    isDark: isDark,
+                    icons: icons,
+                    isCancelled: charge.isCancelled,
+                    onEdit: () => onEditPayment(p),
+                  )),
           ],
         ]),
       ),
@@ -2222,8 +2359,10 @@ class _ChargeCard extends StatelessWidget {
   String _fmtDate(String s) {
     try {
       final d = AppDateUtils.parseOrNow(s);
-      return '${d.day.toString().padLeft(2,'0')}/${d.month.toString().padLeft(2,'0')}/${d.year}';
-    } catch (_) { return s; }
+      return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+    } catch (_) {
+      return s;
+    }
   }
 }
 
@@ -2231,12 +2370,14 @@ class _PaymentRow extends StatelessWidget {
   final ExtraChargePayment payment;
   final bool isDark;
   final bool isCancelled;
+  final GroupIcons icons;
   final VoidCallback onEdit;
 
   const _PaymentRow({
     required this.payment,
     required this.isDark,
     required this.isCancelled,
+    required this.icons,
     required this.onEdit,
   });
 
@@ -2252,12 +2393,19 @@ class _PaymentRow extends StatelessWidget {
       ),
       child: Row(children: [
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(payment.playerName,
-                style: TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w500,
-                  color: isDark ? AppColors.slate100 : AppColors.slate800,
-                )),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            PlayerNameWithIcon(
+              name: payment.playerName,
+              icons: icons,
+              isGoalkeeper: payment.isGoalkeeper,
+              iconSize: 11,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: isDark ? AppColors.slate100 : AppColors.slate800,
+              ),
+            ),
             const SizedBox(height: 2),
             Wrap(
               spacing: 6,
@@ -2266,15 +2414,19 @@ class _PaymentRow extends StatelessWidget {
                 Text('R\$ ${payment.finalAmount.toStringAsFixed(2)}',
                     style: TextStyle(
                         fontSize: 11,
-                        color: isDark ? AppColors.slate400 : AppColors.slate500)),
+                        color:
+                            isDark ? AppColors.slate400 : AppColors.slate500)),
                 if (payment.discount > 0)
                   Text('(desc. R\$ ${payment.discount.toStringAsFixed(2)})',
-                      style: const TextStyle(fontSize: 11, color: AppColors.green600)),
+                      style: const TextStyle(
+                          fontSize: 11, color: AppColors.primaryPressed)),
                 if (payment.paidAt != null)
                   Text('· ${_fmtDate(payment.paidAt!)}',
                       style: TextStyle(
                           fontSize: 11,
-                          color: isDark ? AppColors.slate400 : AppColors.slate500)),
+                          color: isDark
+                              ? AppColors.slate400
+                              : AppColors.slate500)),
               ],
             ),
           ]),
@@ -2285,12 +2437,16 @@ class _PaymentRow extends StatelessWidget {
           OutlinedButton(
             onPressed: onEdit,
             style: OutlinedButton.styleFrom(
-              side:    BorderSide(color: isDark ? AppColors.slate700 : AppColors.slate200),
+              side: BorderSide(
+                  color: isDark ? AppColors.slate700 : AppColors.slate200),
               foregroundColor: isDark ? AppColors.slate300 : AppColors.slate600,
-              padding:  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
-              shape:    RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              textStyle:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             child: const Text('Editar'),
           ),
@@ -2302,19 +2458,21 @@ class _PaymentRow extends StatelessWidget {
   String _fmtDate(String s) {
     try {
       final d = AppDateUtils.parseOrNow(s);
-      return '${d.day.toString().padLeft(2,'0')}/${d.month.toString().padLeft(2,'0')}/${d.year}';
-    } catch (_) { return s; }
+      return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+    } catch (_) {
+      return s;
+    }
   }
 }
 
 // ── Card de cobrança para user ────────────────────────────────────────────────
 
 class _UserChargeCard extends StatelessWidget {
-  final ExtraCharge        charge;
+  final ExtraCharge charge;
   final ExtraChargePayment payment;
-  final bool               isDark;
-  final bool               paid;
-  final VoidCallback       onTap;
+  final bool isDark;
+  final bool paid;
+  final VoidCallback onTap;
 
   const _UserChargeCard({
     required this.charge,
@@ -2330,21 +2488,25 @@ class _UserChargeCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color:        paid
+        color: paid
             ? AppColors.green50.withValues(alpha: .5)
-            : (isDark ? AppColors.slate900 : Colors.white),
+            : (isDark ? AppColors.slate900 : AppColors.onDark),
         borderRadius: BorderRadius.circular(12),
-        border:       Border.all(
-          color: paid ? AppColors.green100 : (isDark ? AppColors.slate700 : AppColors.slate200),
+        border: Border.all(
+          color: paid
+              ? AppColors.green100
+              : (isDark ? AppColors.slate700 : AppColors.slate200),
         ),
       ),
       child: Row(children: [
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(charge.name,
                 style: TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white : AppColors.slate800,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? AppColors.onDark : AppColors.slate800,
                 )),
             const SizedBox(height: 4),
             Row(children: [
@@ -2355,21 +2517,24 @@ class _UserChargeCard extends StatelessWidget {
               if (payment.discount > 0) ...[
                 const SizedBox(width: 8),
                 Text('Desconto: R\$ ${payment.discount.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 12, color: AppColors.green600)),
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.primaryPressed)),
               ],
               if (charge.dueDate != null) ...[
                 const SizedBox(width: 8),
                 Text('Venc. ${_fmtDate(charge.dueDate!)}',
                     style: TextStyle(
                         fontSize: 12,
-                        color: isDark ? AppColors.slate400 : AppColors.slate500)),
+                        color:
+                            isDark ? AppColors.slate400 : AppColors.slate500)),
               ],
               if (payment.paidAt != null) ...[
                 const SizedBox(width: 8),
                 Text('Pago em ${_fmtDate(payment.paidAt!)}',
                     style: TextStyle(
                         fontSize: 12,
-                        color: isDark ? AppColors.slate400 : AppColors.slate500)),
+                        color:
+                            isDark ? AppColors.slate400 : AppColors.slate500)),
               ],
             ]),
           ]),
@@ -2379,12 +2544,16 @@ class _UserChargeCard extends StatelessWidget {
         OutlinedButton(
           onPressed: onTap,
           style: OutlinedButton.styleFrom(
-            side:    BorderSide(color: isDark ? AppColors.slate700 : AppColors.slate200),
+            side: BorderSide(
+                color: isDark ? AppColors.slate700 : AppColors.slate200),
             foregroundColor: isDark ? AppColors.slate300 : AppColors.slate600,
-            padding:  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
-            shape:    RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            textStyle:
+                const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
           child: Text(paid ? 'Ver' : 'Pagar'),
         ),
@@ -2395,8 +2564,10 @@ class _UserChargeCard extends StatelessWidget {
   String _fmtDate(String s) {
     try {
       final d = AppDateUtils.parseOrNow(s);
-      return '${d.day.toString().padLeft(2,'0')}/${d.month.toString().padLeft(2,'0')}/${d.year}';
-    } catch (_) { return s; }
+      return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+    } catch (_) {
+      return s;
+    }
   }
 }
 
@@ -2404,38 +2575,42 @@ class _UserChargeCard extends StatelessWidget {
 
 class _SectionTitle extends StatelessWidget {
   final String text;
-  final bool   isDark;
+  final bool isDark;
   const _SectionTitle(this.text, this.isDark);
 
   @override
   Widget build(BuildContext context) => Text(
-    text,
-    style: TextStyle(
-      fontSize: 13, fontWeight: FontWeight.w700,
-      color: isDark ? AppColors.slate300 : AppColors.slate700,
-    ),
-  );
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: isDark ? AppColors.slate300 : AppColors.slate700,
+        ),
+      );
 }
 
 class _Badge extends StatelessWidget {
-  final String  text;
-  final Color   bg;
-  final Color   fg;
+  final String text;
+  final Color bg;
+  final Color fg;
   final IconData? icon;
   const _Badge(this.text, {required this.bg, required this.fg, this.icon});
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10)),
-    child: Row(mainAxisSize: MainAxisSize.min, children: [
-      if (icon != null) ...[
-        Icon(icon, size: 10, color: fg),
-        const SizedBox(width: 2),
-      ],
-      Text(text, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: fg)),
-    ]),
-  );
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration:
+            BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          if (icon != null) ...[
+            Icon(icon, size: 10, color: fg),
+            const SizedBox(width: 2),
+          ],
+          Text(text,
+              style: TextStyle(
+                  fontSize: 10, fontWeight: FontWeight.w600, color: fg)),
+        ]),
+      );
 }
 
 class _StatusBadge extends StatelessWidget {
@@ -2444,114 +2619,128 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    decoration: BoxDecoration(
-      color:        paid ? AppColors.green100 : AppColors.rose50,
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(
-        paid ? Icons.check_circle_rounded : Icons.cancel_rounded,
-        size: 12, color: paid ? AppColors.green700 : AppColors.rose500,
-      ),
-      const SizedBox(width: 4),
-      Text(
-        paid ? 'Pago' : 'Pendente',
-        style: TextStyle(
-          fontSize: 11, fontWeight: FontWeight.w600,
-          color: paid ? AppColors.green700 : AppColors.rose500,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: paid ? AppColors.green100 : AppColors.rose50,
+          borderRadius: BorderRadius.circular(20),
         ),
-      ),
-    ]),
-  );
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(
+            paid ? Icons.check_circle_rounded : Icons.cancel_rounded,
+            size: 12,
+            color: paid ? AppColors.primaryPressed : AppColors.rose500,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            paid ? 'Pago' : 'Pendente',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: paid ? AppColors.primaryPressed : AppColors.rose500,
+            ),
+          ),
+        ]),
+      );
 }
 
 class _IconTextBtn extends StatelessWidget {
   final IconData icon;
-  final String   label;
-  final bool     isDark;
+  final String label;
+  final bool isDark;
   final VoidCallback onTap;
 
   const _IconTextBtn({
-    required this.icon, required this.label,
-    required this.isDark, required this.onTap,
+    required this.icon,
+    required this.label,
+    required this.isDark,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        border:       Border.all(color: isDark ? AppColors.slate700 : AppColors.slate200),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 12, color: isDark ? AppColors.slate400 : AppColors.slate600),
-        const SizedBox(width: 4),
-        Text(label,
-            style: TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w500,
-              color: isDark ? AppColors.slate400 : AppColors.slate600,
-            )),
-      ]),
-    ),
-  );
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            border: Border.all(
+                color: isDark ? AppColors.slate700 : AppColors.slate200),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon,
+                size: 12,
+                color: isDark ? AppColors.slate400 : AppColors.slate600),
+            const SizedBox(width: 4),
+            Text(label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? AppColors.slate400 : AppColors.slate600,
+                )),
+          ]),
+        ),
+      );
 }
 
 class _EmptyState extends StatelessWidget {
   final IconData icon;
-  final String   title;
-  final String   sub;
-  final bool     isDark;
+  final String title;
+  final String sub;
+  final bool isDark;
   const _EmptyState({
-    required this.icon, required this.title,
-    required this.sub,  required this.isDark,
+    required this.icon,
+    required this.title,
+    required this.sub,
+    required this.isDark,
   });
 
   @override
   Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 40),
-      child: Column(children: [
-        Icon(icon, size: 40, color: isDark ? AppColors.slate600 : AppColors.slate300),
-        const SizedBox(height: 12),
-        Text(title,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14, fontWeight: FontWeight.w500,
-              color: isDark ? AppColors.slate400 : AppColors.slate500,
-            )),
-        if (sub.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Text(sub,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 40),
+          child: Column(children: [
+            Icon(icon,
+                size: 40,
+                color: isDark ? AppColors.slate600 : AppColors.slate300),
+            const SizedBox(height: 12),
+            Text(title,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? AppColors.slate500 : AppColors.slate400)),
-          ),
-        ],
-      ]),
-    ),
-  );
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? AppColors.slate400 : AppColors.slate500,
+                )),
+            if (sub.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(sub,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 12,
+                        color:
+                            isDark ? AppColors.slate500 : AppColors.slate400)),
+              ),
+            ],
+          ]),
+        ),
+      );
 }
 
 class _ErrorState extends StatelessWidget {
   final String error;
-  final bool   isDark;
+  final bool isDark;
   const _ErrorState(this.error, {required this.isDark});
 
   @override
   Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Text(
-        'Erro: $error',
-        style: const TextStyle(color: AppColors.rose500, fontSize: 13),
-        textAlign: TextAlign.center,
-      ),
-    ),
-  );
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'Erro: $error',
+            style: const TextStyle(color: AppColors.rose500, fontSize: 13),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
 }

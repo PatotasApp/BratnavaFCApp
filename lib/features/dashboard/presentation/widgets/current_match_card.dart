@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/horizontal_team_field.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../domain/entities/current_match.dart';
 import '../../../matches/domain/entities/match_models.dart' show matchStepLabel;
 
@@ -49,18 +50,12 @@ class _CurrentMatchCardState extends State<CurrentMatchCard> {
 
     final showPlayerNames =
         match.stepKey == 'teams' || match.stepKey == 'playing';
-    final teamANames = showPlayerNames
-        ? teamAPlayers
-            .map((p) => p.playerName)
-            .where((n) => n.isNotEmpty)
-            .toList()
-        : <String>[];
-    final teamBNames = showPlayerNames
-        ? teamBPlayers
-            .map((p) => p.playerName)
-            .where((n) => n.isNotEmpty)
-            .toList()
-        : <String>[];
+    final visibleTeamAPlayers = showPlayerNames
+        ? teamAPlayers.where((p) => p.playerName.isNotEmpty).toList()
+        : <MatchPlayer>[];
+    final visibleTeamBPlayers = showPlayerNames
+        ? teamBPlayers.where((p) => p.playerName.isNotEmpty).toList()
+        : <MatchPlayer>[];
 
     final hasScore =
         match.teamAGoals > 0 || match.teamBGoals > 0 || match.status >= 4;
@@ -86,7 +81,7 @@ class _CurrentMatchCardState extends State<CurrentMatchCard> {
       onTap: () => context.go('/app/matches'),
       child: Container(
         decoration: BoxDecoration(
-          color: isDark ? AppColors.slate900 : Colors.white,
+          color: isDark ? AppColors.slate900 : AppColors.onDark,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
               color: isDark ? AppColors.slate700 : AppColors.slate200),
@@ -108,7 +103,7 @@ class _CurrentMatchCardState extends State<CurrentMatchCard> {
                     child: Text(
                       dates.full,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: AppColors.onDark,
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                       ),
@@ -168,7 +163,8 @@ class _CurrentMatchCardState extends State<CurrentMatchCard> {
                                     label: 'Time A',
                                     count: teamACount,
                                     isDark: isDark,
-                                    playerNames: teamANames)),
+                                    groupId: match.groupId,
+                                    players: visibleTeamAPlayers)),
                             Padding(
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 8),
@@ -189,7 +185,8 @@ class _CurrentMatchCardState extends State<CurrentMatchCard> {
                                     label: 'Time B',
                                     count: teamBCount,
                                     isDark: isDark,
-                                    playerNames: teamBNames)),
+                                    groupId: match.groupId,
+                                    players: visibleTeamBPlayers)),
                           ],
                         ),
 
@@ -223,7 +220,7 @@ class _CurrentMatchCardState extends State<CurrentMatchCard> {
                                     Text(
                                       '${match.teamAGoals}',
                                       style: const TextStyle(
-                                        color: Colors.white,
+                                        color: AppColors.onDark,
                                         fontSize: 14,
                                         fontWeight: FontWeight.w800,
                                       ),
@@ -239,7 +236,7 @@ class _CurrentMatchCardState extends State<CurrentMatchCard> {
                                     Text(
                                       '${match.teamBGoals}',
                                       style: const TextStyle(
-                                        color: Colors.white,
+                                        color: AppColors.onDark,
                                         fontSize: 14,
                                         fontWeight: FontWeight.w800,
                                       ),
@@ -408,10 +405,10 @@ class _StatusBadge extends StatelessWidget {
     if (s.contains('final') || s.contains('done') || s.contains('encer')) {
       bg = AppColors.emerald50;
       fg = AppColors.emerald700;
-      border = const Color(0xFFA7F3D0);
+      border = AppColors.emerald200;
     } else if (s.contains('jog') || s.contains('play') || s.contains('live')) {
       bg = AppColors.blue50;
-      fg = AppColors.blue600;
+      fg = AppColors.infoLight;
       border = AppColors.blue200;
     } else if (s.contains('time') || s.contains('match')) {
       bg = AppColors.violet50;
@@ -422,9 +419,9 @@ class _StatusBadge extends StatelessWidget {
       fg = AppColors.amber500;
       border = AppColors.amber200;
     } else if (s.contains('pós') || s.contains('pos') || s.contains('post')) {
-      bg = AppColors.orange50;
-      fg = AppColors.orange700;
-      border = AppColors.orange200;
+      bg = AppColors.amber50;
+      fg = AppColors.warningLight;
+      border = AppColors.amber200;
     } else {
       bg = AppColors.slate50;
       fg = AppColors.slate600;
@@ -459,13 +456,13 @@ class _InviteBadge extends StatelessWidget {
           'Confirmado ✓',
           AppColors.emerald700,
           AppColors.emerald50,
-          const Color(0xFFA7F3D0)
+          AppColors.emerald200
         ),
       InviteResponse.declined => (
           'Recusado',
           AppColors.rose600,
           AppColors.rose50,
-          const Color(0xFFFFCDD2)
+          AppColors.rose200
         ),
       _ => (
           'Pendente',
@@ -521,8 +518,9 @@ class _ColorDot extends StatelessWidget {
         shape: BoxShape.circle,
         color: color,
         border: Border.all(
-          color:
-              isWhite ? AppColors.slate300 : Colors.white.withValues(alpha: .3),
+          color: isWhite
+              ? AppColors.slate300
+              : AppColors.onDark.withValues(alpha: .3),
           width: 1,
         ),
       ),
@@ -546,19 +544,21 @@ class _TeamBlock extends StatelessWidget {
   final String label;
   final int count;
   final bool isDark;
-  final List<String> playerNames;
+  final String groupId;
+  final List<MatchPlayer> players;
 
   const _TeamBlock({
     this.color,
     required this.label,
     required this.count,
     required this.isDark,
-    this.playerNames = const [],
+    required this.groupId,
+    this.players = const [],
   });
 
   @override
   Widget build(BuildContext context) {
-    final showPlayers = playerNames.isNotEmpty;
+    final showPlayers = players.isNotEmpty;
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -580,16 +580,18 @@ class _TeamBlock extends StatelessWidget {
               ),
               const SizedBox(height: 3),
               if (showPlayers)
-                ...playerNames.map((name) => Padding(
+                ...players.map((player) => Padding(
                       padding: const EdgeInsets.only(bottom: 1),
-                      child: Text(
-                        name,
+                      child: ConfiguredPlayerName(
+                        groupId: groupId,
+                        name: player.playerName,
+                        isGoalkeeper: player.isGoalkeeper,
+                        iconSize: 11,
                         style: TextStyle(
                           fontSize: 11,
                           color:
                               isDark ? AppColors.slate400 : AppColors.slate500,
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ))
               else
@@ -636,7 +638,7 @@ class _MiniShirt extends StatelessWidget {
             ],
           ),
           child: Icon(Icons.sports_soccer,
-              size: 14, color: Colors.white.withValues(alpha: .8)),
+              size: 14, color: AppColors.onDark.withValues(alpha: .8)),
         ),
         const SizedBox(width: 8),
         Flexible(

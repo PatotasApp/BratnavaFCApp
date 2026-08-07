@@ -186,7 +186,9 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
     } else {
       final err = ref.read(matchNotifierProvider).error ?? 'Erro desconhecido';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Falha: $err'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('Falha: $err'),
+            backgroundColor: AppColors.prototypeDanger),
       );
     }
   }
@@ -249,7 +251,7 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
+                              strokeWidth: 2, color: AppColors.onDark))
                       : const Icon(Icons.check_circle_outline),
                   label: const Text('Finalizar →'),
                 ),
@@ -330,7 +332,17 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
         // ── MVP / Voto ───────────────────────────────────────────────────
         if (s.computedMvps.isNotEmpty)
           _MvpResultCard(
-              mvpNames: s.computedMvps.map((m) => m.playerName).toList())
+            mvpPlayers: s.computedMvps.map((m) {
+              final participant = s.participants
+                  .where((p) => p.playerId == m.playerId)
+                  .firstOrNull;
+              return (
+                name: m.playerName,
+                isGoalkeeper: participant?.isGoalkeeper ?? false,
+              );
+            }).toList(),
+            icons: icons,
+          )
         else
           _buildMyVoteSection(s, isParticipant, canVote, hasVoted, myVote,
               myMatchPlayerId, icons),
@@ -352,6 +364,7 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
                             teamAColor: s.teamAColor?.color,
                             teamBColor: s.teamBColor?.color,
                             participants: s.participants,
+                            icons: icons,
                             isAdmin: false,
                             onEdit: null,
                             onRemove: null,
@@ -507,7 +520,7 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
+                            strokeWidth: 2, color: AppColors.onDark))
                     : const Text('Votar'),
               ),
             ),
@@ -532,7 +545,17 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
               // MVP já definido
               if (s.computedMvps.isNotEmpty) ...[
                 _MvpResultCard(
-                    mvpNames: s.computedMvps.map((m) => m.playerName).toList()),
+                  mvpPlayers: s.computedMvps.map((m) {
+                    final participant = s.participants
+                        .where((p) => p.playerId == m.playerId)
+                        .firstOrNull;
+                    return (
+                      name: m.playerName,
+                      isGoalkeeper: participant?.isGoalkeeper ?? false,
+                    );
+                  }).toList(),
+                  icons: icons,
+                ),
                 const SizedBox(height: 8),
               ],
               // Contagem de votos
@@ -548,51 +571,12 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: _buildVoterColumn(s)),
+                    Expanded(child: _buildVoterColumn(s, icons)),
                     const SizedBox(width: 12),
-                    Expanded(child: _buildVotedColumn(s)),
+                    Expanded(child: _buildVotedColumn(s, icons)),
                   ],
                 ),
                 const SizedBox(height: 10),
-                // Parciais
-                if (s.voteCounts.isNotEmpty) ...[
-                  const Text(
-                    'PARCIAIS',
-                    style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.8,
-                        color: AppColors.slate400),
-                  ),
-                  const SizedBox(height: 6),
-                  ...s.voteCounts.map((vc) => Container(
-                        margin: const EdgeInsets.only(bottom: 4),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: AppColors.slate200),
-                          color: AppColors.slate50,
-                        ),
-                        child: Row(children: [
-                          Expanded(
-                              child: Text(vc.playerName,
-                                  style: const TextStyle(fontSize: 13))),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: AppColors.slate200,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text('${vc.count}',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600, fontSize: 12)),
-                          ),
-                        ]),
-                      )),
-                  const SizedBox(height: 8),
-                ],
                 // Detalhamento dos votos
                 if (s.votes.isNotEmpty) ...[
                   const Text(
@@ -615,17 +599,28 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
                       padding: const EdgeInsets.only(bottom: 3),
                       child: Row(children: [
                         Expanded(
-                            child: Text(voter?.playerName ?? '?',
-                                style: const TextStyle(
-                                    fontSize: 12, color: AppColors.slate500))),
+                          child: PlayerNameWithIcon(
+                            name: voter?.playerName ?? '?',
+                            isGoalkeeper: voter?.isGoalkeeper ?? false,
+                            icons: icons,
+                            iconSize: 12,
+                            style: const TextStyle(
+                                fontSize: 12, color: AppColors.slate500),
+                          ),
+                        ),
                         const Icon(Icons.arrow_forward,
                             size: 12, color: AppColors.slate300),
                         const SizedBox(width: 4),
                         Expanded(
-                            child: Text(voted?.playerName ?? '?',
-                                style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600))),
+                          child: PlayerNameWithIcon(
+                            name: voted?.playerName ?? '?',
+                            isGoalkeeper: voted?.isGoalkeeper ?? false,
+                            icons: icons,
+                            iconSize: 12,
+                            style: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                        ),
                       ]),
                     );
                   }),
@@ -655,6 +650,57 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
                   'Todos os jogadores já votaram.',
                   style: TextStyle(fontSize: 13, color: AppColors.slate500),
                 ),
+              ],
+              // As parciais continuam disponíveis para o administrador
+              // mesmo após todos votarem.
+              if (s.voteCounts.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                const Text(
+                  'PARCIAIS DO MVP',
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.8,
+                      color: AppColors.slate400),
+                ),
+                const SizedBox(height: 6),
+                ...s.voteCounts.map((vc) => Container(
+                      margin: const EdgeInsets.only(bottom: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.slate200),
+                        color: AppColors.slate50,
+                      ),
+                      child: Row(children: [
+                        Expanded(
+                          child: PlayerNameWithIcon(
+                            name: vc.playerName,
+                            isGoalkeeper: s.participants
+                                    .where((p) =>
+                                        p.matchPlayerId == vc.matchPlayerId)
+                                    .firstOrNull
+                                    ?.isGoalkeeper ??
+                                false,
+                            icons: icons,
+                            iconSize: 13,
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.slate200,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text('${vc.count}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600, fontSize: 12)),
+                        ),
+                      ]),
+                    )),
               ],
             ],
           ),
@@ -768,6 +814,7 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
                     teamAColor: s.teamAColor?.color,
                     teamBColor: s.teamBColor?.color,
                     participants: allParticipants,
+                    icons: icons,
                     isAdmin: true,
                     onEdit: () => _editGoal(g, allParticipants),
                     onRemove: () => ref
@@ -784,7 +831,7 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
     );
   }
 
-  Widget _buildVoterColumn(MatchState s) {
+  Widget _buildVoterColumn(MatchState s, GroupIcons icons) {
     final nonGuestCount = s.participants.where((p) => !p.isGuest).length;
     final alreadyVotedCount = nonGuestCount - s.eligibleVoters.length;
     return Column(
@@ -822,8 +869,11 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
                         isSelected ? AppColors.emerald500 : AppColors.slate200),
                 color: isSelected ? AppColors.emerald50 : AppColors.slate50,
               ),
-              child: Text(
-                p.playerName,
+              child: PlayerNameWithIcon(
+                name: p.playerName,
+                isGoalkeeper: p.isGoalkeeper,
+                icons: icons,
+                iconSize: 13,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -837,7 +887,7 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
     );
   }
 
-  Widget _buildVotedColumn(MatchState s) {
+  Widget _buildVotedColumn(MatchState s, GroupIcons icons) {
     final candidates =
         s.participants.where((p) => p.matchPlayerId != _voterMpId).toList();
     return Column(
@@ -865,8 +915,11 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
                         isSelected ? AppColors.emerald500 : AppColors.slate200),
                 color: isSelected ? AppColors.emerald50 : AppColors.slate50,
               ),
-              child: Text(
-                p.playerName,
+              child: PlayerNameWithIcon(
+                name: p.playerName,
+                isGoalkeeper: p.isGoalkeeper,
+                icons: icons,
+                iconSize: 13,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -884,8 +937,9 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
 // ── Card de MVP resultado ─────────────────────────────────────────────────────
 
 class _MvpResultCard extends StatelessWidget {
-  final List<String> mvpNames;
-  const _MvpResultCard({required this.mvpNames});
+  final List<({String name, bool isGoalkeeper})> mvpPlayers;
+  final GroupIcons icons;
+  const _MvpResultCard({required this.mvpPlayers, required this.icons});
 
   @override
   Widget build(BuildContext context) => Container(
@@ -896,7 +950,7 @@ class _MvpResultCard extends StatelessWidget {
           border: Border.all(color: AppColors.amber200),
         ),
         child: Row(children: [
-          const Icon(Icons.emoji_events, color: AppColors.amber400, size: 22),
+          renderGroupIcon(icons.mvp, color: AppColors.warning, size: 22),
           const SizedBox(width: 10),
           Expanded(
             child:
@@ -907,10 +961,17 @@ class _MvpResultCard extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                       color: AppColors.amber500,
                       letterSpacing: 0.6)),
-              Text(
-                mvpNames.join(' & '),
-                style:
-                    const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ...mvpPlayers.map(
+                (player) => PlayerNameWithIcon(
+                  name: player.name,
+                  isGoalkeeper: player.isGoalkeeper,
+                  icons: icons,
+                  iconSize: 15,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ]),
           ),

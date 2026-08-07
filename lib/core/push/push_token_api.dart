@@ -21,7 +21,7 @@ class PushTokenApi {
       final response = await _dio.post(
         ApiConstants.pushRegisterToken,
         data: {
-          'token':    token,
+          'token': token,
           'platform': platform,
         },
         options: Options(extra: {AuthInterceptor.skipUnauthorizedKey: true}),

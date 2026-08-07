@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/match_models.dart';
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -18,7 +19,7 @@ Future<void> showMatchCardDialog({
 }) async {
   await showDialog(
     context: context,
-    barrierColor: Colors.black87,
+    barrierColor: AppColors.shadow87,
     builder: (_) => _MatchCardDialog(s: s, groupId: groupId, dio: dio),
   );
 }
@@ -37,7 +38,7 @@ String buildMatchCardPrompt(MatchState s) {
   final bHex = s.teamBColor?.hexValue ?? '#334155';
 
   buf.writeln(
-      'You are editing a soccer match card image. You MUST keep the EXACT same layout, style, fonts, stadium background, Bratnava logo, jersey design, \'icone\' text on jerseys, and overall design from the template image.');
+      'You are editing a soccer match card image. You MUST keep the EXACT same layout, style, fonts, stadium background, PatotasApp logo, jersey design, \'icone\' text on jerseys, and overall design from the template image.');
   buf.writeln(
       'Only change: (1) text content, (2) jersey/shirt colors, (3) player names in the panels.');
   buf.writeln();
@@ -80,7 +81,7 @@ String buildMatchCardPrompt(MatchState s) {
       '5. PANEL COLORS: The left panel header background should match the left jersey color. The right panel header background should match the right jersey color.');
   buf.writeln(
       '6. BACKGROUND: Keep the stadium background blurred exactly as in the template.');
-  buf.writeln('7. LOGO: Keep the Bratnava logo at the top exactly as it is.');
+  buf.writeln('7. LOGO: Keep the PatotasApp logo at the top exactly as it is.');
   buf.writeln(
       '8. EMPTY ROWS: If there are fewer players than rows in the template, leave the remaining rows empty (just the divider lines, no text).');
   buf.writeln(
@@ -205,7 +206,7 @@ class _MatchCardDialogState extends State<_MatchCardDialog> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Dialog(
-      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      backgroundColor: isDark ? AppColors.darkCard : AppColors.onDark,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: ConstrainedBox(
@@ -265,7 +266,9 @@ class _MatchCardDialogState extends State<_MatchCardDialog> {
                     Container(
                       decoration: BoxDecoration(
                         border: Border.all(
-                            color: isDark ? Colors.white12 : Colors.black12),
+                            color: isDark
+                                ? AppColors.onDark12
+                                : AppColors.shadow12),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Column(
@@ -276,8 +279,9 @@ class _MatchCardDialogState extends State<_MatchCardDialog> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
-                              color:
-                                  isDark ? Colors.white10 : Colors.grey.shade50,
+                              color: isDark
+                                  ? AppColors.onDark10
+                                  : AppColors.lightSubtle,
                               borderRadius: const BorderRadius.vertical(
                                   top: Radius.circular(11)),
                             ),
@@ -290,8 +294,8 @@ class _MatchCardDialogState extends State<_MatchCardDialog> {
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: 0.5,
                                     color: isDark
-                                        ? Colors.white54
-                                        : Colors.grey.shade600,
+                                        ? AppColors.onDark54
+                                        : AppColors.lightTextSecondary,
                                   ),
                                 ),
                               ),
@@ -310,7 +314,7 @@ class _MatchCardDialogState extends State<_MatchCardDialog> {
                                 style: TextButton.styleFrom(
                                   visualDensity: VisualDensity.compact,
                                   foregroundColor: _promptCopied
-                                      ? Colors.green
+                                      ? AppColors.accent
                                       : Theme.of(context).colorScheme.primary,
                                 ),
                               ),
@@ -325,10 +329,9 @@ class _MatchCardDialogState extends State<_MatchCardDialog> {
                                 _prompt,
                                 style: TextStyle(
                                   fontSize: 11,
-                                  fontFamily: 'monospace',
                                   color: isDark
-                                      ? Colors.white70
-                                      : Colors.grey.shade800,
+                                      ? AppColors.onDark70
+                                      : AppColors.darkCard,
                                   height: 1.5,
                                 ),
                               ),
@@ -345,13 +348,14 @@ class _MatchCardDialogState extends State<_MatchCardDialog> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.red.shade50,
+                          color: AppColors.rose50,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.red.shade200),
+                          border: Border.all(color: AppColors.rose200),
                         ),
                         child: Text(_error!,
                             style: const TextStyle(
-                                fontSize: 12, color: Colors.red)),
+                                fontSize: 12,
+                                color: AppColors.prototypeDanger)),
                       ),
 
                     if (_error != null) const SizedBox(height: 8),
@@ -364,7 +368,7 @@ class _MatchCardDialogState extends State<_MatchCardDialog> {
                               width: 16,
                               height: 16,
                               child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white))
+                                  strokeWidth: 2, color: AppColors.onDark))
                           : const Icon(Icons.auto_awesome_rounded, size: 16),
                       label: Text(_generating
                           ? 'Gerando com IA…'

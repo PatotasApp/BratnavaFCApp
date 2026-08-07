@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_colors.dart';
 
 Future<bool> showConfirmDialog({
   required BuildContext context,
@@ -11,17 +10,13 @@ Future<bool> showConfirmDialog({
   final result = await showDialog<bool>(
     context: context,
     builder: (dialogContext) {
-      final isDark = Theme.of(dialogContext).brightness == Brightness.dark;
-      final iconBg = danger
-          ? (isDark
-              ? AppColors.rose600.withValues(alpha: 0.18)
-              : AppColors.rose50)
-          : (isDark ? AppColors.slate800 : AppColors.slate100);
-      final iconColor = danger ? AppColors.rose500 : AppColors.slate500;
+      final theme = Theme.of(dialogContext);
+      final colors = theme.colorScheme;
+      final iconBg =
+          danger ? colors.errorContainer : colors.surfaceContainerHighest;
+      final iconColor = danger ? colors.error : colors.onSurfaceVariant;
 
       return AlertDialog(
-        backgroundColor: isDark ? AppColors.slate900 : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
         contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
         actionsPadding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
@@ -47,22 +42,14 @@ Future<bool> showConfirmDialog({
             Expanded(
               child: Text(
                 title ?? 'Confirmar acao',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.white : AppColors.slate900,
-                ),
+                style: theme.textTheme.titleLarge,
               ),
             ),
           ],
         ),
         content: Text(
           message,
-          style: TextStyle(
-            fontSize: 14,
-            height: 1.35,
-            color: isDark ? AppColors.slate300 : AppColors.slate600,
-          ),
+          style: theme.textTheme.bodyMedium,
         ),
         actions: [
           OutlinedButton(
@@ -72,8 +59,8 @@ Future<bool> showConfirmDialog({
           ElevatedButton(
             onPressed: () => Navigator.pop(dialogContext, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: danger ? AppColors.rose600 : AppColors.slate900,
-              foregroundColor: Colors.white,
+              backgroundColor: danger ? colors.error : colors.primary,
+              foregroundColor: danger ? colors.onError : colors.onPrimary,
             ),
             child: Text(confirmLabel),
           ),

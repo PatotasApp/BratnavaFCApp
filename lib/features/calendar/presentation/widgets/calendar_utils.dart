@@ -12,14 +12,19 @@ bool isSameDay(DateTime a, DateTime b) =>
 
 bool isToday(DateTime d) => isSameDay(d, DateTime.now());
 
-/// Gera as semanas do mês (seg→dom, incluindo dias fora do mês).
+/// Deslocamento até o domingo anterior (inclusive).
+///
+/// `DateTime.weekday` é 1=seg…7=dom. O resto por 7 manda o domingo para 0 e
+/// mantém seg..sáb em 1..6 — é o que alinha a grade com o protótipo, que abre
+/// a semana no domingo.
+int sundayOffset(DateTime d) => d.weekday % 7;
+
+/// Gera as semanas do mês (dom→sáb, incluindo dias fora do mês).
 List<List<DateTime>> getMonthWeeks(int year, int month) {
   final first = DateTime(year, month, 1);
-  final last  = DateTime(year, month + 1, 0);
+  final last = DateTime(year, month + 1, 0);
 
-  // Weekday: 1=Mon…7=Sun — alinha na segunda
-  final offset = first.weekday - 1;
-  final start  = first.subtract(Duration(days: offset));
+  final start = first.subtract(Duration(days: sundayOffset(first)));
 
   final weeks = <List<DateTime>>[];
   var cur = start;
@@ -35,11 +40,10 @@ List<List<DateTime>> getMonthWeeks(int year, int month) {
   return weeks;
 }
 
-/// Retorna os 7 dias da semana (seg→dom) em que `cursor` está.
+/// Retorna os 7 dias da semana (dom→sáb) em que `cursor` está.
 List<DateTime> getWeekDays(DateTime cursor) {
-  final offset = cursor.weekday - 1;
-  final monday = cursor.subtract(Duration(days: offset));
-  return List.generate(7, (i) => monday.add(Duration(days: i)));
+  final sunday = cursor.subtract(Duration(days: sundayOffset(cursor)));
+  return List.generate(7, (i) => sunday.add(Duration(days: i)));
 }
 
 // ── Event style ───────────────────────────────────────────────────────────────
@@ -47,40 +51,75 @@ List<DateTime> getWeekDays(DateTime cursor) {
 ({Color bg, Color fg, Color border}) eventColors(CalendarEvent ev) {
   switch (ev.type) {
     case 'birthday':
-      return (bg: const Color(0xFFFCE7F3), fg: const Color(0xFF9D174D), border: const Color(0xFFF9A8D4));
+      return (
+        bg: AppColors.rose50,
+        fg: AppColors.prototypeDanger,
+        border: AppColors.rose200
+      );
     case 'match':
       return ev.isPast
-          ? (bg: AppColors.slate100, fg: AppColors.slate500, border: AppColors.slate300)
-          : (bg: const Color(0xFFDCFCE7), fg: const Color(0xFF166534), border: const Color(0xFF86EFAC));
+          ? (
+              bg: AppColors.slate100,
+              fg: AppColors.slate500,
+              border: AppColors.slate300
+            )
+          : (
+              bg: AppColors.green100,
+              fg: AppColors.primaryPressed,
+              border: AppColors.green200
+            );
     case 'holiday':
-      return (bg: AppColors.amber50, fg: const Color(0xFF92400E), border: AppColors.amber200);
+      return (
+        bg: AppColors.amber50,
+        fg: AppColors.warningLight,
+        border: AppColors.amber200
+      );
     case 'event':
-      return (bg: AppColors.violet50, fg: AppColors.violet700, border: AppColors.violet200);
+      return (
+        bg: AppColors.violet50,
+        fg: AppColors.violet700,
+        border: AppColors.violet200
+      );
     case 'manual':
       if (ev.categoryColor != null) {
-        final hex  = ev.categoryColor!.replaceAll('#', '');
+        final hex = ev.categoryColor!.replaceAll('#', '');
         try {
           final base = Color(int.parse('0xFF$hex'));
           return (
-            bg:     Color.fromARGB(30,  (base.r * 255.0).round(), (base.g * 255.0).round(), (base.b * 255.0).round()),
-            fg:     base,
-            border: Color.fromARGB(80,  (base.r * 255.0).round(), (base.g * 255.0).round(), (base.b * 255.0).round()),
+            bg: Color.fromARGB(30, (base.r * 255.0).round(),
+                (base.g * 255.0).round(), (base.b * 255.0).round()),
+            fg: base,
+            border: Color.fromARGB(80, (base.r * 255.0).round(),
+                (base.g * 255.0).round(), (base.b * 255.0).round()),
           );
         } catch (_) {}
       }
-      return (bg: AppColors.slate100, fg: AppColors.slate700, border: AppColors.slate200);
+      return (
+        bg: AppColors.slate100,
+        fg: AppColors.slate700,
+        border: AppColors.slate200
+      );
     default:
-      return (bg: AppColors.slate100, fg: AppColors.slate700, border: AppColors.slate200);
+      return (
+        bg: AppColors.slate100,
+        fg: AppColors.slate700,
+        border: AppColors.slate200
+      );
   }
 }
 
 String eventIcon(CalendarEvent ev) {
   switch (ev.type) {
-    case 'birthday': return '🎂';
-    case 'match':    return ev.isPast ? '✅' : '⚽';
-    case 'holiday':  return '🎉';
-    case 'event':    return ev.icon ?? '🍖';
-    default:         return ev.icon ?? ev.categoryIcon ?? '📅';
+    case 'birthday':
+      return '🎂';
+    case 'match':
+      return ev.isPast ? '✅' : '⚽';
+    case 'holiday':
+      return '🎉';
+    case 'event':
+      return ev.icon ?? '🍖';
+    default:
+      return ev.icon ?? ev.categoryIcon ?? '📅';
   }
 }
 
@@ -93,8 +132,8 @@ Color? dotColor(CalendarEvent ev) {
 
 class EventPill extends StatelessWidget {
   final CalendarEvent ev;
-  final VoidCallback  onTap;
-  final bool          compact;
+  final VoidCallback onTap;
+  final bool compact;
 
   const EventPill({
     super.key,
@@ -105,7 +144,7 @@ class EventPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c    = eventColors(ev);
+    final c = eventColors(ev);
     final icon = eventIcon(ev);
 
     return GestureDetector(
@@ -114,9 +153,9 @@ class EventPill extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
         decoration: BoxDecoration(
-          color:        c.bg,
+          color: c.bg,
           borderRadius: BorderRadius.circular(4),
-          border:       Border.all(color: c.border, width: .8),
+          border: Border.all(color: c.border, width: .8),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -125,12 +164,13 @@ class EventPill extends StatelessWidget {
             const SizedBox(width: 2),
             Flexible(
               child: Text(
-                compact ? ev.title
+                compact
+                    ? ev.title
                     : '${!ev.timeTBD && ev.time != null ? "${ev.time} " : ""}${ev.title}',
                 style: TextStyle(
-                  fontSize:   10,
+                  fontSize: 10,
                   fontWeight: FontWeight.w600,
-                  color:      c.fg,
+                  color: c.fg,
                 ),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,

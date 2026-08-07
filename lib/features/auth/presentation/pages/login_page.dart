@@ -18,10 +18,10 @@ class LoginPage extends ConsumerStatefulWidget {
 }
 
 class _LoginPageState extends ConsumerState<LoginPage> {
-  final _formKey      = GlobalKey<FormState>();
-  final _emailCtrl    = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
-  bool  _keepLoggedIn = true;
+  bool _keepLoggedIn = true;
 
   @override
   void dispose() {
@@ -34,17 +34,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     if (!_formKey.currentState!.validate()) return;
 
     await ref.read(authNotifierProvider.notifier).login(
-      _emailCtrl.text.trim(),
-      _passwordCtrl.text,
-      keepLoggedIn: _keepLoggedIn,
-    );
+          _emailCtrl.text.trim(),
+          _passwordCtrl.text,
+          keepLoggedIn: _keepLoggedIn,
+        );
 
     if (!mounted) return;
 
     final state = ref.read(authNotifierProvider);
     state.whenOrNull(
-      error: (e, _) => _showError(extractDioError(e, 'Usuário ou senha incorretos.')),
-      data:  (_)    => context.go('/app'),
+      error: (e, _) =>
+          _showError(extractDioError(e, 'Usuário ou senha incorretos.')),
+      data: (_) => context.go('/app'),
     );
   }
 
@@ -53,11 +54,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       ..clearSnackBars()
       ..showSnackBar(
         SnackBar(
-          content:         Text(msg),
+          content: Text(msg),
           backgroundColor: AppColors.rose600,
-          behavior:        SnackBarBehavior.floating,
-          shape:           RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10)),
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
   }
@@ -65,7 +66,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final isLoading = ref.watch(authNotifierProvider).isLoading;
-    final isDark    = Theme.of(context).brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       body: SafeArea(
@@ -84,22 +85,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color:        isDark
-                          ? AppColors.slate800
-                          : Colors.white,
+                      color: isDark ? AppColors.slate800 : AppColors.onDark,
                       borderRadius: BorderRadius.circular(16),
-                      border:       Border.all(
-                        color: isDark
-                            ? AppColors.slate700
-                            : AppColors.slate200,
+                      border: Border.all(
+                        color: isDark ? AppColors.slate700 : AppColors.slate200,
                       ),
                       boxShadow: isDark
                           ? null
                           : [
                               BoxShadow(
-                                color:      Colors.black.withValues(alpha: 0.04),
+                                color:
+                                    AppColors.darkApp.withValues(alpha: 0.04),
                                 blurRadius: 8,
-                                offset:     const Offset(0, 2),
+                                offset: const Offset(0, 2),
                               ),
                             ],
                     ),
@@ -120,22 +118,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             widget.addMode
                                 ? 'Insira os dados da conta adicional.'
                                 : 'Bem-vindo de volta!',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                  color: isDark
-                                      ? AppColors.slate400
-                                      : AppColors.slate500,
-                                ),
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: isDark
+                                          ? AppColors.slate400
+                                          : AppColors.slate500,
+                                    ),
                           ),
                           const SizedBox(height: 24),
 
                           AppTextField(
-                            label:         'E-mail',
-                            hint:          'seu@email.com',
-                            controller:    _emailCtrl,
-                            keyboardType:  TextInputType.emailAddress,
+                            label: 'E-mail',
+                            hint: 'seu@email.com',
+                            controller: _emailCtrl,
+                            keyboardType: TextInputType.emailAddress,
                             textInputAction: TextInputAction.next,
                             validator: (v) {
                               if (v == null || v.trim().isEmpty) {
@@ -147,10 +143,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           const SizedBox(height: 16),
 
                           AppTextField(
-                            label:           'Senha',
-                            hint:            '••••••',
-                            controller:      _passwordCtrl,
-                            obscureText:     true,
+                            label: 'Senha',
+                            hint: '••••••',
+                            controller: _passwordCtrl,
+                            obscureText: true,
                             textInputAction: TextInputAction.done,
                             onEditingComplete: _submit,
                             validator: (v) {
@@ -163,16 +159,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           const SizedBox(height: 12),
 
                           // ── Manter logado ─────────────────────────────
-                          GestureDetector(
-                              onTap: () => setState(
-                                  () => _keepLoggedIn = !_keepLoggedIn),
+                          InkWell(
+                            onTap: () =>
+                                setState(() => _keepLoggedIn = !_keepLoggedIn),
+                            borderRadius: BorderRadius.circular(10),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                               child: Row(
                                 children: [
                                   SizedBox(
-                                    width:  20,
+                                    width: 20,
                                     height: 20,
                                     child: Checkbox(
-                                      value:    _keepLoggedIn,
+                                      value: _keepLoggedIn,
                                       onChanged: (v) => setState(
                                           () => _keepLoggedIn = v ?? true),
                                       materialTapTargetSize:
@@ -195,14 +194,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 ],
                               ),
                             ),
+                          ),
 
                           const SizedBox(height: 20),
 
                           AppButton(
-                            label:     widget.addMode ? 'Adicionar conta' : 'Entrar',
+                            label:
+                                widget.addMode ? 'Adicionar conta' : 'Entrar',
                             onPressed: _submit,
                             isLoading: isLoading,
-                            width:     double.infinity,
+                            width: double.infinity,
                           ),
                         ],
                       ),
@@ -218,23 +219,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       Text(
                         'Não tem conta? ',
                         style: TextStyle(
-                          color:    isDark
-                              ? AppColors.slate400
-                              : AppColors.slate500,
+                          color:
+                              isDark ? AppColors.slate400 : AppColors.slate500,
                           fontSize: 13,
                         ),
                       ),
-                      GestureDetector(
-                        onTap: () => context.push(
+                      TextButton(
+                        onPressed: () => context.push(
                           widget.addMode ? '/register?add=1' : '/register',
                         ),
-                        child: Text(
+                        child: const Text(
                           'Criar conta',
                           style: TextStyle(
-                            color:      isDark
-                                ? Colors.white
-                                : AppColors.slate900,
-                            fontSize:   13,
+                            fontSize: 13,
                             fontWeight: FontWeight.w600,
                             decoration: TextDecoration.underline,
                           ),
@@ -256,9 +253,10 @@ class _BrandHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Image.asset(
-      'assets/images/logo.png',
-      width:  160,
+      'assets/images/logo_wordmark.png',
+      width: 160,
       height: 160,
+      fit: BoxFit.contain,
     );
   }
 }

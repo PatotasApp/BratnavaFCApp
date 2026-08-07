@@ -363,7 +363,10 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
     // watch (não read) para reagir ao refreshRoles() assíncrono do startup
     final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
-    final groupId = account?.activeGroupId ?? activePlayer?.groupId ?? '';
+    // O jogador manda no grupo: `activeGroupId` da conta pode apontar
+    // para uma patota sem jogador nosso, e aí toda rota por grupo
+    // responde 403. Ver dashboard_page para o diagnóstico completo.
+    final groupId = activePlayer?.groupId ?? account?.activeGroupId ?? '';
     final isAdmin = _isAdmin(account, groupId);
 
     if (groupId.isNotEmpty) {
@@ -398,6 +401,81 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
     }
 
     final currentStep = s.hasMatch ? s.step : MatchStep.create;
+    final displayedStep = _previewStep ?? currentStep;
+    final stepHeaderWidgets = <Widget>[
+      if (s.upcomingHeaders.length > 1)
+        _MatchSelector(
+          headers: s.upcomingHeaders,
+          selected: s.selectedMatchIdx,
+          onSelect: (i) {
+            setState(() => _creatingNew = false);
+            ref.read(matchNotifierProvider.notifier).selectMatch(i);
+          },
+        ),
+      MatchStepperHeader(
+        currentStep: currentStep,
+        previewStep: _previewStep,
+        onStepTap: isAdmin && s.hasMatch
+            ? (step) => setState(() {
+                  _previewStep = (_previewStep == step || step == currentStep)
+                      ? null
+                      : step;
+                })
+            : null,
+      ),
+      if (s.hasMatch && currentStep != MatchStep.accept)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _LinkedPollStrip(
+            groupId: groupId,
+            linkedPollId: s.linkedPollId,
+            isAdmin: isAdmin,
+            onLink: (pollId) =>
+                ref.read(matchNotifierProvider.notifier).setLinkedPoll(pollId),
+            onUnlink: () =>
+                ref.read(matchNotifierProvider.notifier).setLinkedPoll(null),
+          ),
+        ),
+      if (_previewStep != null && _previewStep != currentStep)
+        _PreviewBanner(
+          previewStep: _previewStep!,
+          currentStep: currentStep,
+          onDismiss: () => setState(() => _previewStep = null),
+        ),
+    ];
+
+    // A formação já possui botão fixo e um scroll próprio. Mantê-la dentro do
+    // Expanded + NestedScrollView posicionava o corpo depois de todo o header
+    // externo: o RenderBox recebia altura, mas era pintado fora da viewport.
+    // Nesta etapa, banner, progresso e gerador formam uma única superfície.
+    if (displayedStep == MatchStep.teams) {
+      return Step3MatchmakingPage(
+        scrollHeader: Column(
+          children: [
+            _MatchBanner(
+              s: s,
+              isAdmin: isAdmin,
+              canRewind: isAdmin && s.hasMatch && s.canRewind,
+              onRefresh: () =>
+                  ref.read(matchNotifierProvider.notifier).refresh(),
+              onRewind: _rewindStep,
+              onEdit: isAdmin && s.hasMatch ? () => _editCurrentMatch(s) : null,
+              onDelete: isAdmin && s.hasMatch ? _confirmDelete : null,
+              onCreateNew: isAdmin
+                  ? () {
+                      ref.read(matchNotifierProvider.notifier).clearSelection();
+                      setState(() {
+                        _creatingNew = true;
+                        _previewStep = null;
+                      });
+                    }
+                  : null,
+            ),
+            ...stepHeaderWidgets,
+          ],
+        ),
+      );
+    }
 
     return Stack(
       children: [
@@ -422,47 +500,73 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
                     }
                   : null,
             ),
-            if (s.upcomingHeaders.length > 1)
-              _MatchSelector(
-                headers: s.upcomingHeaders,
-                selected: s.selectedMatchIdx,
-                onSelect: (i) {
-                  setState(() => _creatingNew = false);
-                  ref.read(matchNotifierProvider.notifier).selectMatch(i);
-                },
-              ),
-            MatchStepperHeader(
-              currentStep: currentStep,
-              previewStep: _previewStep,
-              onStepTap: isAdmin && s.hasMatch
-                  ? (step) => setState(() {
-                        _previewStep =
-                            (_previewStep == step || step == currentStep)
-                                ? null
-                                : step;
-                      })
-                  : null,
-            ),
-            if (s.hasMatch && currentStep != MatchStep.accept)
-              _LinkedPollStrip(
-                groupId: groupId,
-                linkedPollId: s.linkedPollId,
-                isAdmin: isAdmin,
-                onLink: (pollId) => ref
-                    .read(matchNotifierProvider.notifier)
-                    .setLinkedPoll(pollId),
-                onUnlink: () => ref
-                    .read(matchNotifierProvider.notifier)
-                    .setLinkedPoll(null),
-              ),
-            if (_previewStep != null && _previewStep != currentStep)
-              _PreviewBanner(
-                previewStep: _previewStep!,
-                currentStep: currentStep,
-                onDismiss: () => setState(() => _previewStep = null),
-              ),
+            // Seletor, cabeçalho de etapa e banners ficavam empilhados acima do
+            // conteúdo, fora de qualquer área rolável: só a metade de baixo da
+            // tela rolava, e num passo com muitos jogadores o cabeçalho comia
+            // espaço permanentemente. Como slivers de um NestedScrollView eles
+            // saem de cena junto com o conteúdo, sem que cada página de etapa
+            // precise ser reestruturada — o `Expanded` interno de cada uma
+            // continua recebendo altura, e rodapés de ação seguem fixos.
             Expanded(
-              child: _buildStepContent(s, isAdmin, groupId),
+              child: NestedScrollView(
+                headerSliverBuilder: (context, _) => [
+                  if (s.upcomingHeaders.length > 1)
+                    SliverToBoxAdapter(
+                      child: _MatchSelector(
+                        headers: s.upcomingHeaders,
+                        selected: s.selectedMatchIdx,
+                        onSelect: (i) {
+                          setState(() => _creatingNew = false);
+                          ref
+                              .read(matchNotifierProvider.notifier)
+                              .selectMatch(i);
+                        },
+                      ),
+                    ),
+                  SliverToBoxAdapter(
+                    child: MatchStepperHeader(
+                      currentStep: currentStep,
+                      previewStep: _previewStep,
+                      onStepTap: isAdmin && s.hasMatch
+                          ? (step) => setState(() {
+                                _previewStep = (_previewStep == step ||
+                                        step == currentStep)
+                                    ? null
+                                    : step;
+                              })
+                          : null,
+                    ),
+                  ),
+                  if (s.hasMatch && currentStep != MatchStep.accept)
+                    SliverToBoxAdapter(
+                      // O respiro horizontal agora é de quem usa o strip; no
+                      // passo 2 ele vem do padding da própria área rolável.
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: _LinkedPollStrip(
+                          groupId: groupId,
+                          linkedPollId: s.linkedPollId,
+                          isAdmin: isAdmin,
+                          onLink: (pollId) => ref
+                              .read(matchNotifierProvider.notifier)
+                              .setLinkedPoll(pollId),
+                          onUnlink: () => ref
+                              .read(matchNotifierProvider.notifier)
+                              .setLinkedPoll(null),
+                        ),
+                      ),
+                    ),
+                  if (_previewStep != null && _previewStep != currentStep)
+                    SliverToBoxAdapter(
+                      child: _PreviewBanner(
+                        previewStep: _previewStep!,
+                        currentStep: currentStep,
+                        onDismiss: () => setState(() => _previewStep = null),
+                      ),
+                    ),
+                ],
+                body: _buildStepContent(s, isAdmin, groupId),
+              ),
             ),
           ],
         ), // Column
@@ -496,10 +600,22 @@ class _MatchBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final fmt = DateFormat('dd/MM HH:mm', 'pt_BR');
+    // Esta tela usa banner próprio em vez de AppBar, então o inset da status bar
+    // não é aplicado automaticamente. Sem somar esse espaço o conteúdo sobe por
+    // baixo do relógio e dos ícones do sistema. O fundo continua indo até o topo
+    // da tela — só o conteúdo desce.
+    final topInset = MediaQuery.of(context).padding.top;
     return Container(
-      color: AppColors.slate900,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      height: 72 + topInset,
+      padding: EdgeInsets.fromLTRB(16, 12 + topInset, 16, 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
+      ),
       child: Row(
         children: [
           Expanded(
@@ -507,85 +623,88 @@ class _MatchBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Partidas',
+                  'PARTIDAS',
                   style: TextStyle(
-                      color: AppColors.slate400,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500),
+                    color: AppColors.darkTextMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: .8,
+                  ),
                 ),
                 if (s.hasMatch)
                   Text(
                     '${s.placeName ?? "—"} · ${s.playedAt != null ? fmt.format(s.playedAt!) : "—"}',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
               ],
             ),
           ),
-          // ── Nova Partida (só admin) ───────────────────────────────────────
-          if (isAdmin && onCreateNew != null)
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline_rounded,
-                  color: Colors.white, size: 20),
-              onPressed: onCreateNew,
-              tooltip: 'Nova partida',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-            ),
-          if (isAdmin && s.hasMatch)
-            TextButton.icon(
-              onPressed: canRewind ? onRewind : null,
-              icon: Icon(Icons.undo_rounded,
-                  size: 16,
-                  color: canRewind ? AppColors.amber400 : AppColors.slate600),
-              label: Text(
-                'Voltar etapa',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: canRewind ? AppColors.amber400 : AppColors.slate600,
-                ),
-              ),
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                minimumSize: const Size(0, 34),
-              ),
-            ),
-          // ── Excluir (só admin, com confirmação) ──────────────────────────
           if (onEdit != null)
             IconButton(
-              icon: const Icon(Icons.edit_outlined,
-                  color: AppColors.blue500, size: 20),
               onPressed: onEdit,
               tooltip: 'Alterar partida',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              icon: const Icon(Icons.edit_outlined),
+            ),
+          if (isAdmin && s.hasMatch)
+            IconButton(
+              onPressed: canRewind ? onRewind : null,
+              tooltip: 'Voltar para a etapa anterior',
+              icon: const Icon(Icons.undo_rounded),
             ),
           if (onDelete != null)
             IconButton(
-              icon: const Icon(Icons.delete_outline_rounded,
-                  color: AppColors.rose400, size: 20),
               onPressed: onDelete,
               tooltip: 'Excluir partida',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              style: IconButton.styleFrom(
+                foregroundColor: theme.colorScheme.error,
+                backgroundColor: theme.colorScheme.errorContainer,
+                side: BorderSide(color: theme.colorScheme.error),
+              ),
+              icon: const Icon(Icons.delete_outline_rounded),
             ),
-          // ── Refresh ──────────────────────────────────────────────────────
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white, size: 20),
-            onPressed: onRefresh,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          PopupMenuButton<_MatchHeaderAction>(
+            tooltip: 'Mais ações',
+            icon: const Icon(Icons.more_horiz_rounded),
+            onSelected: (action) {
+              switch (action) {
+                case _MatchHeaderAction.create:
+                  onCreateNew?.call();
+                case _MatchHeaderAction.refresh:
+                  onRefresh();
+              }
+            },
+            itemBuilder: (context) => [
+              if (isAdmin && onCreateNew != null)
+                const PopupMenuItem(
+                  value: _MatchHeaderAction.create,
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.add_circle_outline_rounded),
+                    title: Text('Nova partida'),
+                  ),
+                ),
+              const PopupMenuItem(
+                value: _MatchHeaderAction.refresh,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.refresh_rounded),
+                  title: Text('Atualizar'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 }
+
+enum _MatchHeaderAction { create, refresh }
 
 // ── Strip de votação/evento vinculado ────────────────────────────────────────
 
@@ -623,9 +742,11 @@ class _LinkedPollStrip extends ConsumerWidget {
     // Se não tem vínculo e não é admin → não mostra nada
     if (linked == null && !isAdmin) return const SizedBox.shrink();
 
-    return Container(
-      color: isDark ? AppColors.slate800 : AppColors.slate50,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    // Sem faixa cinza de ponta a ponta: no protótipo isto é um card, com
+    // borda e cantos, igual aos demais da tela. O respiro horizontal fica com
+    // quem usa o widget — dentro do passo 2 ele já vive numa área com padding.
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: linked != null
           ? _LinkedRow(
               poll: linked,
@@ -651,7 +772,7 @@ class _LinkedPollStrip extends ConsumerWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => _PollPickerSheet(
         polls: open,
         onPick: onLink,
@@ -681,7 +802,7 @@ class _LinkedPollStrip extends ConsumerWidget {
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.transparent,
         builder: (_) => sheet,
       );
     } catch (_) {}
@@ -708,7 +829,7 @@ class _LinkedRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = poll.isEvent ? AppColors.violet600 : AppColors.blue600;
+    final color = poll.isEvent ? AppColors.violet600 : AppColors.infoLight;
     final responses = poll.totalVoters;
     final presence = detail != null ? _EventPresenceStats.from(detail!) : null;
     final summaryText = poll.isEvent && presence != null
@@ -762,9 +883,9 @@ class _LinkedRow extends StatelessWidget {
                 const SizedBox(width: 6),
                 _Badge(
                   label: '✓ Votou',
-                  fg: AppColors.blue600,
-                  bg: AppColors.blue600.withValues(alpha: .08),
-                  border: AppColors.blue600.withValues(alpha: .25),
+                  fg: AppColors.infoLight,
+                  bg: AppColors.infoLight.withValues(alpha: .08),
+                  border: AppColors.infoLight.withValues(alpha: .25),
                 ),
               ],
 
@@ -865,20 +986,49 @@ class _UnlinkRow extends StatelessWidget {
   const _UnlinkRow({required this.isDark, required this.onTap});
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
+  Widget build(BuildContext context) {
+    // Card com borda e chevron, como no protótipo. Antes era uma linha solta
+    // de texto cinza-claro sobre faixa cinza: não parecia clicável e o
+    // contraste do rótulo ficava fraco.
+    final label = isDark ? AppColors.slate300 : AppColors.slate700;
+    return Material(
+      color: isDark ? AppColors.slate800 : AppColors.onDark,
+      borderRadius: BorderRadius.circular(13),
+      child: InkWell(
         onTap: onTap,
-        child: Row(children: [
-          Icon(Icons.add_link_rounded,
-              size: 14,
-              color: isDark ? AppColors.slate500 : AppColors.slate400),
-          const SizedBox(width: 8),
-          Text('Vincular votação ou evento',
-              style: TextStyle(
-                fontSize: 12,
-                color: isDark ? AppColors.slate500 : AppColors.slate400,
-              )),
-        ]),
-      );
+        borderRadius: BorderRadius.circular(13),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(
+              color: isDark ? AppColors.slate700 : AppColors.slate200,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.add_link_rounded, size: 18, color: label),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Vincular votação ou evento',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: label,
+                  ),
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded,
+                  size: 20,
+                  color: isDark ? AppColors.slate500 : AppColors.slate400),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _PollPickerSheet extends StatelessWidget {
@@ -891,7 +1041,7 @@ class _PollPickerSheet extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate900 : Colors.white,
+        color: isDark ? AppColors.slate900 : AppColors.onDark,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
@@ -913,7 +1063,7 @@ class _PollPickerSheet extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.white : AppColors.slate900,
+                  color: isDark ? AppColors.onDark : AppColors.slate900,
                 )),
           ),
           if (polls.isEmpty)
@@ -944,7 +1094,7 @@ class _PollPickerSheet extends StatelessWidget {
                 itemBuilder: (_, i) {
                   final p = polls[i];
                   final color =
-                      p.isEvent ? AppColors.violet600 : AppColors.blue600;
+                      p.isEvent ? AppColors.violet600 : AppColors.infoLight;
                   return ListTile(
                     leading: p.eventIcon != null && p.eventIcon!.isNotEmpty
                         ? Text(p.eventIcon!,
@@ -959,7 +1109,7 @@ class _PollPickerSheet extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white : AppColors.slate900,
+                          color: isDark ? AppColors.onDark : AppColors.slate900,
                         )),
                     subtitle: Text(p.isEvent ? 'Evento' : 'Votação',
                         style: TextStyle(fontSize: 12, color: color)),
@@ -1036,7 +1186,8 @@ class _MatchSelector extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: active ? AppColors.blue600 : AppColors.slate700,
+                        color:
+                            active ? AppColors.infoLight : AppColors.slate700,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -1045,7 +1196,8 @@ class _MatchSelector extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: active ? Colors.white : AppColors.slate300,
+                            color:
+                                active ? AppColors.onDark : AppColors.slate300,
                           ),
                         ),
                         const SizedBox(width: 5),
@@ -1054,7 +1206,7 @@ class _MatchSelector extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 11,
                             color: active
-                                ? Colors.white.withValues(alpha: .85)
+                                ? AppColors.onDark.withValues(alpha: .85)
                                 : AppColors.slate400,
                           ),
                           overflow: TextOverflow.ellipsis,
@@ -1132,21 +1284,21 @@ class _PreviewBanner extends StatelessWidget {
       child: Row(
         children: [
           const Icon(Icons.visibility_outlined,
-              size: 14, color: AppColors.orange700),
+              size: 14, color: AppColors.warningLight),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
               'Pré-visualização · etapa real: ${currentStep.label}',
               style: const TextStyle(
                   fontSize: 12,
-                  color: AppColors.orange700,
+                  color: AppColors.warningLight,
                   fontWeight: FontWeight.w500),
             ),
           ),
           GestureDetector(
             onTap: onDismiss,
-            child:
-                const Icon(Icons.close, size: 16, color: AppColors.orange700),
+            child: const Icon(Icons.close,
+                size: 16, color: AppColors.warningLight),
           ),
         ],
       ),
@@ -1273,7 +1425,7 @@ class _CreateMatchView extends StatelessWidget {
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
+                              strokeWidth: 2, color: AppColors.onDark))
                       : const Icon(Icons.add),
                   label: const Text('Criar Partida'),
                 ),
@@ -1303,7 +1455,7 @@ class _WaitingForMatchView extends StatelessWidget {
           decoration: BoxDecoration(
             color: isDark
                 ? AppColors.slate800.withValues(alpha: 0.5)
-                : Colors.white,
+                : AppColors.onDark,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isDark ? AppColors.slate700 : AppColors.slate200,

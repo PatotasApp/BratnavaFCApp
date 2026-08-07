@@ -15,8 +15,8 @@ class NotificationsDatasource {
   }
 
   Future<List<AppNotification>> getMyNotifications() async {
-    final res  = await _dio.get(ApiConstants.myNotifications);
-    final d    = _unwrap(res.data);
+    final res = await _dio.get(ApiConstants.myNotifications);
+    final d = _unwrap(res.data);
     final list = d is List ? d : <dynamic>[];
     return list
         .map((e) => AppNotification.fromJson(e as Map<String, dynamic>))
@@ -26,7 +26,7 @@ class NotificationsDatasource {
   Future<int> getUnreadCount() async {
     try {
       final res = await _dio.get(ApiConstants.myNotificationsUnreadCount);
-      final d   = _unwrap(res.data);
+      final d = _unwrap(res.data);
       if (d is int) return d;
       if (d is Map) {
         return (d['count'] ?? d['unreadCount'] ?? d['total'] ?? 0) as int;
@@ -38,7 +38,8 @@ class NotificationsDatasource {
   }
 
   Future<void> markRead(String notificationId) async {
-    final res = await _dio.patch(ApiConstants.notificationMarkRead(notificationId));
+    final res =
+        await _dio.patch(ApiConstants.notificationMarkRead(notificationId));
     _throwIfError(res.data);
   }
 

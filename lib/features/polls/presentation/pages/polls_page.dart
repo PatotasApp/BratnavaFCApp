@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/realtime/realtime_provider.dart';
 import '../../../auth/presentation/providers/account_store.dart';
@@ -16,7 +17,10 @@ import '../widgets/create_event_sheet.dart';
 import '../widgets/create_poll_sheet.dart';
 
 class PollsPage extends ConsumerStatefulWidget {
-  const PollsPage({super.key});
+  /// Null displays the section menu; a value opens its respective list.
+  final bool? showEvents;
+
+  const PollsPage({super.key, this.showEvents});
 
   @override
   ConsumerState<PollsPage> createState() => _PollsPageState();
@@ -25,11 +29,20 @@ class PollsPage extends ConsumerStatefulWidget {
 class _PollsPageState extends ConsumerState<PollsPage> {
   _Tab _activeTab = _Tab.events;
 
+  @override
+  void initState() {
+    super.initState();
+    _activeTab = widget.showEvents == false ? _Tab.polls : _Tab.events;
+  }
+
   // Fallback: usa groupId do player ativo se activeGroupId não estiver persistido.
   String? get _groupId {
     final acc = ref.read(accountStoreProvider).activeAccount;
     final player = ref.read(activePlayerProvider);
-    return acc?.activeGroupId ?? player?.groupId;
+    // O jogador manda no grupo: `activeGroupId` da conta pode apontar
+    // para uma patota sem jogador nosso, e aí toda rota por grupo
+    // responde 403. Ver dashboard_page para o diagnóstico completo.
+    return player?.groupId ?? acc?.activeGroupId;
   }
 
   bool get _isAdmin {
@@ -111,7 +124,7 @@ class _PollsPageState extends ConsumerState<PollsPage> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => sheet,
     );
     _refresh();
@@ -136,17 +149,21 @@ class _PollsPageState extends ConsumerState<PollsPage> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => sheet,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (widget.showEvents == null) {
+      return const _PollsMenu();
+    }
+
     // watch para reagir quando activePlayer carrega após navegação
     final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
-    final groupId = account?.activeGroupId ?? activePlayer?.groupId;
+    final groupId = activePlayer?.groupId ?? account?.activeGroupId;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (groupId != null && groupId.isNotEmpty) {
@@ -179,22 +196,154 @@ class _PollsPageState extends ConsumerState<PollsPage> {
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
-      body: _Body(
-        groupId: groupId,
-        activeTab: _activeTab,
-        isAdmin: _isAdmin,
-        isDark: isDark,
-        onTabChange: (t) => setState(() => _activeTab = t),
-        onItemTap: _openDetail,
-        onRefresh: _refresh,
-        onCreateTap: _openCreate,
-        onToggleShowVotes: _toggleShowVotes,
+      // Rota do shell sem AppBar: precisa respeitar o inset da status bar.
+      body: SafeArea(
+        bottom: false,
+        child: _Body(
+          groupId: groupId,
+          activeTab: _activeTab,
+          isAdmin: _isAdmin,
+          isDark: isDark,
+          onTabChange: (t) => setState(() => _activeTab = t),
+          onItemTap: _openDetail,
+          onRefresh: _refresh,
+          onCreateTap: _openCreate,
+          onToggleShowVotes: _toggleShowVotes,
+        ),
       ),
     );
   }
 }
 
 // ── _Body ──────────────────────────────────────────────────────────────────────
+
+class _PollsMenu extends StatelessWidget {
+  const _PollsMenu();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Scaffold(
+      backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  onPressed: () => context.go('/app'),
+                  tooltip: 'Voltar',
+                  icon: const Icon(Icons.arrow_back_rounded),
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Votações',
+                          style: TextStyle(
+                              fontSize: 20, fontWeight: FontWeight.w800)),
+                      Text('Eventos e enquetes da patota',
+                          style: TextStyle(
+                              fontSize: 13, color: AppColors.slate500)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 28),
+            _PollsMenuCard(
+              icon: Icons.calendar_today_outlined,
+              title: 'Eventos',
+              description: 'Confirme presença e acompanhe os eventos.',
+              color: AppColors.violet600,
+              onTap: () => context.push('/app/polls/events'),
+            ),
+            const SizedBox(height: 14),
+            _PollsMenuCard(
+              icon: Icons.how_to_vote_outlined,
+              title: 'Votações',
+              description: 'Participe das enquetes criadas pela patota.',
+              color: AppColors.blue500,
+              onTap: () => context.push('/app/polls/votes'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PollsMenuCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String description;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _PollsMenuCard({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: isDark ? AppColors.slate900 : AppColors.onDark,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+                color: isDark ? AppColors.slate800 : AppColors.slate200),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: .12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: color),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 3),
+                    Text(description,
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? AppColors.slate400
+                                : AppColors.slate500)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded,
+                  color: isDark ? AppColors.slate500 : AppColors.slate400),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _Body extends ConsumerWidget {
   final String groupId;
@@ -230,6 +379,7 @@ class _Body extends ConsumerWidget {
         isDark: isDark,
         onTabChange: onTabChange,
         onCreateTap: onCreateTap,
+        showTabs: false,
         eventCount: 0,
         pollCount: 0,
         child: _Skeleton(),
@@ -240,6 +390,7 @@ class _Body extends ConsumerWidget {
         isDark: isDark,
         onTabChange: onTabChange,
         onCreateTap: onCreateTap,
+        showTabs: false,
         eventCount: 0,
         pollCount: 0,
         child: _ErrorState(onRetry: onRefresh),
@@ -263,6 +414,7 @@ class _Body extends ConsumerWidget {
             isDark: isDark,
             onTabChange: onTabChange,
             onCreateTap: onCreateTap,
+            showTabs: false,
             eventCount: activeEventCount,
             pollCount: activePollCount,
             child: tabList.isEmpty
@@ -292,6 +444,7 @@ class _Layout extends StatelessWidget {
   final int pollCount;
   final ValueChanged<_Tab> onTabChange;
   final VoidCallback onCreateTap;
+  final bool showTabs;
   final Widget child;
 
   const _Layout({
@@ -302,6 +455,7 @@ class _Layout extends StatelessWidget {
     required this.pollCount,
     required this.onTabChange,
     required this.onCreateTap,
+    required this.showTabs,
     required this.child,
   });
 
@@ -310,6 +464,9 @@ class _Layout extends StatelessWidget {
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
+          child: _PollsTopHeader(isEvents: activeTab == _Tab.events),
+        ),
+        SliverToBoxAdapter(
             child: _Header(
           activeTab: activeTab,
           isAdmin: isAdmin,
@@ -317,6 +474,7 @@ class _Layout extends StatelessWidget {
           pollCount: pollCount,
           onTabChange: onTabChange,
           onCreateTap: onCreateTap,
+          showTabs: showTabs,
         )),
         SliverFillRemaining(
           hasScrollBody: false,
@@ -329,6 +487,78 @@ class _Layout extends StatelessWidget {
 
 // ── _Header ────────────────────────────────────────────────────────────────────
 
+class _PollsTopHeader extends StatelessWidget {
+  final bool isEvents;
+
+  const _PollsTopHeader({required this.isEvents});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.slate950 : AppColors.onDark,
+        border: Border(
+          bottom: BorderSide(
+            color: isDark ? AppColors.slate800 : AppColors.slate200,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/app');
+              }
+            },
+            tooltip: 'Voltar',
+            icon: const Icon(Icons.arrow_back_rounded),
+            style: IconButton.styleFrom(
+              foregroundColor: isDark ? AppColors.slate100 : AppColors.slate700,
+              backgroundColor: isDark ? AppColors.slate900 : AppColors.onDark,
+              side: BorderSide(
+                color: isDark ? AppColors.slate700 : AppColors.slate200,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isEvents ? 'Eventos' : 'Votações',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? AppColors.onDark : AppColors.slate900,
+                  ),
+                ),
+                Text(
+                  isEvents
+                      ? 'Presenças e encontros da patota'
+                      : 'Decisões e enquetes da patota',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? AppColors.slate400 : AppColors.slate500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Header extends StatelessWidget {
   final _Tab activeTab;
   final bool isAdmin;
@@ -336,6 +566,7 @@ class _Header extends StatelessWidget {
   final int pollCount;
   final ValueChanged<_Tab> onTabChange;
   final VoidCallback onCreateTap;
+  final bool showTabs;
 
   const _Header({
     required this.activeTab,
@@ -344,6 +575,7 @@ class _Header extends StatelessWidget {
     required this.pollCount,
     required this.onTabChange,
     required this.onCreateTap,
+    required this.showTabs,
   });
 
   @override
@@ -353,14 +585,18 @@ class _Header extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A)],
+              colors: [
+                AppColors.lightText,
+                AppColors.darkCard,
+                AppColors.lightText
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: .18),
+                color: AppColors.darkApp.withValues(alpha: .18),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -377,16 +613,16 @@ class _Header extends StatelessWidget {
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.1),
+                      color: AppColors.onDark.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.2)),
+                          color: AppColors.onDark.withValues(alpha: 0.2)),
                     ),
                     child: Icon(
                       activeTab == _Tab.events
                           ? Icons.calendar_today_outlined
                           : Icons.how_to_vote_outlined,
-                      color: Colors.white,
+                      color: AppColors.onDark,
                       size: 22,
                     ),
                   ),
@@ -395,18 +631,20 @@ class _Header extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Eventos & Votações',
-                          style: TextStyle(
-                            color: Colors.white,
+                        Text(
+                          activeTab == _Tab.events ? 'Eventos' : 'Votações',
+                          style: const TextStyle(
+                            color: AppColors.onDark,
                             fontSize: 20,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
                         Text(
-                          '$eventCount evento${eventCount != 1 ? 's' : ''} · $pollCount votaç${pollCount != 1 ? 'ões' : 'ão'}',
+                          activeTab == _Tab.events
+                              ? '$eventCount evento${eventCount != 1 ? 's' : ''}'
+                              : '$pollCount votação${pollCount != 1 ? 'ões' : ''}',
                           style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.5),
+                              color: AppColors.onDark.withValues(alpha: 0.5),
                               fontSize: 13),
                         ),
                       ],
@@ -422,7 +660,7 @@ class _Header extends StatelessWidget {
                             icon: const Icon(Icons.add,
                                 color: AppColors.slate900, size: 18),
                             style: IconButton.styleFrom(
-                              backgroundColor: Colors.white,
+                              backgroundColor: AppColors.onDark,
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12)),
                               padding: const EdgeInsets.all(8),
@@ -437,7 +675,7 @@ class _Header extends StatelessWidget {
                               : 'Nova votação'),
                           style: TextButton.styleFrom(
                             foregroundColor: AppColors.slate900,
-                            backgroundColor: Colors.white,
+                            backgroundColor: AppColors.onDark,
                             textStyle: const TextStyle(
                                 fontSize: 13, fontWeight: FontWeight.w600),
                             padding: const EdgeInsets.symmetric(
@@ -450,35 +688,35 @@ class _Header extends StatelessWidget {
                     ),
                 ],
               ),
-              const SizedBox(height: 14),
-
-              // ── Tabs ──
-              Container(
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom:
-                        BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+              if (showTabs) ...[
+                const SizedBox(height: 14),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(
+                          color: AppColors.onDark.withValues(alpha: 0.2)),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      _TabBtn(
+                        label: 'Eventos',
+                        icon: Icons.calendar_today_outlined,
+                        count: eventCount,
+                        active: activeTab == _Tab.events,
+                        onTap: () => onTabChange(_Tab.events),
+                      ),
+                      _TabBtn(
+                        label: 'Votações',
+                        icon: Icons.how_to_vote_outlined,
+                        count: pollCount,
+                        active: activeTab == _Tab.polls,
+                        onTap: () => onTabChange(_Tab.polls),
+                      ),
+                    ],
                   ),
                 ),
-                child: Row(
-                  children: [
-                    _TabBtn(
-                      label: 'Eventos',
-                      icon: Icons.calendar_today_outlined,
-                      count: eventCount,
-                      active: activeTab == _Tab.events,
-                      onTap: () => onTabChange(_Tab.events),
-                    ),
-                    _TabBtn(
-                      label: 'Votações',
-                      icon: Icons.how_to_vote_outlined,
-                      count: pollCount,
-                      active: activeTab == _Tab.polls,
-                      onTap: () => onTabChange(_Tab.polls),
-                    ),
-                  ],
-                ),
-              ),
+              ],
             ],
           ),
         ));
@@ -509,7 +747,7 @@ class _TabBtn extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: active ? Colors.white : Colors.transparent,
+              color: active ? AppColors.onDark : AppColors.transparent,
               width: 2,
             ),
           ),
@@ -520,16 +758,17 @@ class _TabBtn extends StatelessWidget {
             Icon(icon,
                 size: 14,
                 color: active
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.6)),
+                    ? AppColors.onDark
+                    : AppColors.onDark.withValues(alpha: 0.6)),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
-                color:
-                    active ? Colors.white : Colors.white.withValues(alpha: 0.6),
+                color: active
+                    ? AppColors.onDark
+                    : AppColors.onDark.withValues(alpha: 0.6),
               ),
             ),
             if (count > 0) ...[
@@ -537,7 +776,7 @@ class _TabBtn extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: active ? 0.2 : 0.1),
+                  color: AppColors.onDark.withValues(alpha: active ? 0.2 : 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
@@ -545,7 +784,8 @@ class _TabBtn extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: active ? 1.0 : 0.6),
+                    color:
+                        AppColors.onDark.withValues(alpha: active ? 1.0 : 0.6),
                   ),
                 ),
               ),
@@ -734,7 +974,7 @@ class _GroupCardState extends ConsumerState<_GroupCard> {
       borderRadius: BorderRadius.circular(16),
       child: Container(
         decoration: BoxDecoration(
-          color: widget.isDark ? AppColors.slate900 : Colors.white,
+          color: widget.isDark ? AppColors.slate900 : AppColors.onDark,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
               color: widget.isDark ? AppColors.slate800 : AppColors.slate100),
@@ -783,8 +1023,9 @@ class _GroupCardState extends ConsumerState<_GroupCard> {
                       child: DropdownButton<int>(
                         value: _pageSize,
                         isDense: true,
-                        dropdownColor:
-                            widget.isDark ? AppColors.slate800 : Colors.white,
+                        dropdownColor: widget.isDark
+                            ? AppColors.slate800
+                            : AppColors.onDark,
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -842,7 +1083,7 @@ class _GroupCardState extends ConsumerState<_GroupCard> {
                                         : Icons.visibility_off_outlined,
                                     size: 18,
                                     color: p.showVotes
-                                        ? Colors.blue.shade400
+                                        ? AppColors.info
                                         : (widget.isDark
                                             ? AppColors.slate500
                                             : AppColors.slate400),
@@ -1007,7 +1248,8 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 36, color: Colors.red),
+            const Icon(Icons.error_outline,
+                size: 36, color: AppColors.prototypeDanger),
             const SizedBox(height: 8),
             const Text('Erro ao carregar.', style: TextStyle(fontSize: 14)),
             const SizedBox(height: 12),

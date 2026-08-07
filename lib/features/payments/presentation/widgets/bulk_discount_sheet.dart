@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../domain/entities/payment_entities.dart';
 import 'payment_sheet_widgets.dart';
 
 class BulkDiscountSheet extends StatefulWidget {
+  final String groupId;
   final ExtraCharge charge;
   final Future<void> Function(Map<String, dynamic>) onSubmit;
   final VoidCallback onSaved;
 
   const BulkDiscountSheet({
     super.key,
+    required this.groupId,
     required this.charge,
     required this.onSubmit,
     required this.onSaved,
@@ -21,7 +24,7 @@ class BulkDiscountSheet extends StatefulWidget {
 }
 
 class _BulkDiscountSheetState extends State<BulkDiscountSheet> {
-  final _discCtrl   = TextEditingController();
+  final _discCtrl = TextEditingController();
   final _reasonCtrl = TextEditingController();
   late Set<String> _selected;
   bool _saving = false;
@@ -30,9 +33,7 @@ class _BulkDiscountSheetState extends State<BulkDiscountSheet> {
   void initState() {
     super.initState();
     _selected = Set.from(
-      widget.charge.payments
-          .where((p) => !p.isPaid)
-          .map((p) => p.playerId),
+      widget.charge.payments.where((p) => !p.isPaid).map((p) => p.playerId),
     );
   }
 
@@ -62,7 +63,7 @@ class _BulkDiscountSheetState extends State<BulkDiscountSheet> {
     setState(() => _saving = true);
     try {
       final dto = <String, dynamic>{
-        'discount':  discount,
+        'discount': discount,
         'playerIds': _selected.toList(),
       };
       final reason = _reasonCtrl.text.trim();
@@ -88,13 +89,13 @@ class _BulkDiscountSheetState extends State<BulkDiscountSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark     = Theme.of(context).brightness == Brightness.dark;
-    final border     = isDark ? AppColors.slate700 : AppColors.slate200;
-    final divColor   = isDark ? AppColors.slate800 : AppColors.slate50;
-    final sub        = isDark ? AppColors.slate400 : AppColors.slate500;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final border = isDark ? AppColors.slate700 : AppColors.slate200;
+    final divColor = isDark ? AppColors.slate800 : AppColors.slate50;
+    final sub = isDark ? AppColors.slate400 : AppColors.slate500;
     final allPlayers = widget.charge.payments;
     final allSelected = _selected.length == allPlayers.length;
-    final discount   = double.tryParse(_discCtrl.text) ?? 0;
+    final discount = double.tryParse(_discCtrl.text) ?? 0;
 
     return SheetContainer(
       isDark: isDark,
@@ -104,11 +105,11 @@ class _BulkDiscountSheetState extends State<BulkDiscountSheet> {
         children: [
           SheetHandle(isDark: isDark),
           const SizedBox(height: 16),
-
           Text('Desconto em massa',
               style: TextStyle(
-                fontSize: 17, fontWeight: FontWeight.w800,
-                color: isDark ? Colors.white : AppColors.slate900,
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: isDark ? AppColors.onDark : AppColors.slate900,
               )),
           const SizedBox(height: 4),
           Text(
@@ -116,24 +117,26 @@ class _BulkDiscountSheetState extends State<BulkDiscountSheet> {
             style: TextStyle(fontSize: 13, color: sub),
           ),
           const SizedBox(height: 20),
-
           FieldLabel('Desconto (R\$) *', isDark),
           const SizedBox(height: 6),
           SheetField(
-            controller: _discCtrl, isDark: isDark, hint: '0,00',
+            controller: _discCtrl,
+            isDark: isDark,
+            hint: '0,00',
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))
+            ],
           ),
           const SizedBox(height: 12),
-
           FieldLabel('Motivo (opcional)', isDark),
           const SizedBox(height: 6),
           SheetField(
-            controller: _reasonCtrl, isDark: isDark,
+            controller: _reasonCtrl,
+            isDark: isDark,
             hint: 'Ex: Desconto de fidelidade',
           ),
           const SizedBox(height: 16),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -147,7 +150,8 @@ class _BulkDiscountSheetState extends State<BulkDiscountSheet> {
                 child: Text(
                   allSelected ? 'Desmarcar todos' : 'Marcar todos',
                   style: TextStyle(
-                    fontSize: 12, color: sub,
+                    fontSize: 12,
+                    color: sub,
                     decoration: TextDecoration.underline,
                   ),
                 ),
@@ -158,57 +162,73 @@ class _BulkDiscountSheetState extends State<BulkDiscountSheet> {
           Container(
             constraints: const BoxConstraints(maxHeight: 200),
             decoration: BoxDecoration(
-              border:       Border.all(color: border),
+              border: Border.all(color: border),
               borderRadius: BorderRadius.circular(10),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: ListView.separated(
                 shrinkWrap: true,
-                itemCount:  allPlayers.length,
-                separatorBuilder: (_, __) => Divider(height: 1, color: divColor),
+                itemCount: allPlayers.length,
+                separatorBuilder: (_, __) =>
+                    Divider(height: 1, color: divColor),
                 itemBuilder: (_, i) {
-                  final p       = allPlayers[i];
+                  final p = allPlayers[i];
                   final checked = _selected.contains(p.playerId);
                   return InkWell(
                     onTap: () => setState(() {
-                      if (checked) _selected.remove(p.playerId);
-                      else         _selected.add(p.playerId);
+                      if (checked)
+                        _selected.remove(p.playerId);
+                      else
+                        _selected.add(p.playerId);
                     }),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 10),
                       child: Row(children: [
                         Checkbox(
-                          value:    checked,
+                          value: checked,
                           onChanged: (_) => setState(() {
-                            if (checked) _selected.remove(p.playerId);
-                            else         _selected.add(p.playerId);
+                            if (checked)
+                              _selected.remove(p.playerId);
+                            else
+                              _selected.add(p.playerId);
                           }),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
                           visualDensity: VisualDensity.compact,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(p.playerName,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDark ? Colors.white : AppColors.slate800,
-                              )),
+                          child: ConfiguredPlayerName(
+                            groupId: widget.groupId,
+                            name: p.playerName,
+                            isGoalkeeper: p.isGoalkeeper,
+                            iconSize: 13,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark
+                                  ? AppColors.onDark
+                                  : AppColors.slate800,
+                            ),
+                          ),
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: p.isPaid ? AppColors.green100 : AppColors.rose50,
+                            color: p.isPaid
+                                ? AppColors.green100
+                                : AppColors.rose50,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
                             p.isPaid ? 'Pago' : 'Pendente',
                             style: TextStyle(
-                              fontSize: 10, fontWeight: FontWeight.w600,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
                               color: p.isPaid
-                                  ? AppColors.green700
+                                  ? AppColors.primaryPressed
                                   : AppColors.rose500,
                             ),
                           ),
@@ -227,40 +247,40 @@ class _BulkDiscountSheetState extends State<BulkDiscountSheet> {
               style: TextStyle(fontSize: 11, color: sub),
             ),
           ),
-
           if (discount > 0 && _selected.isNotEmpty) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color:        const Color(0xFFFFFBEB),
-                border:       Border.all(color: const Color(0xFFFDE68A)),
+                color: AppColors.amber50,
+                border: Border.all(color: AppColors.amber200),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 'Aplicará R\$ ${discount.toStringAsFixed(2)} de desconto para '
                 '${_selected.length} jogador${_selected.length != 1 ? 'es' : ''}.',
-                style: const TextStyle(fontSize: 12, color: Color(0xFF92400E)),
+                style: const TextStyle(
+                    fontSize: 12, color: AppColors.warningLight),
               ),
             ),
           ],
-
           const SizedBox(height: 24),
-
           Row(children: [
             Expanded(
               child: ActionBtn(
-                label:           'Aplicar desconto',
-                icon:            Icons.monetization_on_outlined,
-                color:           isDark ? Colors.white : AppColors.slate900,
-                foregroundColor: isDark ? AppColors.slate900 : Colors.white,
-                loading:         _saving,
-                onTap:           _submit,
+                label: 'Aplicar desconto',
+                icon: Icons.monetization_on_outlined,
+                color: isDark ? AppColors.onDark : AppColors.slate900,
+                foregroundColor: isDark ? AppColors.slate900 : AppColors.onDark,
+                loading: _saving,
+                onTap: _submit,
               ),
             ),
             const SizedBox(width: 8),
             OutlineBtn(
-              label: 'Cancelar', isDark: isDark, padH: 16,
+              label: 'Cancelar',
+              isDark: isDark,
+              padH: 16,
               onTap: () => Navigator.of(context).pop(),
             ),
           ]),

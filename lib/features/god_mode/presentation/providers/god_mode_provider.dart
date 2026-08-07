@@ -60,8 +60,7 @@ class UsersFilterParams {
 class UsersFilterNotifier extends StateNotifier<UsersFilterParams> {
   UsersFilterNotifier() : super(const UsersFilterParams());
 
-  void setSearch(String q) =>
-      state = state.copyWith(search: q, page: 1);
+  void setSearch(String q) => state = state.copyWith(search: q, page: 1);
 
   void setStatus(UserStatusFilter s) =>
       state = state.copyWith(status: s, page: 1);
@@ -92,8 +91,7 @@ final pagedUsersProvider =
 
 // ── Groups provider ───────────────────────────────────────────────────────────
 
-final godModeGroupsProvider =
-    FutureProvider.autoDispose<List<GroupDto>>((ref) {
+final godModeGroupsProvider = FutureProvider.autoDispose<List<GroupDto>>((ref) {
   final ds = ref.watch(godModeDsProvider);
   return ds.fetchGroups();
 });

@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
-import '../../data/datasources/history_remote_datasource.dart';
 import '../../domain/entities/history_match.dart';
 import '../providers/history_provider.dart';
-
-// ── Page ──────────────────────────────────────────────────────────────────────
 
 class HistoryPage extends ConsumerStatefulWidget {
   const HistoryPage({super.key});
@@ -19,1102 +18,635 @@ class HistoryPage extends ConsumerStatefulWidget {
 }
 
 class _HistoryPageState extends ConsumerState<HistoryPage> {
-  static const _pageSizeOptions = [5, 10, 20, 50];
-  int _page = 1;
-  int _pageSize = 5;
+  int _visibleCount = 5;
   bool _onlyMine = false;
-  final _scrollCtrl = ScrollController();
+  final _scrollController = ScrollController();
+
+  void _setOnlyMine(bool value) {
+    setState(() {
+      _onlyMine = value;
+      _visibleCount = 5;
+    });
+  }
+
+  Future<void> _refresh(String? groupId) async {
+    if (groupId == null || groupId.isEmpty) return;
+    ref.invalidate(historyPageProvider);
+    setState(() => _visibleCount = 5);
+  }
 
   @override
   void dispose() {
-    _scrollCtrl.dispose();
+    _scrollController.dispose();
     super.dispose();
-  }
-
-  void _changePage(int p) {
-    setState(() => _page = p);
-    // Scroll to top
-    _scrollCtrl.animateTo(
-      0,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
-  }
-
-  void _changePageSize(int size) {
-    if (!_pageSizeOptions.contains(size)) return;
-    setState(() {
-      _pageSize = size;
-      _page = 1;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
-    final groupId = account?.activeGroupId ?? activePlayer?.groupId;
-    final myPlayerId = account?.activePlayerId ?? activePlayer?.playerId;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // O jogador manda no grupo: `activeGroupId` da conta pode apontar
+    // para uma patota sem jogador nosso, e aí toda rota por grupo
+    // responde 403. Ver dashboard_page para o diagnóstico completo.
+    final groupId = activePlayer?.groupId ?? account?.activeGroupId;
+    final playerId = account?.activePlayerId ?? activePlayer?.playerId;
+    final filterPlayerId = _onlyMine ? playerId : null;
 
-    return RefreshIndicator(
-      onRefresh: () async {
-        if (groupId != null) {
-          ref.invalidate(historyPageProvider);
-          setState(() => _page = 1);
-        }
-      },
-      child: CustomScrollView(
-        controller: _scrollCtrl,
-        slivers: [
-          // ── Header ──────────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: _Header(
-              groupId: groupId,
-              isDark: isDark,
-              onlyMine: _onlyMine,
-              playerId: _onlyMine ? myPlayerId : null,
-              canFilter: myPlayerId != null,
-              onToggleMine: () => setState(() {
-                _onlyMine = !_onlyMine;
-                _page = 1;
-              }),
-              onRefresh: groupId == null
-                  ? null
-                  : () => ref.invalidate(historyPageProvider),
-            ),
-          ),
-
-          if (groupId == null) ...[
-            SliverFillRemaining(
-              child: _NoGroup(isDark: isDark),
-            ),
-          ] else ...[
-            SliverToBoxAdapter(
-              child: _HistoryList(
+    final historyAsync = groupId == null || groupId.isEmpty
+        ? null
+        : ref.watch(
+            historyPageProvider(
+              (
                 groupId: groupId,
-                page: _page,
-                pageSize: _pageSize,
-                pageSizeOptions: _pageSizeOptions,
-                isDark: isDark,
-                onlyMine: _onlyMine,
-                playerId: _onlyMine ? myPlayerId : null,
-                onPageChanged: _changePage,
-                onPageSizeChanged: _changePageSize,
+                page: 1,
+                pageSize: _visibleCount,
+                playerId: filterPlayerId,
               ),
             ),
-            const SliverToBoxAdapter(child: SizedBox(height: 24)),
-          ],
+          );
+
+    return RefreshIndicator(
+      onRefresh: () => _refresh(groupId),
+      child: CustomScrollView(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverToBoxAdapter(
+            child: _HistoryHeader(
+              total: historyAsync?.valueOrNull?.total,
+              loading: historyAsync?.isLoading ?? false,
+              onRefresh: groupId == null ? null : () => _refresh(groupId),
+            ),
+          ),
+          if (playerId != null)
+            SliverToBoxAdapter(
+              child: _HistoryFilter(
+                onlyMine: _onlyMine,
+                onChanged: _setOnlyMine,
+              ),
+            ),
+          if (historyAsync == null)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: _NoGroupState(),
+            )
+          else
+            historyAsync.when(
+              loading: () => const SliverPadding(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 24),
+                sliver: SliverToBoxAdapter(child: _HistorySkeletons()),
+              ),
+              error: (error, _) => SliverFillRemaining(
+                hasScrollBody: false,
+                child: _HistoryError(
+                  error: error,
+                  onRetry: () => _refresh(groupId),
+                ),
+              ),
+              data: (pageData) {
+                final matches = [...pageData.items]..sort((a, b) {
+                    final aDate = a.playedAt?.millisecondsSinceEpoch ?? 0;
+                    final bDate = b.playedAt?.millisecondsSinceEpoch ?? 0;
+                    return bDate.compareTo(aDate);
+                  });
+
+                final finalized = matches.where((match) {
+                  final status = match.statusName?.trim().toLowerCase() ?? '';
+                  return status.isEmpty ||
+                      status.contains('final') ||
+                      status == 'done';
+                }).toList();
+
+                if (finalized.isEmpty) {
+                  return SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: _HistoryEmpty(onlyMine: _onlyMine),
+                  );
+                }
+
+                final canLoadMore = _visibleCount < pageData.total;
+                return SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                  sliver: SliverList.list(
+                    children: [
+                      for (final match in finalized) ...[
+                        _HistoryMatchCard(
+                          match: match,
+                          onTap: () => context.go(
+                            '/app/history/${match.groupId}/${match.id}',
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      if (canLoadMore) ...[
+                        const SizedBox(height: 4),
+                        OutlinedButton.icon(
+                          onPressed: () => setState(() => _visibleCount += 5),
+                          icon: const Icon(Icons.expand_more_rounded),
+                          label: Text(
+                            'Carregar mais '
+                            '(${pageData.total - _visibleCount})',
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
         ],
       ),
     );
   }
 }
 
-// ── Header ─────────────────────────────────────────────────────────────────
-
-class _Header extends ConsumerWidget {
-  final String? groupId;
-  final bool isDark;
-  final bool onlyMine;
-  final String? playerId;
-  final bool canFilter;
-  final VoidCallback onToggleMine;
+class _HistoryHeader extends StatelessWidget {
+  final int? total;
+  final bool loading;
   final VoidCallback? onRefresh;
 
-  const _Header({
-    required this.groupId,
-    required this.isDark,
-    required this.onlyMine,
-    required this.playerId,
-    required this.canFilter,
-    required this.onToggleMine,
-    this.onRefresh,
+  const _HistoryHeader({
+    required this.total,
+    required this.loading,
+    required this.onRefresh,
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final histAsync = groupId != null
-        ? ref.watch(
-            historyPageProvider((
-              groupId: groupId!,
-              page: 1,
-              pageSize: 1,
-              playerId: playerId,
-            )),
-          )
-        : const AsyncValue<PagedHistoryMatches>.data(
-            PagedHistoryMatches(items: [], total: 0, page: 1, pageSize: 1),
-          );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final subtitle = loading
+        ? 'Carregando partidas'
+        : total == null
+            ? 'Histórico da patota'
+            : '$total partida${total == 1 ? '' : 's'}';
 
-    final isLoading = histAsync.isLoading;
-    final total = histAsync.valueOrNull?.total ?? 0;
-
+    // O shell só coloca AppBar na aba Dashboard; as demais desenham a partir do
+    // topo absoluto. Sem somar o inset o conteúdo fica sob a status bar.
+    final topInset = MediaQuery.of(context).padding.top;
     return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(20),
+      height: 72 + topInset,
+      padding: EdgeInsets.fromLTRB(16, 12 + topInset, 16, 12),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF0f172a),
-            Color(0xFF1e293b),
-            Color(0xFF0f172a),
-          ],
+        color: theme.colorScheme.surface,
+        border: Border(
+          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
         ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(40),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+      ),
+      child: Row(
+        children: [
+          const PrototypeIconBox(icon: Icon(Icons.history_rounded)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Histórico', style: theme.textTheme.titleLarge),
+                const SizedBox(height: 2),
+                Text(subtitle, style: theme.textTheme.bodySmall),
+              ],
+            ),
           ),
+          if (onRefresh != null)
+            IconButton(
+              tooltip: 'Atualizar',
+              onPressed: loading ? null : onRefresh,
+              icon: loading
+                  ? const SizedBox.square(
+                      dimension: 17,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh_rounded),
+            ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    );
+  }
+}
+
+class _HistoryFilter extends StatelessWidget {
+  final bool onlyMine;
+  final ValueChanged<bool> onChanged;
+
+  const _HistoryFilter({
+    required this.onlyMine,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest,
+          border: Border.all(color: theme.colorScheme.outlineVariant),
+          borderRadius: BorderRadius.circular(13),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: _FilterButton(
+                selected: !onlyMine,
+                label: 'Todas',
+                onTap: () => onChanged(false),
+              ),
+            ),
+            Expanded(
+              child: _FilterButton(
+                selected: onlyMine,
+                label: 'Minhas',
+                onTap: () => onChanged(true),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterButton extends StatelessWidget {
+  final bool selected;
+  final String label;
+  final VoidCallback onTap;
+
+  const _FilterButton({
+    required this.selected,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: selected ? theme.colorScheme.surface : AppColors.transparent,
+      borderRadius: BorderRadius.circular(9),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(9),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Center(
+            child: Text(
+              label,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: selected
+                    ? theme.colorScheme.onSurface
+                    : theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HistoryMatchCard extends StatelessWidget {
+  final HistoryMatch match;
+  final VoidCallback onTap;
+
+  const _HistoryMatchCard({
+    required this.match,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final teamA = _colorFromHex(match.teamAColorHex);
+    final teamB = _colorFromHex(match.teamBColorHex);
+    final date = match.playedAt;
+    final month =
+        date == null ? '---' : DateFormat('MMM', 'pt_BR').format(date);
+    final day = date == null ? '--' : DateFormat('dd').format(date);
+    final time = date == null ? '--:--' : DateFormat('HH:mm').format(date);
+    final draw = match.hasScore && match.teamAGoals == match.teamBGoals;
+    final winnerColor = match.hasScore
+        ? match.teamAGoals! > match.teamBGoals!
+            ? teamA
+            : match.teamBGoals! > match.teamAGoals!
+                ? teamB
+                : null
+        : null;
+
+    return Material(
+      color: theme.colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Icon box
               Container(
-                width: 52,
-                height: 52,
+                width: 5,
                 decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(25),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.white.withAlpha(50)),
-                ),
-                child: const Icon(
-                  Icons.history_rounded,
-                  color: Colors.white,
-                  size: 26,
-                ),
-              ),
-              const SizedBox(width: 16),
-              // Title + subtitle
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Histórico',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    if (isLoading)
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 10,
-                            height: 10,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.5,
-                              color: Colors.white.withAlpha(128),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Carregando...',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.white.withAlpha(128),
-                            ),
-                          ),
-                        ],
-                      )
-                    else if (groupId == null)
-                      Text(
-                        'Crie ou entre em um grupo',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.white.withAlpha(128),
-                        ),
-                      )
-                    else
-                      Text(
-                        '$total partida${total != 1 ? 's' : ''} '
-                        'registrada${total != 1 ? 's' : ''}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.white.withAlpha(128),
-                        ),
-                      ),
-                  ],
+                  color: winnerColor,
+                  gradient: draw
+                      ? LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          stops: const [.46, .54],
+                          colors: [
+                            teamA ?? theme.colorScheme.outline,
+                            teamB ?? theme.colorScheme.outline,
+                          ],
+                        )
+                      : null,
                 ),
               ),
-              // Refresh button
-              if (onRefresh != null)
-                GestureDetector(
-                  onTap: isLoading ? null : onRefresh,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(25),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withAlpha(50)),
+              // `.proto-history-date` tem borda à direita separando a data do
+              // conteúdo, e o dia em 22px/900 — é a âncora visual da linha.
+              SizedBox(
+                width: 64,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    border: Border(
+                      right:
+                          BorderSide(color: theme.colorScheme.outlineVariant),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.refresh_rounded,
-                          size: 14,
-                          color: Colors.white.withAlpha(204),
-                        ),
-                        const SizedBox(width: 4),
                         Text(
-                          'Atualizar',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white.withAlpha(204),
+                          month.toUpperCase(),
+                          style: theme.textTheme.labelSmall,
+                        ),
+                        Text(
+                          day,
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontSize: 22,
+                            height: 1,
+                            fontWeight: FontWeight.w900,
                           ),
                         ),
+                        Text(time, style: theme.textTheme.bodySmall),
                       ],
                     ),
                   ),
                 ),
-            ],
-          ),
-
-          // ── "Só minhas" filter chip ──────────────────────────────────
-          if (canFilter) ...[
-            const SizedBox(height: 12),
-            GestureDetector(
-              onTap: onToggleMine,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                decoration: BoxDecoration(
-                  color: onlyMine ? Colors.white : Colors.white.withAlpha(25),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: onlyMine ? Colors.white : Colors.white.withAlpha(80),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 12,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          _TeamDot(color: teamA),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 5),
+                            child: Text(
+                              'VS',
+                              style: theme.textTheme.labelSmall,
+                            ),
+                          ),
+                          _TeamDot(color: teamB),
+                        ],
+                      ),
+                      const SizedBox(height: 7),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.location_on_outlined,
+                            size: 12,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(
+                              match.placeName ?? 'Local não informado',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.person_rounded,
-                      size: 13,
-                      color: onlyMine
-                          ? const Color(0xFF0f172a)
-                          : Colors.white.withAlpha(204),
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      'Só minhas partidas',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: onlyMine
-                            ? const Color(0xFF0f172a)
-                            : Colors.white.withAlpha(204),
+              ),
+              // O protótipo põe o placar numa caixa escura destacada
+              // (`.proto-history-score`: 60×46, raio 13, fundo #0b1326). Aqui
+              // era texto solto, e o placar — que é a informação principal da
+              // linha — se perdia no meio do card.
+              if (match.hasScore)
+                Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: Center(
+                    child: Container(
+                      constraints: const BoxConstraints(minWidth: 60),
+                      height: 46,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.darkApp,
+                        borderRadius: BorderRadius.circular(13),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: AppColors.shadow20,
+                            blurRadius: 20,
+                            offset: Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${match.teamAGoals}',
+                            style: const TextStyle(
+                              color: AppColors.onDark,
+                              fontSize: 17,
+                              height: 1,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 5),
+                            child: Text(
+                              '×',
+                              style: TextStyle(
+                                color: AppColors.darkTextMuted,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '${match.teamBGoals}',
+                            style: const TextStyle(
+                              color: AppColors.onDark,
+                              fontSize: 17,
+                              height: 1,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
+                )
+              else
+                const Padding(
+                  padding: EdgeInsets.only(right: 10),
+                  child: Icon(Icons.chevron_right_rounded),
                 ),
-              ),
-            ),
-          ],
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-// ── No group ──────────────────────────────────────────────────────────────────
+class _TeamDot extends StatelessWidget {
+  final Color? color;
 
-class _NoGroup extends StatelessWidget {
-  final bool isDark;
-  const _NoGroup({required this.isDark});
+  const _TeamDot({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 12,
+      height: 12,
+      decoration: BoxDecoration(
+        color: color ?? Theme.of(context).colorScheme.outline,
+        shape: BoxShape.circle,
+        border: Border.all(color: Theme.of(context).colorScheme.outline),
+      ),
+    );
+  }
+}
+
+class _HistorySkeletons extends StatelessWidget {
+  const _HistorySkeletons();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: List.generate(
+        4,
+        (index) => Container(
+          height: 88,
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
+          ),
+          child: const Center(child: CircularProgressIndicator()),
+        ),
+      ),
+    );
+  }
+}
+
+class _NoGroupState extends StatelessWidget {
+  const _NoGroupState();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _CenteredHistoryState(
+      icon: Icons.groups_outlined,
+      title: 'Nenhuma patota ativa',
+      subtitle: 'Selecione uma patota para ver o histórico.',
+    );
+  }
+}
+
+class _HistoryEmpty extends StatelessWidget {
+  final bool onlyMine;
+
+  const _HistoryEmpty({required this.onlyMine});
+
+  @override
+  Widget build(BuildContext context) {
+    return _CenteredHistoryState(
+      icon: Icons.calendar_month_outlined,
+      title: 'Nenhuma partida neste filtro',
+      subtitle: onlyMine
+          ? 'Você ainda não participou de partidas finalizadas.'
+          : 'As partidas finalizadas aparecerão aqui.',
+    );
+  }
+}
+
+class _HistoryError extends StatelessWidget {
+  final Object error;
+  final VoidCallback onRetry;
+
+  const _HistoryError({required this.error, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return _CenteredHistoryState(
+      icon: Icons.error_outline_rounded,
+      title: 'Não foi possível carregar',
+      subtitle: '$error',
+      action: OutlinedButton(
+        onPressed: onRetry,
+        child: const Text('Tentar novamente'),
+      ),
+    );
+  }
+}
+
+class _CenteredHistoryState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Widget? action;
+
+  const _CenteredHistoryState({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.action,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.group_outlined,
-            size: 40,
-            color: isDark ? AppColors.slate600 : AppColors.slate300,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Crie ou entre em um grupo',
-            style: TextStyle(
-              fontSize: 14,
-              color: isDark ? AppColors.slate500 : AppColors.slate400,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── List ──────────────────────────────────────────────────────────────────────
-
-class _HistoryList extends ConsumerWidget {
-  final String groupId;
-  final int page;
-  final int pageSize;
-  final List<int> pageSizeOptions;
-  final bool isDark;
-  final bool onlyMine;
-  final String? playerId;
-  final void Function(int) onPageChanged;
-  final void Function(int) onPageSizeChanged;
-
-  const _HistoryList({
-    required this.groupId,
-    required this.page,
-    required this.pageSize,
-    required this.pageSizeOptions,
-    required this.isDark,
-    required this.onlyMine,
-    required this.playerId,
-    required this.onPageChanged,
-    required this.onPageSizeChanged,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final async = ref.watch(
-      historyPageProvider((
-        groupId: groupId,
-        page: page,
-        pageSize: pageSize,
-        playerId: playerId,
-      )),
-    );
-
-    return async.when(
-      loading: () => _Skeletons(isDark: isDark),
-      error: (e, _) => Padding(
-        padding: const EdgeInsets.all(16),
-        child: Center(
-          child: Text(
-            'Erro: $e',
-            style: TextStyle(
-              color: isDark ? AppColors.slate400 : AppColors.slate500,
-            ),
-          ),
-        ),
-      ),
-      data: (pageData) {
-        // Only finalized matches belong in history
-        final finalized = pageData.items.where((m) {
-          final s = m.statusName?.toLowerCase().trim() ?? '';
-          return s.contains('final') || s == 'done' || s == 'finalizado';
-        }).toList();
-
-        // Apply "só minhas" filter if active — show spinner while IDs are loading
-        final filtered = finalized;
-
-        // Sort newest first
-        final sorted = [...filtered]..sort((a, b) {
-            final da = a.playedAt?.millisecondsSinceEpoch ?? 0;
-            final db = b.playedAt?.millisecondsSinceEpoch ?? 0;
-            return db.compareTo(da);
-          });
-
-        if (sorted.isEmpty) {
-          return _EmptyState(isDark: isDark, onlyMine: onlyMine);
-        }
-
-        final total = pageData.total;
-        final totalPages = (total / pageSize).ceil().clamp(1, 9999);
-        final safeP = pageData.page.clamp(1, totalPages);
-        final paged = sorted;
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(
-                    'Por pagina',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? AppColors.slate400 : AppColors.slate500,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  DropdownButton<int>(
-                    value: pageSize,
-                    isDense: true,
-                    dropdownColor: isDark ? AppColors.slate800 : Colors.white,
-                    items: pageSizeOptions
-                        .map((n) => DropdownMenuItem(
-                              value: n,
-                              child: Text('$n'),
-                            ))
-                        .toList(),
-                    onChanged: (n) {
-                      if (n != null) onPageSizeChanged(n);
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ...paged.map((m) => _MatchCard(
-                    match: m,
-                    isDark: isDark,
-                    onTap: () =>
-                        context.go('/app/history/${m.groupId}/${m.id}'),
-                  )),
-              const SizedBox(height: 12),
-              if (total > pageSize)
-                _Pagination(
-                  page: safeP,
-                  totalPages: totalPages,
-                  total: total,
-                  isDark: isDark,
-                  onPage: onPageChanged,
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ── Match card ────────────────────────────────────────────────────────────────
-
-class _MatchCard extends StatelessWidget {
-  final HistoryMatch match;
-  final bool isDark;
-  final VoidCallback onTap;
-
-  const _MatchCard({
-    required this.match,
-    required this.isDark,
-    required this.onTap,
-  });
-
-  Color? _parseHex(String? hex) {
-    if (hex == null) return null;
-    try {
-      final h = hex.replaceAll('#', '');
-      if (h.length == 3) {
-        final r = h[0] + h[0];
-        final g = h[1] + h[1];
-        final b = h[2] + h[2];
-        return Color(int.parse('FF$r$g$b', radix: 16));
-      }
-      if (h.length == 6) return Color(int.parse('FF$h', radix: 16));
-    } catch (_) {}
-    return null;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final aColor = _parseHex(match.teamAColorHex);
-    final bColor = _parseHex(match.teamBColorHex);
-    final hasScore = match.hasScore;
-    final dates = _formatDate(match.playedAt);
-
-    // Accent strip color
-    Color? accentA, accentB;
-    if (hasScore) {
-      final a = match.teamAGoals!;
-      final b = match.teamBGoals!;
-      if (a > b) {
-        accentA = aColor;
-        accentB = aColor;
-      } else if (b > a) {
-        accentA = bColor;
-        accentB = bColor;
-      } else {
-        accentA = aColor;
-        accentB = bColor;
-      }
-    } else {
-      accentA = aColor ?? AppColors.slate400;
-      accentB = aColor ?? AppColors.slate400;
-    }
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.slate900 : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark ? AppColors.slate700 : AppColors.slate200,
-          ),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Left accent strip
-                _AccentStrip(colorA: accentA, colorB: accentB),
-
-                // Date box
-                if (dates != null) _DateBox(dates: dates, isDark: isDark),
-
-                // Body
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Place name as primary title
-                        if (match.placeName != null)
-                          Row(children: [
-                            Icon(Icons.location_on_rounded,
-                                size: 11,
-                                color: isDark
-                                    ? AppColors.slate500
-                                    : AppColors.slate400),
-                            const SizedBox(width: 3),
-                            Expanded(
-                              child: Text(
-                                match.placeName!,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: isDark
-                                      ? Colors.white
-                                      : AppColors.slate900,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ]),
-                        const SizedBox(height: 5),
-                        // Meta row
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: [
-                            // Team dots
-                            if (aColor != null || bColor != null)
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _TeamDot(color: aColor),
-                                  const Padding(
-                                    padding:
-                                        EdgeInsets.symmetric(horizontal: 3),
-                                    child: Text(
-                                      'vs',
-                                      style: TextStyle(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.slate400,
-                                      ),
-                                    ),
-                                  ),
-                                  _TeamDot(color: bColor),
-                                ],
-                              ),
-                            // Status badge
-                            if (match.statusName != null &&
-                                match.statusName!.isNotEmpty)
-                              _StatusBadge(
-                                status: match.statusName!,
-                                isDark: isDark,
-                              ),
-                          ],
-                        ),
-
-                        // Linked event row
-                        if (match.linkedPollTitle != null) ...[
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(
-                                match.linkedPollType == 'event'
-                                    ? Icons.celebration_rounded
-                                    : Icons.how_to_vote_rounded,
-                                size: 11,
-                                color: match.linkedPollType == 'event'
-                                    ? const Color(0xFFFBBF24)
-                                    : (isDark
-                                        ? AppColors.slate500
-                                        : AppColors.slate400),
-                              ),
-                              const SizedBox(width: 3),
-                              Expanded(
-                                child: Text(
-                                  match.linkedPollTitle!,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: isDark
-                                        ? AppColors.slate500
-                                        : AppColors.slate400,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Score pill or chevron
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                  child: Center(
-                    child: hasScore
-                        ? _ScorePill(
-                            a: match.teamAGoals!,
-                            b: match.teamBGoals!,
-                          )
-                        : Icon(
-                            Icons.chevron_right_rounded,
-                            size: 18,
-                            color: isDark
-                                ? AppColors.slate600
-                                : AppColors.slate300,
-                          ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Accent strip ──────────────────────────────────────────────────────────────
-
-class _AccentStrip extends StatelessWidget {
-  final Color? colorA;
-  final Color? colorB;
-
-  const _AccentStrip({this.colorA, this.colorB});
-
-  @override
-  Widget build(BuildContext context) {
-    if (colorA == colorB || colorB == null) {
-      return Container(
-        width: 4,
-        color: colorA ?? AppColors.slate400,
-      );
-    }
-    return Container(
-      width: 4,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          stops: const [0.5, 0.5],
-          colors: [colorA ?? AppColors.slate400, colorB!],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Date box ──────────────────────────────────────────────────────────────────
-
-class _DateBox extends StatelessWidget {
-  final _DateParts dates;
-  final bool isDark;
-
-  const _DateBox({required this.dates, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 58,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.slate800.withAlpha(120) : AppColors.slate50,
-        border: Border(
-          right: BorderSide(
-            color: isDark ? AppColors.slate800 : AppColors.slate100,
-          ),
-        ),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            dates.month.toUpperCase(),
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.2,
-              color: isDark ? AppColors.slate500 : AppColors.slate400,
-            ),
-          ),
-          Text(
-            dates.day,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              height: 1,
-              color: isDark ? AppColors.slate100 : AppColors.slate800,
-            ),
-          ),
-          Text(
-            dates.time,
-            style: TextStyle(
-              fontSize: 9,
-              color: isDark ? AppColors.slate500 : AppColors.slate400,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Score pill ────────────────────────────────────────────────────────────────
-
-class _ScorePill extends StatelessWidget {
-  final int a, b;
-  const _ScorePill({required this.a, required this.b});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: isDark ? Colors.white : AppColors.slate900,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '$a',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w900,
-              color: isDark ? AppColors.slate900 : Colors.white,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 3),
-            child: Text(
-              '×',
-              style: TextStyle(
-                fontSize: 11,
-                color: isDark ? AppColors.slate500 : AppColors.slate400,
-              ),
-            ),
-          ),
-          Text(
-            '$b',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w900,
-              color: isDark ? AppColors.slate900 : Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Team dot ──────────────────────────────────────────────────────────────────
-
-class _TeamDot extends StatelessWidget {
-  final Color? color;
-  const _TeamDot({this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    if (color == null) return const SizedBox.shrink();
-    final isWhite = color == const Color(0xFFFFFFFF);
-    return Container(
-      width: 13,
-      height: 13,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: color,
-        border: Border.all(
-          color: isWhite ? AppColors.slate300 : Colors.white.withAlpha(100),
-          width: 1,
-        ),
-        boxShadow: isWhite
-            ? [
-                BoxShadow(
-                    color: AppColors.slate300.withAlpha(100), blurRadius: 2)
-              ]
-            : null,
-      ),
-    );
-  }
-}
-
-// ── Status badge ──────────────────────────────────────────────────────────────
-
-class _StatusBadge extends StatelessWidget {
-  final String status;
-  final bool isDark;
-
-  const _StatusBadge({required this.status, required this.isDark});
-
-  static const _meta = {
-    'final': (Color(0xFFecfdf5), Color(0xFF059669)),
-    'finalizado': (Color(0xFFecfdf5), Color(0xFF059669)),
-    'done': (Color(0xFFecfdf5), Color(0xFF059669)),
-    'pós-jogo': (Color(0xFFfff7ed), Color(0xFFea580c)),
-    'postgame': (Color(0xFFfff7ed), Color(0xFFea580c)),
-    'playing': (Color(0xFFeff6ff), Color(0xFF2563eb)),
-    'started': (Color(0xFFeff6ff), Color(0xFF2563eb)),
-    'live': (Color(0xFFeff6ff), Color(0xFF2563eb)),
-    'teams': (Color(0xFFf5f3ff), Color(0xFF7c3aed)),
-    'matchmaking': (Color(0xFFf5f3ff), Color(0xFF7c3aed)),
-    'accept': (Color(0xFFfffbeb), Color(0xFFd97706)),
-    'aceitação': (Color(0xFFfffbeb), Color(0xFFd97706)),
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final key = status.toLowerCase().trim();
-    (Color, Color)? found;
-    if (_meta.containsKey(key)) {
-      found = _meta[key];
-    } else {
-      for (final e in _meta.entries) {
-        if (key.contains(e.key)) {
-          found = e.value;
-          break;
-        }
-      }
-    }
-    final bg = found?.$1 ?? (isDark ? AppColors.slate800 : AppColors.slate50);
-    final fg = found?.$2 ?? (isDark ? AppColors.slate400 : AppColors.slate600);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: fg.withAlpha(80)),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: fg,
-        ),
-      ),
-    );
-  }
-}
-
-// ── Pagination ────────────────────────────────────────────────────────────────
-
-class _Pagination extends StatelessWidget {
-  final int page;
-  final int totalPages;
-  final int total;
-  final bool isDark;
-  final void Function(int) onPage;
-
-  const _Pagination({
-    required this.page,
-    required this.totalPages,
-    required this.total,
-    required this.isDark,
-    required this.onPage,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        // Prev
-        _PagButton(
-          label: 'Anterior',
-          icon: Icons.chevron_left_rounded,
-          leading: true,
-          enabled: page > 1,
-          isDark: isDark,
-          onTap: () => onPage(page - 1),
-        ),
-        // Page info
-        Expanded(
-          child: Text(
-            'Página $page de $totalPages',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 12,
-              color: isDark ? AppColors.slate400 : AppColors.slate500,
-            ),
-          ),
-        ),
-        // Next
-        _PagButton(
-          label: 'Próxima',
-          icon: Icons.chevron_right_rounded,
-          leading: false,
-          enabled: page < totalPages,
-          isDark: isDark,
-          onTap: () => onPage(page + 1),
-        ),
-      ],
-    );
-  }
-}
-
-class _PagButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool leading;
-  final bool enabled;
-  final bool isDark;
-  final VoidCallback onTap;
-
-  const _PagButton({
-    required this.label,
-    required this.icon,
-    required this.leading,
-    required this.enabled,
-    required this.isDark,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Opacity(
-        opacity: enabled ? 1.0 : 0.4,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.slate900 : Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isDark ? AppColors.slate700 : AppColors.slate200,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (leading) Icon(icon, size: 14),
-              if (leading) const SizedBox(width: 4),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              if (!leading) const SizedBox(width: 4),
-              if (!leading) Icon(icon, size: 14),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Skeletons ─────────────────────────────────────────────────────────────────
-
-class _Skeletons extends StatelessWidget {
-  final bool isDark;
-  const _Skeletons({required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: List.generate(
-          6,
-          (i) => Container(
-            height: 68,
-            margin: const EdgeInsets.only(bottom: 8),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.slate800 : AppColors.slate100,
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Empty state ───────────────────────────────────────────────────────────────
-
-class _EmptyState extends StatelessWidget {
-  final bool isDark;
-  final bool onlyMine;
-  const _EmptyState({required this.isDark, this.onlyMine = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 48),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.slate900 : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark ? AppColors.slate700 : AppColors.slate200,
-            style: BorderStyle.solid,
-          ),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.calendar_today_outlined,
-              size: 36,
-              color: isDark ? AppColors.slate600 : AppColors.slate300,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Nenhuma partida encontrada',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: isDark ? AppColors.slate400 : AppColors.slate500,
-              ),
-            ),
+            PrototypeIconBox(size: 52, icon: Icon(icon, size: 25)),
+            const SizedBox(height: 14),
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
             Text(
-              onlyMine
-                  ? 'Você ainda não participou de nenhuma partida registrada.'
-                  : 'O histórico aparecerá após a primeira partida criada.',
+              subtitle,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                color: isDark ? AppColors.slate500 : AppColors.slate400,
-              ),
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
+            if (action != null) ...[
+              const SizedBox(height: 14),
+              action!,
+            ],
           ],
         ),
       ),
@@ -1122,26 +654,15 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-// ── Date helpers ──────────────────────────────────────────────────────────────
-
-class _DateParts {
-  final String day, month, time, full, short;
-  const _DateParts({
-    required this.day,
-    required this.month,
-    required this.time,
-    required this.full,
-    required this.short,
-  });
-}
-
-_DateParts? _formatDate(DateTime? d) {
-  if (d == null) return null;
-  return _DateParts(
-    day: DateFormat('dd', 'pt_BR').format(d),
-    month: DateFormat('MMM', 'pt_BR').format(d).replaceAll('.', ''),
-    time: DateFormat('HH:mm', 'pt_BR').format(d),
-    full: DateFormat("EEE, dd 'de' MMM 'de' yyyy • HH:mm", 'pt_BR').format(d),
-    short: DateFormat("dd 'de' MMM", 'pt_BR').format(d),
-  );
+Color? _colorFromHex(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return null;
+  try {
+    var hex = raw.replaceAll('#', '').trim();
+    if (hex.length == 3) {
+      hex = '${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}';
+    }
+    return Color(int.parse('FF$hex', radix: 16));
+  } catch (_) {
+    return null;
+  }
 }

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../domain/entities/replay_clip.dart';
 import '../../../../core/errors/app_exception.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
 import '../providers/replays_provider.dart';
@@ -131,7 +133,7 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
           child: Text(
             'Apenas administradores podem ver todos os replays.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey),
+            style: TextStyle(color: AppColors.neutral),
           ),
         ),
       );
@@ -145,11 +147,12 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, size: 40, color: Colors.grey),
+              const Icon(Icons.error_outline,
+                  size: 40, color: AppColors.neutral),
               const SizedBox(height: 12),
               Text('Erro ao carregar: $err',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.grey)),
+                  style: const TextStyle(color: AppColors.neutral)),
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: notifier.fetch,
@@ -169,10 +172,10 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.videocam_off_outlined,
-                      size: 48, color: Colors.grey),
+                      size: 48, color: AppColors.neutral),
                   SizedBox(height: 12),
                   Text('Nenhum replay disponível.',
-                      style: TextStyle(color: Colors.grey)),
+                      style: TextStyle(color: AppColors.neutral)),
                 ],
               ),
             ),
@@ -206,7 +209,7 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
                   crossAxisCount: 2,
                   crossAxisSpacing: 8,
                   mainAxisSpacing: 8,
-                  mainAxisExtent: 188,
+                  mainAxisExtent: 212,
                 ),
                 delegate: SliverChildBuilderDelegate(
                   (ctx, i) {
@@ -305,7 +308,10 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
   Widget build(BuildContext context) {
     final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
-    final gid = account?.activeGroupId ?? activePlayer?.groupId ?? '';
+    // O jogador manda no grupo: `activeGroupId` da conta pode apontar
+    // para uma patota sem jogador nosso, e aí toda rota por grupo
+    // responde 403. Ver dashboard_page para o diagnóstico completo.
+    final gid = activePlayer?.groupId ?? account?.activeGroupId ?? '';
     final isAdmin = _resolvedIsAdmin(gid);
     final accessToken = _accessToken;
 
@@ -325,12 +331,12 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
               Icon(Icons.videocam_outlined,
                   size: 44,
                   color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white24
-                      : Colors.black26),
+                      ? AppColors.onDark24
+                      : AppColors.shadow26),
               const SizedBox(height: 12),
               const Text(
                 'Crie ou entre em um grupo',
-                style: TextStyle(color: Colors.grey),
+                style: TextStyle(color: AppColors.neutral),
               ),
             ],
           ),
@@ -440,18 +446,27 @@ class _GridClipCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final border = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-    final textPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
-    final textSub = isDark ? Colors.white54 : const Color(0xFF64748B);
+    final cardColor = isDark ? AppColors.darkCard : AppColors.onDark;
+    final border = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+    final textPrimary = isDark ? AppColors.onDark : AppColors.lightText;
+    final textSub = isDark ? AppColors.onDark54 : AppColors.lightTextSecondary;
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
           color: cardColor,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: border),
+          boxShadow: isDark
+              ? null
+              : [
+                  BoxShadow(
+                    color: AppColors.slate900.withAlpha(10),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -459,7 +474,7 @@ class _GridClipCard extends StatelessWidget {
             // ── Thumbnail ───────────────────────────────────────────────
             ClipRRect(
               borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(9)),
+                  const BorderRadius.vertical(top: Radius.circular(15)),
               child: AspectRatio(
                 aspectRatio: 16 / 9,
                 child: Stack(
@@ -471,9 +486,9 @@ class _GridClipCard extends StatelessWidget {
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                           colors: [
-                            Color(0xFF0F172A),
-                            Color(0xFF14532D),
-                            Color(0xFF0F172A),
+                            AppColors.lightText,
+                            AppColors.successBackground,
+                            AppColors.lightText,
                           ],
                         ),
                       ),
@@ -485,23 +500,23 @@ class _GridClipCard extends StatelessWidget {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Colors.transparent,
-                            Colors.black.withValues(alpha: .52),
+                            AppColors.transparent,
+                            AppColors.darkApp.withValues(alpha: .52),
                           ],
                         ),
                       ),
                     ),
                     Center(
                       child: Container(
-                        width: 36,
-                        height: 36,
+                        width: 42,
+                        height: 42,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: .15),
+                          color: AppColors.onDark.withValues(alpha: .2),
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white30),
+                          border: Border.all(color: AppColors.onDark30),
                         ),
                         child: const Icon(Icons.play_arrow_rounded,
-                            size: 20, color: Colors.white),
+                            size: 24, color: AppColors.onDark),
                       ),
                     ),
                     Positioned(
@@ -512,45 +527,18 @@ class _GridClipCard extends StatelessWidget {
                             horizontal: 6, vertical: 3),
                         decoration: BoxDecoration(
                           color: (clip.eventType ?? '').toLowerCase() == 'gol'
-                              ? const Color(0xFF10B981)
-                              : const Color(0xFF3B82F6),
+                              ? AppColors.accent
+                              : AppColors.info,
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
                           (clip.eventType ?? 'Replay').toUpperCase(),
                           style: const TextStyle(
-                            color: Colors.white,
+                            color: AppColors.onDark,
                             fontSize: 8,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 6,
-                      right: 6,
-                      child: Column(
-                        children: [
-                          _FloatingSocialAction(
-                            icon: clip.isLiked
-                                ? Icons.favorite_rounded
-                                : Icons.favorite_border_rounded,
-                            active: clip.isLiked,
-                            color: const Color(0xFFFF4D6D),
-                            label:
-                                clip.likeCount > 0 ? '${clip.likeCount}' : null,
-                            onTap: onLike,
-                          ),
-                          const SizedBox(height: 6),
-                          _FloatingSocialAction(
-                            icon: clip.isFavorited
-                                ? Icons.bookmark_rounded
-                                : Icons.bookmark_border_rounded,
-                            active: clip.isFavorited,
-                            color: const Color(0xFFF59E0B),
-                            onTap: onFavorite,
-                          ),
-                        ],
                       ),
                     ),
                     if (clip.minute != null)
@@ -561,13 +549,13 @@ class _GridClipCard extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 5, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: .65),
+                            color: AppColors.darkApp.withValues(alpha: .65),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             "${clip.minute}'",
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: AppColors.onDark,
                               fontSize: 9,
                               fontWeight: FontWeight.w700,
                             ),
@@ -582,25 +570,47 @@ class _GridClipCard extends StatelessWidget {
             // ── Info ────────────────────────────────────────────────────
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                padding: const EdgeInsets.fromLTRB(10, 9, 10, 4),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '$_formattedDate · ${clip.matchPlace}',
+                      _eventLabel.isNotEmpty
+                          ? '$_eventEmoji $_eventLabel'
+                          : 'Replay da partida',
                       style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
                         color: textPrimary,
                       ),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     ),
-                    if (_eventLabel.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.calendar_today_outlined,
+                            size: 11, color: textSub),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            '$_formattedDate · ${clip.matchPlace}',
+                            style: TextStyle(fontSize: 10, color: textSub),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (clip.teamName != null) ...[
                       const SizedBox(height: 2),
                       Text(
-                        '$_eventEmoji $_eventLabel',
-                        style: TextStyle(fontSize: 10, color: textSub),
+                        clip.teamName!,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                       ),
@@ -612,29 +622,30 @@ class _GridClipCard extends StatelessWidget {
 
             // ── Actions ─────────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+              padding: const EdgeInsets.fromLTRB(8, 2, 8, 7),
               child: Row(
                 children: [
                   _MiniAction(
                     icon: clip.isLiked
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
-                    color: clip.isLiked ? Colors.redAccent : textSub,
+                    color: clip.isLiked ? AppColors.prototypeDanger : textSub,
                     label: clip.likeCount > 0 ? '${clip.likeCount}' : null,
                     onTap: onLike,
                   ),
+                  const SizedBox(width: 5),
                   _MiniAction(
                     icon: clip.isFavorited
                         ? Icons.star_rounded
                         : Icons.star_border_rounded,
-                    color: clip.isFavorited ? Colors.amber : textSub,
+                    color: clip.isFavorited ? AppColors.warning : textSub,
                     onTap: onFavorite,
                   ),
                   const Spacer(),
                   if (isAdmin && onDelete != null)
                     _MiniAction(
                       icon: Icons.delete_outline_rounded,
-                      color: Colors.redAccent.withValues(alpha: .7),
+                      color: AppColors.prototypeDanger.withValues(alpha: .7),
                       onTap: onDelete!,
                     ),
                 ],
@@ -647,59 +658,11 @@ class _GridClipCard extends StatelessWidget {
   }
 }
 
-class _FloatingSocialAction extends StatelessWidget {
-  final IconData icon;
-  final bool active;
-  final Color color;
-  final String? label;
-  final VoidCallback onTap;
-
-  const _FloatingSocialAction({
-    required this.icon,
-    required this.active,
-    required this.color,
-    this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: active ? color : Colors.black.withValues(alpha: .42),
-      borderRadius: BorderRadius.circular(999),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: Colors.white, size: 16),
-              if (label != null) ...[
-                const SizedBox(width: 3),
-                Text(
-                  label!,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _ReplayFieldPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final line = Paint()
-      ..color = Colors.white.withValues(alpha: .18)
+      ..color = AppColors.onDark.withValues(alpha: .18)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 
@@ -750,8 +713,12 @@ class _MiniAction extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+        decoration: BoxDecoration(
+          color: color.withAlpha(18),
+          borderRadius: BorderRadius.circular(8),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -794,9 +761,9 @@ class _MatchSectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
-    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
-    final subColor = isDark ? Colors.white54 : Colors.black45;
+    final bgColor = isDark ? AppColors.darkCard : AppColors.lightSeparator;
+    final textColor = isDark ? AppColors.onDark : AppColors.lightText;
+    final subColor = isDark ? AppColors.onDark54 : AppColors.shadow45;
     final n = matchClips.length;
 
     final radius = collapsed
@@ -815,11 +782,11 @@ class _MatchSectionHeader extends StatelessWidget {
               width: 30,
               height: 30,
               decoration: BoxDecoration(
-                color: const Color(0xFF3B82F6).withValues(alpha: .15),
+                color: AppColors.info.withValues(alpha: .15),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.sports_soccer_rounded,
-                  size: 15, color: Color(0xFF3B82F6)),
+                  size: 15, color: AppColors.info),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -866,7 +833,11 @@ class _ReplayHeader extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A)],
+          colors: [
+            AppColors.lightText,
+            AppColors.darkCard,
+            AppColors.lightText
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -880,54 +851,93 @@ class _ReplayHeader extends StatelessWidget {
             children: [
               Row(
                 children: [
+                  IconButton(
+                    tooltip: 'Voltar',
+                    onPressed: () {
+                      if (context.canPop()) {
+                        context.pop();
+                      } else {
+                        context.go('/app');
+                      }
+                    },
+                    constraints:
+                        const BoxConstraints.tightFor(width: 48, height: 48),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppColors.onDark.withAlpha(22),
+                      foregroundColor: AppColors.onDark,
+                      side: BorderSide(color: AppColors.onDark.withAlpha(46)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon: const Icon(
+                      Icons.arrow_back_rounded,
+                      color: AppColors.onDark,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
                   Container(
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: .1),
+                      color: AppColors.onDark.withValues(alpha: .1),
                       borderRadius: BorderRadius.circular(12),
-                      border:
-                          Border.all(color: Colors.white.withValues(alpha: .2)),
+                      border: Border.all(
+                          color: AppColors.onDark.withValues(alpha: .2)),
                     ),
                     child: const Icon(Icons.videocam_rounded,
-                        size: 20, color: Colors.white),
+                        size: 20, color: AppColors.onDark),
                   ),
                   const SizedBox(width: 12),
                   const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Replay Vault',
+                        'Replays',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: AppColors.onDark,
                           fontSize: 16,
                           fontWeight: FontWeight.w900,
                         ),
                       ),
                       Text(
-                        'Seus melhores momentos',
-                        style: TextStyle(color: Colors.white54, fontSize: 11),
+                        'Momentos da sua patota',
+                        style:
+                            TextStyle(color: AppColors.onDark54, fontSize: 11),
                       ),
                     ],
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              TabBar(
-                controller: tabController,
-                indicatorColor: Colors.white,
-                indicatorWeight: 2,
-                labelColor: Colors.white,
-                unselectedLabelColor: Colors.white54,
-                labelStyle:
-                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                unselectedLabelStyle:
-                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w400),
-                tabs: const [
-                  Tab(text: 'Todos'),
-                  Tab(text: 'Curtidos'),
-                  Tab(text: 'Favoritos'),
-                ],
+              Container(
+                height: 46,
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: AppColors.onDark.withAlpha(12),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.onDark.withAlpha(20)),
+                ),
+                child: TabBar(
+                  controller: tabController,
+                  indicator: BoxDecoration(
+                    color: AppColors.onDark.withAlpha(32),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  dividerColor: AppColors.transparent,
+                  labelColor: AppColors.onDark,
+                  unselectedLabelColor: AppColors.onDark54,
+                  labelStyle: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600),
+                  unselectedLabelStyle: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w400),
+                  tabs: const [
+                    Tab(text: 'Todos'),
+                    Tab(text: 'Curtidos'),
+                    Tab(text: 'Favoritos'),
+                  ],
+                ),
               ),
             ],
           ),

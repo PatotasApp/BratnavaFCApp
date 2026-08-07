@@ -1,17 +1,25 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/theme/app_colors.dart';
+import 'package:intl/intl.dart';
+
 import '../../../../core/realtime/realtime_provider.dart';
-import '../../../../shared/presentation/widgets/horizontal_team_field.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
+import '../../../../shared/presentation/widgets/football_pitch.dart';
+import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../calendar/domain/entities/calendar_event.dart';
+import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../matches/domain/entities/match_models.dart';
-import '../providers/dashboard_provider.dart';
-import '../widgets/recent_match_card.dart';
+import '../../../matches/presentation/providers/match_provider.dart';
+import '../../../members/presentation/providers/members_provider.dart';
 import '../../../payments/presentation/providers/payments_provider.dart';
-import '../../../../core/errors/app_exception.dart';
+import '../../../player_history/domain/entities/player_history_models.dart';
+import '../../../player_history/presentation/providers/player_history_provider.dart'
+    as player_history;
+import '../../../polls/presentation/providers/polls_provider.dart';
+import '../providers/dashboard_provider.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -21,25 +29,96 @@ class DashboardPage extends ConsumerStatefulWidget {
 }
 
 class _DashboardPageState extends ConsumerState<DashboardPage> {
-  bool _refreshingRecent = false;
+  final Set<String> _respondingMatches = {};
 
-  Future<void> _refreshRecent(String groupId, String playerId) async {
-    if (_refreshingRecent) return;
-    setState(() => _refreshingRecent = true);
-    ref.invalidate(
-        recentMatchesProvider((groupId: groupId, playerId: playerId)));
-    await Future.delayed(const Duration(milliseconds: 900));
-    if (mounted) setState(() => _refreshingRecent = false);
+  Future<void> _refresh(String groupId, String? playerId) async {
+    ref.invalidate(myPlayersProvider);
+    if (groupId.isEmpty) return;
+
+    ref.invalidate(upcomingMatchesFullProvider(groupId));
+    ref.invalidate(upcomingEventsProvider(groupId));
+    ref.invalidate(pollsListProvider(groupId));
+    ref.invalidate(myPaymentSummaryProvider(groupId));
+    ref.invalidate(pendingPollsCountProvider(groupId));
+    if (playerId != null) {
+      ref.invalidate(
+        player_history.playerHistoryProvider(
+          (
+            groupId: groupId,
+            playerId: playerId,
+            // Sem ano: o card mostra o total da carreira e precisa da
+            // primeira temporada, que só aparece no histórico completo.
+            year: null,
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _respondToMatch({
+    required UpcomingMatchDetails match,
+    required String playerId,
+    required bool accept,
+  }) async {
+    if (_respondingMatches.contains(match.header.matchId)) return;
+    setState(() => _respondingMatches.add(match.header.matchId));
+
+    try {
+      final datasource = ref.read(matchDsProvider);
+      if (accept) {
+        await datasource.acceptInvite(
+          match.header.groupId,
+          match.header.matchId,
+          playerId,
+        );
+      } else {
+        await datasource.rejectInvite(
+          match.header.groupId,
+          match.header.matchId,
+          playerId,
+        );
+      }
+      ref.invalidate(upcomingMatchesFullProvider(match.header.groupId));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              accept ? 'Presença confirmada.' : 'Ausência informada.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Não foi possível atualizar: $error')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _respondingMatches.remove(match.header.matchId));
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final account = ref.watch(accountStoreProvider).activeAccount;
+    final playersAsync = ref.watch(myPlayersProvider);
     final activePlayer = ref.watch(activePlayerProvider);
-    // Fallback: usa o groupId do player ativo se activeGroupId ainda não foi
-    // persistido (race condition logo após login com múltiplos grupos)
-    final groupId = account?.activeGroupId ?? activePlayer?.groupId ?? '';
+    // O jogador manda no grupo, não o `activeGroupId` da conta.
+    //
+    // O log mostrou o estrago da ordem antiga: a conta apontava para
+    // `3f401edf…` enquanto `/players/mine` devolvia o jogador em
+    // `26d42510…`. Todas as rotas por grupo respondiam **403 Forbidden**
+    // (`/upcoming`, `/player-history`, `/TeamColor`), porque o usuário não é
+    // membro daquela patota — daí os zeros e o "não foi possível carregar".
+    //
+    // `activePlayerProvider` já escolhe o jogador do grupo da conta quando
+    // existe um; nesse caso os dois valores coincidem e nada muda. Quando não
+    // existe, é o jogador que está certo: é dele que vêm as permissões.
+    final groupId = activePlayer?.groupId ?? account?.activeGroupId ?? '';
+    final playerId = activePlayer?.playerId;
 
     if (groupId.isNotEmpty) {
       ref.listen<AsyncValue<BratnavaRealtimeEvent>>(
@@ -47,1213 +126,953 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         (_, next) {
           next.whenData((event) {
             if (event.type == 'match.changed') {
-              ref.invalidate(upcomingMatchesProvider(groupId));
               ref.invalidate(upcomingMatchesFullProvider(groupId));
-              ref.invalidate(currentMatchProvider(groupId));
-              if (activePlayer != null) {
-                ref.invalidate(recentMatchesProvider(
-                    (groupId: groupId, playerId: activePlayer.playerId)));
+              if (playerId != null) {
+                ref.invalidate(
+                  player_history.playerHistoryProvider(
+                    (
+                      groupId: groupId,
+                      playerId: playerId,
+                      // Sem ano: o card mostra o total da carreira e precisa da
+                      // primeira temporada, que só aparece no histórico completo.
+                      year: null,
+                    ),
+                  ),
+                );
               }
-            }
-            if (event.type == 'poll.changed') {
+            } else if (event.type == 'poll.changed') {
+              ref.invalidate(pendingPollsCountProvider(groupId));
               ref.invalidate(upcomingEventsProvider(groupId));
+              ref.invalidate(pollsListProvider(groupId));
             }
           });
         },
       );
     }
 
-    final recentAsync = (activePlayer != null && groupId.isNotEmpty)
-        ? ref.watch(recentMatchesProvider(
-            (groupId: groupId, playerId: activePlayer.playerId)))
-        : null;
+    if (activePlayer == null) {
+      if (playersAsync.isLoading) {
+        return PrototypeScrollView(
+          onRefresh: () => _refresh(groupId, playerId),
+          child: const _DashboardLoadingState(),
+        );
+      }
 
-    // Subtítulo do header — igual ao site
-    final headerSubtitle = activePlayer != null
-        ? activePlayer.playerName
-        : groupId.isNotEmpty
-            ? 'Selecione um jogador'
-            : 'Crie ou entre em um grupo';
+      if (playersAsync.hasError) {
+        return PrototypeScrollView(
+          onRefresh: () => _refresh(groupId, playerId),
+          child: _DashboardLoadErrorState(
+            onRetry: () => ref.invalidate(myPlayersProvider),
+          ),
+        );
+      }
 
-    return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(myPlayersProvider);
-          if (groupId.isNotEmpty) {
-            ref.invalidate(upcomingMatchesFullProvider(groupId));
-            ref.invalidate(upcomingEventsProvider(groupId));
-            if (activePlayer != null) {
-              ref.invalidate(recentMatchesProvider(
-                  (groupId: groupId, playerId: activePlayer.playerId)));
-            }
-          }
-        },
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          children: [
-            // ── Header gradiente ────────────────────────────────────────────
-            _DashboardHeader(subtitle: headerSubtitle),
-            const SizedBox(height: 16),
+      if (groupId.isNotEmpty) {
+        return PrototypeScrollView(
+          onRefresh: () => _refresh(groupId, playerId),
+          child: _DashboardPlayerMissingState(
+            onRetry: () => ref.invalidate(myPlayersProvider),
+          ),
+        );
+      }
 
-            // ── Próximas partidas ─────────────────────────────────────────────
-            if (groupId.isNotEmpty) ...[
-              _SectionCard(
-                isDark: isDark,
-                iconData: Icons.sports_soccer_rounded,
-                title: 'Próximas Partidas',
-                trailing: _SectionLink(
-                  label: 'Ver tudo',
-                  color: AppColors.blue600,
-                  onTap: () => context.go('/app/matches'),
-                ),
-                child:
-                    _UpcomingMatchesCarousel(groupId: groupId, isDark: isDark),
-              ),
-              const SizedBox(height: 16),
-            ],
+      return PrototypeScrollView(
+        onRefresh: () => _refresh(groupId, playerId),
+        child: const _DashboardEmptyState(),
+      );
+    }
 
-            // ── Últimas partidas ─────────────────────────────────────────────
-            _SectionCard(
-              isDark: isDark,
-              iconData: Icons.history_rounded,
-              title: activePlayer != null
-                  ? 'Minhas últimas partidas · ${activePlayer.playerName}'
-                  : 'Minhas últimas partidas',
-              trailing: (activePlayer != null && groupId.isNotEmpty)
-                  ? _RefreshBtn(
-                      isLoading: _refreshingRecent,
-                      onTap: () =>
-                          _refreshRecent(groupId, activePlayer.playerId),
-                    )
-                  : null,
-              child: _buildRecentContent(
-                  context, isDark, activePlayer, recentAsync, groupId),
-            ),
-            const SizedBox(height: 16),
+    if (groupId.isEmpty) {
+      return PrototypeScrollView(
+        onRefresh: () => _refresh(groupId, playerId),
+        child: const _DashboardEmptyState(),
+      );
+    }
 
-            // ── Situação financeira ───────────────────────────────────────────
-            _SectionCard(
-              isDark: isDark,
-              iconData: Icons.payments_outlined,
-              title: 'Financeiro',
-              trailing: _SectionLink(
-                label: 'Ver',
-                color: AppColors.green600,
-                onTap: () => context.go('/app/payments'),
-              ),
-              child: _buildPaymentSummaryContent(context, isDark, groupId),
-            ),
-            const SizedBox(height: 16),
+    final profile = ref.watch(myProfileProvider).valueOrNull;
+    final profileUsername = profile?.userName.trim() ?? '';
+    final accountUsername = account?.email.split('@').first.trim() ?? '';
+    final username = (profileUsername.isNotEmpty
+            ? profileUsername
+            : accountUsername.isNotEmpty
+                ? accountUsername
+                : activePlayer.playerName)
+        .replaceFirst(RegExp(r'^@+'), '')
+        .toLowerCase();
 
-            // ── Próximos eventos ─────────────────────────────────────────────
-            if (groupId.isNotEmpty) ...[
-              _SectionCard(
-                isDark: isDark,
-                iconData: Icons.calendar_month_outlined,
-                title: 'Próximos Eventos',
-                trailing: _SectionLink(
-                  label: 'Calendário',
-                  color: AppColors.violet600,
-                  onTap: () => context.go('/app/calendar'),
-                ),
-                child:
-                    _UpcomingEventsCarousel(groupId: groupId, isDark: isDark),
-              ),
-            ],
-          ],
+    final historyAsync = ref.watch(
+      player_history.playerHistoryProvider(
+        (
+          groupId: groupId,
+          playerId: activePlayer.playerId,
+          // Sem ano: o card mostra o total da carreira e precisa da
+          // primeira temporada, que só aparece no histórico completo.
+          year: null,
         ),
       ),
     );
-  }
+    final matchesAsync = ref.watch(upcomingMatchesFullProvider(groupId));
+    final paymentAsync = ref.watch(myPaymentSummaryProvider(groupId));
+    final pollsAsync = ref.watch(pendingPollsCountProvider(groupId));
+    final eventsAsync = ref.watch(upcomingEventsProvider(groupId));
+    final registeredEventsAsync = ref.watch(pollsListProvider(groupId));
 
-  // ── Situação financeira — conteúdo ─────────────────────────────────────────
-  Widget _buildPaymentSummaryContent(
-      BuildContext context, bool isDark, String groupId) {
-    if (groupId.isEmpty) {
-      return _CenteredMsg(msg: 'Crie ou entre em um grupo', isDark: isDark);
-    }
-    final summaryAsync = ref.watch(myPaymentSummaryProvider(groupId));
-    return summaryAsync.when(
-      loading: () => const _Skeleton(height: 60),
-      error: (_, __) => _CenteredMsg(
-          msg: 'Não foi possível carregar situação financeira.',
-          isDark: isDark),
-      data: (summary) {
-        if (summary == null) {
-          return _CenteredMsg(
-              msg: 'Nenhuma informação de pagamento disponível.',
-              isDark: isDark);
-        }
-        final hasPending =
-            summary.pendingMonthlyCount > 0 || summary.pendingExtraCount > 0;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!hasPending)
-              Row(children: [
-                const Icon(Icons.check_circle_outline_rounded,
-                    size: 15, color: AppColors.green600),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('Em dia',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isDark ? AppColors.slate300 : AppColors.slate600,
-                      )),
+    final summary = historyAsync.valueOrNull == null
+        ? null
+        : PlayerHistorySummary.from(historyAsync.valueOrNull!);
+    final nextMatch = matchesAsync.valueOrNull?.firstOrNull;
+    final pendingPayments = paymentAsync.valueOrNull == null
+        ? null
+        : paymentAsync.valueOrNull!.pendingMonthlyCount +
+            paymentAsync.valueOrNull!.pendingExtraCount;
+
+    return PrototypeScrollView(
+      onRefresh: () => _refresh(groupId, activePlayer.playerId),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _PlayerIdentityCard(
+            groupId: groupId,
+            groupName: activePlayer.groupName,
+            playerName: activePlayer.playerName,
+            username: username,
+            isGoalkeeper: activePlayer.isGoalkeeper,
+            summary: summary,
+            loading: historyAsync.isLoading,
+            onOpen: () => context.go('/app/player-history'),
+          ),
+          const SizedBox(height: 12),
+          _NextMatchBand(
+            match: nextMatch,
+            loading: matchesAsync.isLoading,
+            error: matchesAsync.hasError,
+            playerId: activePlayer.playerId,
+            responding: nextMatch != null &&
+                _respondingMatches.contains(nextMatch.header.matchId),
+            onAccept: nextMatch == null
+                ? null
+                : () => _respondToMatch(
+                      match: nextMatch,
+                      playerId: activePlayer.playerId,
+                      accept: true,
+                    ),
+            onDecline: nextMatch == null
+                ? null
+                : () => _respondToMatch(
+                      match: nextMatch,
+                      playerId: activePlayer.playerId,
+                      accept: false,
+                    ),
+            onOpen: () => context.go(
+              nextMatch == null
+                  ? '/app/matches'
+                  : '/app/matches?matchId=${nextMatch.header.matchId}',
+            ),
+          ),
+          const SizedBox(height: 12),
+          _ActionGrid(
+            pendingPayments: pendingPayments,
+            pendingPolls: pollsAsync.valueOrNull,
+            registeredEvents: registeredEventsAsync.valueOrNull
+                ?.where((poll) => poll.isEvent && poll.isOpen)
+                .length,
+            upcomingEvents: eventsAsync.valueOrNull?.length,
+            onPayments: () => context.go('/app/payments'),
+            onPolls: () => context.go('/app/polls/votes'),
+            onEvents: () => context.go('/app/polls/events'),
+            onCalendar: () => context.go('/app/calendar'),
+            onStats: () => context.go('/app/visual-stats'),
+          ),
+          const SizedBox(height: 12),
+          _UpcomingEventsCard(
+            events: eventsAsync.valueOrNull ?? const [],
+            loading: eventsAsync.isLoading,
+            error: eventsAsync.hasError,
+            onOpenCalendar: () => context.go('/app/calendar'),
+          ),
+          const SizedBox(height: 12),
+          PrototypeCard(
+            onTap: () => context.go('/app/matches'),
+            child: Row(
+              children: [
+                const PrototypeIconBox(
+                  icon: Icon(Icons.sports_soccer_outlined),
                 ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? AppColors.green600.withValues(alpha: .2)
-                        : AppColors.green50,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isDark
-                          ? AppColors.green600.withValues(alpha: .4)
-                          : AppColors.green200,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Acompanhar partidas',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Aceitação, formação, jogo e pós-jogo',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlayerIdentityCard extends ConsumerWidget {
+  final String groupId;
+  final String groupName;
+  final String playerName;
+  final String username;
+  final bool isGoalkeeper;
+  final PlayerHistorySummary? summary;
+  final bool loading;
+  final VoidCallback onOpen;
+
+  const _PlayerIdentityCard({
+    required this.groupId,
+    required this.groupName,
+    required this.playerName,
+    required this.username,
+    required this.isGoalkeeper,
+    required this.summary,
+    required this.loading,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(groupSettingsProvider(groupId)).valueOrNull;
+    final icons = GroupIcons.from(settings);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // O protótipo troca este card no tema claro:
+    //   [data-theme="white"] .proto-player-identity:not(.share-view){
+    //     background:var(--bg-card); color:var(--text-primary); ... }
+    // Aqui a cor era fixa (#12151C), então o card ficava escuro sobre fundo
+    // branco — a única peça escura no meio de uma tela clara.
+    final cardColor = isDark ? AppColors.darkSubtle : AppColors.lightCard;
+    final cardBorder = isDark ? AppColors.darkElevated : AppColors.lightBorder;
+    final nameColor = isDark ? AppColors.onDark : AppColors.lightText;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardColor,
+        border: Border.all(color: cardBorder),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: isDark ? AppColors.shadow20 : AppColors.shadow08,
+            blurRadius: isDark ? 30 : 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Column(
+                children: [
+                  Container(
+                    width: 82,
+                    height: 92,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color:
+                          isDark ? AppColors.darkSubtle : AppColors.lightSubtle,
+                      border: Border.all(
+                          color: AppColors.accentOf(theme.brightness)),
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: renderGroupIcon(
+                      isGoalkeeper ? icons.goalkeeper : icons.player,
+                      size: 34,
+                      color: AppColors.darkTextMuted,
                     ),
                   ),
-                  child: Text('Sem pendências',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? AppColors.green400 : AppColors.green700,
-                      )),
+                  const SizedBox(height: 7),
+                  Text(
+                    isGoalkeeper ? 'GOLEIRO' : 'JOGADOR',
+                    style: const TextStyle(
+                      color: AppColors.darkTextMuted,
+                      fontSize: 10,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      groupName,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        ConfiguredPlayerName(
+                          groupId: groupId,
+                          name: playerName,
+                          isGoalkeeper: isGoalkeeper,
+                          iconSize: 16,
+                          style: TextStyle(
+                            color: nameColor,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            // O fundo estava fixo num marrom escuro enquanto a
+                            // cor do texto seguia o tema. No tema claro dava
+                            // #96390F sobre #341B0E — 2.2:1, escuro sobre
+                            // escuro. `accentBgOf` é o par desenhado para
+                            // `accentTextOf`: 6.3:1 no claro, 7.8:1 no escuro.
+                            color: AppColors.accentBgOf(theme.brightness),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          // Protótipo: "3ª temporada". A contagem sai da
+                          // primeira partida disputada — não existe data de
+                          // entrada na patota, e a primeira partida é na
+                          // prática quando a pessoa começou.
+                          child: Text(
+                            '${summary?.seasonNumber ?? 1}ª temporada',
+                            style: TextStyle(
+                              color: AppColors.accentTextOf(theme.brightness),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: '@',
+                            style: TextStyle(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          TextSpan(text: username),
+                        ],
+                      ),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
-              ])
-            else ...[
-              Row(children: [
-                Icon(Icons.error_outline_rounded,
-                    size: 15,
-                    color: isDark ? AppColors.amber400 : AppColors.amber500),
-                const SizedBox(width: 8),
-                Text('Pendências',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDark ? AppColors.slate300 : AppColors.slate600,
-                    )),
-              ]),
-              const SizedBox(height: 6),
-              if (summary.pendingMonthlyCount > 0)
-                _PaymentSummaryRow(
-                  icon: Icons.calendar_month_outlined,
-                  label:
-                      '${summary.pendingMonthlyCount} mensalidade${summary.pendingMonthlyCount != 1 ? 's' : ''} pendente${summary.pendingMonthlyCount != 1 ? 's' : ''}',
-                  isDark: isDark,
-                  isAlert: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              // No protótipo o destaque é o PRIMEIRO stat (gols), não o MVP —
+              // `PLAYER_CARD_STATS[0].featured`. Gol é o número que a pessoa
+              // procura primeiro; MVP costuma ser 0 e destacar um zero é ruim.
+              Expanded(
+                child: _PlayerStat(
+                  icon: renderGroupIcon(icons.goal, size: 19),
+                  value: summary?.totalGoals,
+                  label: 'gols',
+                  loading: loading,
+                  featured: true,
                 ),
-              if (summary.pendingExtraCount > 0)
-                _PaymentSummaryRow(
-                  icon: Icons.receipt_outlined,
-                  label:
-                      '${summary.pendingExtraCount} cobrança${summary.pendingExtraCount != 1 ? 's' : ''} extra pendente${summary.pendingExtraCount != 1 ? 's' : ''}',
-                  isDark: isDark,
-                  isAlert: true,
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: _PlayerStat(
+                  icon: renderGroupIcon(icons.assist, size: 19),
+                  value: summary?.totalAssists,
+                  label: 'assist.',
+                  loading: loading,
                 ),
-              if (summary.totalPendingAmount > 0) ...[
-                const SizedBox(height: 4),
-                Text(
-                  'Total: R\$ ${summary.totalPendingAmount.toStringAsFixed(2)}',
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: _PlayerStat(
+                  icon: renderGroupIcon(icons.mvp, size: 19),
+                  value: summary?.totalMvps,
+                  label: 'MVP',
+                  loading: loading,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 48,
+            child: FilledButton(
+              onPressed: onOpen,
+              child: const Text('Ver meu histórico'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlayerStat extends StatelessWidget {
+  final Widget icon;
+  final int? value;
+  final String label;
+  final bool loading;
+  final bool featured;
+
+  const _PlayerStat({
+    required this.icon,
+    required this.value,
+    required this.label,
+    required this.loading,
+    this.featured = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Acompanha o tema, igual ao `.proto-player-stat` do protótipo, que ganha
+    // override em [data-theme="white"]. Antes ficava escuro sobre card claro.
+    final brightness = Theme.of(context).brightness;
+    final isDark = brightness == Brightness.dark;
+
+    final background = featured
+        ? AppColors.accentBgOf(brightness)
+        : (isDark ? AppColors.darkCard : AppColors.lightSubtle);
+    final iconColor = featured
+        ? AppColors.accentTextOf(brightness)
+        : (isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary);
+    final valueColor = isDark ? AppColors.onDark : AppColors.lightText;
+    final labelColor =
+        isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted;
+
+    return Container(
+      height: 94,
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconTheme(
+            data: IconThemeData(color: iconColor),
+            child: icon,
+          ),
+          const SizedBox(height: 5),
+          Text(
+            loading ? '—' : '${value ?? 0}',
+            style: TextStyle(
+              color: featured ? AppColors.accentTextOf(brightness) : valueColor,
+              fontSize: 21,
+              height: 1,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            // .proto-player-stat span — 10px é o piso do protótipo aqui, mas
+            // 11 é o mínimo legível que adotamos no textTheme.
+            style: TextStyle(color: labelColor, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NextMatchBand extends StatefulWidget {
+  final UpcomingMatchDetails? match;
+  final bool loading;
+  final bool error;
+  final String playerId;
+  final bool responding;
+  final VoidCallback? onAccept;
+  final VoidCallback? onDecline;
+  final VoidCallback onOpen;
+
+  const _NextMatchBand({
+    required this.match,
+    required this.loading,
+    required this.error,
+    required this.playerId,
+    required this.responding,
+    required this.onAccept,
+    required this.onDecline,
+    required this.onOpen,
+  });
+
+  @override
+  State<_NextMatchBand> createState() => _NextMatchBandState();
+}
+
+class _NextMatchBandState extends State<_NextMatchBand> {
+  /// Começa fechado: o card mora no topo do dashboard e um campo aberto por
+  /// padrão empurraria todo o resto para fora da tela.
+  bool _showTeams = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final match = widget.match;
+    final loading = widget.loading;
+    final playerId = widget.playerId;
+    final responding = widget.responding;
+    final onAccept = widget.onAccept;
+    final onDecline = widget.onDecline;
+    final onOpen = widget.onOpen;
+    if (loading) {
+      return const PrototypeHeaderBand(
+        child: SizedBox(
+          height: 126,
+          child: Center(
+            child: CircularProgressIndicator(color: AppColors.accent),
+          ),
+        ),
+      );
+    }
+
+    if (match == null) {
+      return PrototypeHeaderBand(
+        child: InkWell(
+          onTap: onOpen,
+          child: SizedBox(
+            height: 92,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  'AGENDA DA PATOTA',
                   style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? AppColors.amber400 : AppColors.amber500,
+                    color: AppColors.primaryHover,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: .8,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  widget.error
+                      ? 'Não foi possível carregar'
+                      : 'Nenhuma partida agendada',
+                  style: const TextStyle(
+                    color: AppColors.onDark,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Toque para abrir Partidas',
+                  style: TextStyle(
+                      color: AppColors.darkTextSecondary, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final header = match!.header;
+    final player = match!.findPlayer(playerId);
+    final response = player?.inviteResponse;
+    final step = header.step;
+    final canRespond = step == MatchStep.create || step == MatchStep.accept;
+
+    // `team`: 0 = sem time, 1 = A, 2 = B.
+    // Usa `match!` e não o promovido: a promoção de tipo não atravessa o corpo
+    // de uma função local de forma confiável.
+    List<PitchPlayer> squad(int team) => match!.allPlayers
+        .where((p) => p.team == team)
+        .map((p) =>
+            PitchPlayer(name: p.playerName, isGoalkeeper: p.isGoalkeeper))
+        .toList();
+    final teamA = squad(1);
+    final teamB = squad(2);
+    final teamsInFormation = step == MatchStep.teams &&
+        teamA.isEmpty &&
+        teamB.isEmpty &&
+        match!.teamAColor == null &&
+        match!.teamBColor == null;
+    final date = DateFormat('EEE, dd/MM', 'pt_BR').format(header.playedAt);
+    final time = DateFormat('HH:mm').format(header.playedAt);
+
+    return PrototypeHeaderBand(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: onOpen,
+            // O protótipo usa `.proto-between`, que é align-items:center — o
+            // número do dia fica centrado contra o bloco inteiro, não colado no
+            // topo junto da eyebrow.
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'HOJE NA PATOTA',
+                        style: TextStyle(
+                          color: AppColors.primaryHover,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: .8,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Próxima pelada',
+                        style: TextStyle(
+                          color: AppColors.onDark,
+                          fontSize: 23,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '$date · $time · ${header.placeName}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.darkTextSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      // Evento/votação vinculado. Os dados nunca deixaram de
+                      // ser carregados pelo provider — só a exibição saiu na
+                      // repaginação do card.
+                      if (match!.linkedEventTitle != null)
+                        _LinkedEventLine(match: match!),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // O canto acompanha a etapa. Antes era só o dia do mês, que a
+                // linha acima já informa por extenso.
+                //
+                // Na aceitação o que importa é quem topou. Depois dela a
+                // pergunta muda para os times — insistir nos confirmados vira
+                // informação morta, já que ninguém mais responde.
+                if (canRespond)
+                  _InviteTally(
+                    accepted: match!.acceptedCount,
+                    pending: match!.pendingCount,
+                    refused: match!.refusedCount,
+                  )
+                else
+                  _TeamsSummary(
+                    match: match!,
+                    teamsInFormation: teamsInFormation,
+                    isLive: step == MatchStep.playing,
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          if (canRespond)
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: FilledButton.icon(
+                    onPressed: responding ? null : onAccept,
+                    icon: responding
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.check_rounded, size: 18),
+                    label: Text(
+                      response == InviteResponse.accepted
+                          ? 'Presença confirmada'
+                          : 'Confirmar presença',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // O protótipo dá menos peso ao "Não vou": grid 2.3fr / .85fr.
+                // Confirmar é a ação principal e ocupa quase o triplo.
+                Expanded(
+                  flex: 0,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 96),
+                    child: OutlinedButton(
+                      onPressed: responding ? null : onDecline,
+                      style: OutlinedButton.styleFrom(
+                        // No tema claro o protótipo troca este botão para o
+                        // fundo do card — sobre a faixa escura ele fica claro:
+                        //   [data-theme="white"] .proto-presence-decline{
+                        //     background:var(--bg-card); color:var(--text-secondary) }
+                        foregroundColor: response == InviteResponse.declined
+                            ? AppColors.dangerOf(Theme.of(context).brightness)
+                            : (Theme.of(context).brightness == Brightness.dark
+                                ? AppColors.darkTextSecondary
+                                : AppColors.lightTextSecondary),
+                        backgroundColor: response == InviteResponse.declined
+                            ? AppColors.dangerBgOf(Theme.of(context).brightness)
+                            : (Theme.of(context).brightness == Brightness.dark
+                                ? AppColors.darkSubtle
+                                : AppColors.lightCard),
+                      ),
+                      child: const Text('Não vou'),
+                    ),
                   ),
                 ),
               ],
-            ],
-            const SizedBox(height: 12),
-            GestureDetector(
-              onTap: () => context.go('/app/payments'),
-              child: Text(
-                'Ver pagamentos →',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isDark ? AppColors.slate400 : AppColors.slate500,
-                  decoration: TextDecoration.underline,
-                ),
-              ),
             ),
-          ],
-        );
-      },
-    );
-  }
+          // Depois da aceitação não há botão de abrir: o cabeçalho do card já
+          // é tocável e leva para a partida, então o botão só repetia a ação
+          // ocupando uma faixa inteira.
 
-  // ── Últimas partidas — conteúdo ─────────────────────────────────────────────
-  Widget _buildRecentContent(BuildContext context, bool isDark,
-      dynamic activePlayer, AsyncValue? async, String groupId) {
-    if (activePlayer == null) {
-      return _CenteredMsg(
-          msg: 'Selecione um jogador para ver suas últimas partidas.',
-          isDark: isDark);
-    }
-    if (async == null) return const SizedBox.shrink();
-
-    return async.when(
-      loading: () => Column(
-        children:
-            List.generate(3, (_) => const _Skeleton(height: 76, bottom: 8)),
-      ),
-      error: (e, _) => _CenteredMsg(
-          msg: extractDioError(e, 'Não foi possível carregar as partidas.'),
-          isDark: isDark),
-      data: (matches) {
-        if (matches.isEmpty) {
-          return _DashedEmpty(
-            icon: Icons.calendar_today_outlined,
-            title: 'Nenhuma partida encontrada',
-            sub: 'As últimas partidas do jogador aparecerão aqui.',
-            isDark: isDark,
-          );
-        }
-        return Column(
-          children: [
-            for (int i = 0; i < matches.length; i++) ...[
-              RecentMatchCard(
-                match: matches[i],
-                groupId: groupId,
-              ),
-              if (i < matches.length - 1) const SizedBox(height: 10),
-            ],
-          ],
-        );
-      },
-    );
-  }
-}
-
-// ── Helpers compartilhados ────────────────────────────────────────────────────
-
-const _kMonths = [
-  'JAN',
-  'FEV',
-  'MAR',
-  'ABR',
-  'MAI',
-  'JUN',
-  'JUL',
-  'AGO',
-  'SET',
-  'OUT',
-  'NOV',
-  'DEZ',
-];
-
-Color? _hexColor(String? hex) {
-  if (hex == null) return null;
-  try {
-    return Color(int.parse('FF${hex.replaceAll('#', '')}', radix: 16));
-  } catch (_) {
-    return null;
-  }
-}
-
-// ── Dots indicator ────────────────────────────────────────────────────────────
-
-class _DotsIndicator extends StatelessWidget {
-  final int count;
-  final int current;
-  final bool isDark;
-  const _DotsIndicator(
-      {required this.count, required this.current, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) => Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(count, (i) {
-          final active = i == current;
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            margin: const EdgeInsets.symmetric(horizontal: 3),
-            width: active ? 16 : 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: active
-                  ? AppColors.blue600
-                  : (isDark ? AppColors.slate600 : AppColors.slate300),
-              borderRadius: BorderRadius.circular(3),
-            ),
-          );
-        }),
-      );
-}
-
-// ── Carrossel: Próximas Partidas (sem header — header fica no SectionCard) ────
-
-class _UpcomingMatchesCarousel extends ConsumerStatefulWidget {
-  final String groupId;
-  final bool isDark;
-  const _UpcomingMatchesCarousel({required this.groupId, required this.isDark});
-
-  @override
-  ConsumerState<_UpcomingMatchesCarousel> createState() =>
-      _UpcomingMatchesCarouselState();
-}
-
-class _UpcomingMatchesCarouselState
-    extends ConsumerState<_UpcomingMatchesCarousel> {
-  final _ctrl = PageController();
-  int _page = 0;
-  int _count = 0;
-  bool _showField = false;
-  Timer? _timer;
-
-  void _startTimer() {
-    _timer?.cancel();
-    if (_count <= 1) return;
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (!mounted || !_ctrl.hasClients || _showField) return;
-      final next = (_page + 1) % _count;
-      _ctrl.animateToPage(next,
-          duration: const Duration(milliseconds: 400), curve: Curves.easeInOut);
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  static Color _stepColor(String? key) => switch (key?.toLowerCase()) {
-        'playing' || 'live' => AppColors.blue600,
-        'post' || 'post_game' => AppColors.orange700,
-        'teams' || 'matchmaking' => AppColors.violet600,
-        'accept' || 'acceptation' => AppColors.amber500,
-        'ended' => AppColors.slate400,
-        'done' || 'finished' || 'finalized' => AppColors.slate400,
-        _ => AppColors.slate400,
-      };
-
-  @override
-  Widget build(BuildContext context) {
-    final async = ref.watch(upcomingMatchesFullProvider(widget.groupId));
-    final myPlayerId = ref.watch(activePlayerProvider)?.playerId ?? '';
-    final isDark = widget.isDark;
-
-    return async.when(
-      loading: () => const _Skeleton(height: 138),
-      error: (_, __) => _DashedEmpty(
-        icon: Icons.sports_soccer_rounded,
-        title: 'Sem partidas em andamento',
-        sub: 'Inicie uma partida na seção Partidas.',
-        isDark: isDark,
-      ),
-      data: (matches) {
-        if (matches.isEmpty) {
-          return _DashedEmpty(
-            icon: Icons.sports_soccer_rounded,
-            title: 'Sem partidas em andamento',
-            sub: 'Inicie uma partida na seção Partidas.',
-            isDark: isDark,
-          );
-        }
-        if (_count != matches.length) {
-          _count = matches.length;
-          WidgetsBinding.instance.addPostFrameCallback((_) => _startTimer());
-        }
-        // Computa se a partida atual pode mostrar o campo
-        final cur = matches[_page.clamp(0, matches.length - 1)];
-        final curStep = cur.header.stepKey.toLowerCase();
-        final canField = (curStep == 'teams' ||
-                curStep == 'matchmaking' ||
-                curStep == 'playing' ||
-                curStep == 'live') &&
-            cur.allPlayers.any((p) => p.team == 1 || p.team == 2);
-
-        // Altura fixa para todos os cards — footer oculto mas com tamanho mantido
-        const cardH = 138.0;
-
-        // Monta as listas de jogadores para o campo do carrossel
-        Color? parsedA, parsedB;
-        try {
-          parsedA = cur.teamAColor != null
-              ? Color(int.parse(
-                  '0xFF${cur.teamAColor!.hexValue.replaceAll('#', '')}'))
-              : null;
-        } catch (_) {}
-        try {
-          parsedB = cur.teamBColor != null
-              ? Color(int.parse(
-                  '0xFF${cur.teamBColor!.hexValue.replaceAll('#', '')}'))
-              : null;
-        } catch (_) {}
-        final fieldAColor = parsedA ?? AppColors.blue500;
-        final fieldBColor = parsedB ?? AppColors.slate400;
-        final fieldA = cur.allPlayers
-            .where((p) => p.team == 1)
-            .map((p) => FieldPlayer(
-                id: p.playerId,
-                name: p.playerName,
-                isGoalkeeper: p.isGoalkeeper))
-            .toList();
-        final fieldB = cur.allPlayers
-            .where((p) => p.team == 2)
-            .map((p) => FieldPlayer(
-                id: p.playerId,
-                name: p.playerName,
-                isGoalkeeper: p.isGoalkeeper))
-            .toList();
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeInOut,
-              height: cardH,
-              child: PageView.builder(
-                controller: _ctrl,
-                itemCount: matches.length,
-                physics: const NeverScrollableScrollPhysics(),
-                onPageChanged: (i) => setState(() {
-                  _page = i;
-                  _showField = false;
-                }),
-                itemBuilder: (_, i) {
-                  final m = matches[i];
-                  final sk = m.header.stepKey.toLowerCase();
-                  final hasTeams = (sk == 'teams' ||
-                          sk == 'matchmaking' ||
-                          sk == 'playing' ||
-                          sk == 'live') &&
-                      m.allPlayers.any((p) => p.team == 1 || p.team == 2);
-                  return _MatchCard(
-                    match: m,
-                    myPlayerId: myPlayerId,
-                    isDark: isDark,
-                    canShowField: hasTeams,
-                    showField: i == _page && _showField,
-                    onShowFieldChange: (v) => setState(() => _showField = v),
-                    onTap: () =>
-                        context.go('/app/matches?matchId=${m.header.matchId}'),
-                  );
-                },
-              ),
-            ),
-
-            // Campo expandido — fora do PageView para não quebrar o layout
-            if (canField && _showField) ...[
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: HorizontalTeamField(
-                  teamA: fieldA,
-                  teamB: fieldB,
-                  teamAColor: fieldAColor,
-                  teamBColor: fieldBColor,
-                ),
-              ),
-            ],
-
-            if (matches.length > 1) ...[
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      final next =
-                          (_page - 1 + matches.length) % matches.length;
-                      _ctrl.animateToPage(next,
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut);
-                    },
-                    child: const Icon(Icons.chevron_left_rounded,
-                        size: 20, color: AppColors.slate400),
-                  ),
-                  _DotsIndicator(
-                      count: matches.length, current: _page, isDark: isDark),
-                  GestureDetector(
-                    onTap: () {
-                      final next = (_page + 1) % matches.length;
-                      _ctrl.animateToPage(next,
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut);
-                    },
-                    child: const Icon(Icons.chevron_right_rounded,
-                        size: 20, color: AppColors.slate400),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        );
-      },
-    );
-  }
-}
-
-// ── Card de partida upcoming ──────────────────────────────────────────────────
-
-class _MatchCard extends StatelessWidget {
-  final UpcomingMatchDetails match;
-  final String myPlayerId;
-  final bool isDark;
-  final bool canShowField;
-  final bool showField;
-  final ValueChanged<bool> onShowFieldChange;
-  final VoidCallback onTap;
-
-  const _MatchCard({
-    required this.match,
-    required this.myPlayerId,
-    required this.isDark,
-    required this.canShowField,
-    required this.showField,
-    required this.onShowFieldChange,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final h = match.header;
-    final stepKey = h.stepKey.toLowerCase();
-    final stepColor = _UpcomingMatchesCarouselState._stepColor(stepKey);
-    final d = h.playedAt;
-    final me = match.findPlayer(myPlayerId);
-
-    // Após aceitação fechada, quem não respondeu é exibido como recusado
-    final acceptOpen = stepKey == 'accept' || stepKey == 'acceptation';
-    final effectiveInvite =
-        (me?.inviteResponse == InviteResponse.pending && !acceptOpen)
-            ? InviteResponse.declined
-            : me?.inviteResponse;
-
-    final (statusLabel, statusColor) = me == null
-        ? ('', AppColors.slate400)
-        : switch (effectiveInvite) {
-            InviteResponse.accepted => ('✓ Confirmado', AppColors.emerald500),
-            InviteResponse.declined => ('✗ Não aceitou', AppColors.rose500),
-            _ => ('Pendente', AppColors.amber500),
-          };
-
-    final myTeamColor = me == null
-        ? null
-        : me.team == 1
-            ? match.teamAColor
-            : me.team == 2
-                ? match.teamBColor
-                : null;
-
-    final isLive = stepKey == 'playing' || stepKey == 'live';
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 1),
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.slate900 : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-              color: isDark ? AppColors.slate700 : AppColors.slate200),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: IntrinsicHeight(
-          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Container(width: 4, color: stepColor),
-            // ── Coluna data — estica até o fim do card ────────────────────
-            Container(
-              width: 54,
-              decoration: BoxDecoration(
-                color: isDark
-                    ? AppColors.slate800.withValues(alpha: .5)
-                    : AppColors.slate50,
-                border: Border(
-                  right: BorderSide(
-                    color: isDark ? AppColors.slate800 : AppColors.slate100,
-                  ),
-                ),
-              ),
-              child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(_kMonths[d.month - 1],
-                        style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: isDark
-                                ? AppColors.slate500
-                                : AppColors.slate400,
-                            letterSpacing: 0.5)),
-                    Text(d.day.toString().padLeft(2, '0'),
-                        style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
-                            height: 1.0,
-                            color: isDark
-                                ? AppColors.slate100
-                                : AppColors.slate900)),
-                    Text(
-                        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}',
-                        style: TextStyle(
-                            fontSize: 10,
-                            color: isDark
-                                ? AppColors.slate400
-                                : AppColors.slate500)),
-                  ]),
-            ),
-
-            // ── Lado direito: conteúdo principal + footer ─────────────────
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Linha principal
-                  IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // ── Conteúdo central ──────────────────────────────
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                Row(children: [
-                                  if (isLive) ...[
-                                    Container(
-                                      width: 6,
-                                      height: 6,
-                                      decoration: const BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: AppColors.blue600,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    const Text(
-                                      'AO VIVO',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w800,
-                                        color: AppColors.blue600,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                  ],
-                                  Flexible(
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: stepColor.withValues(alpha: .10),
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color:
-                                              stepColor.withValues(alpha: .28),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        matchStepLabel(h.statusName.isNotEmpty
-                                            ? h.statusName
-                                            : stepKey),
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                          color: stepColor,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ),
-                                  if (h.canRewind) ...[
-                                    const SizedBox(width: 4),
-                                    const Icon(Icons.replay_rounded,
-                                        size: 11, color: AppColors.slate400),
-                                  ],
-                                ]),
-
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.location_on_outlined,
-                                      size: 11,
-                                      color: isDark
-                                          ? AppColors.slate600
-                                          : AppColors.slate300,
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Expanded(
-                                      child: Text(
-                                        h.placeName.isNotEmpty
-                                            ? h.placeName
-                                            : 'Partida',
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w500,
-                                            color: isDark
-                                                ? AppColors.slate400
-                                                : AppColors.slate500),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-
-                                Container(
-                                  height: 20,
-                                  padding: const EdgeInsets.only(top: 4),
-                                  decoration: BoxDecoration(
-                                    border: Border(
-                                      top: BorderSide(
-                                        color: isDark
-                                            ? AppColors.slate700
-                                                .withValues(alpha: .5)
-                                            : AppColors.slate100,
-                                      ),
-                                    ),
-                                  ),
-                                  child: Opacity(
-                                    opacity: me != null ? 1 : 0,
-                                    child: Row(children: [
-                                      Text('VOCÊ',
-                                          style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w600,
-                                              color: isDark
-                                                  ? AppColors.slate500
-                                                  : AppColors.slate400)),
-                                      if (myTeamColor != null) ...[
-                                        const SizedBox(width: 4),
-                                        _ColorCircle(
-                                            hex: myTeamColor.hexValue, size: 9),
-                                        const SizedBox(width: 3),
-                                        Flexible(
-                                          child: Text(myTeamColor.name,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: isDark
-                                                      ? AppColors.slate400
-                                                      : AppColors.slate500)),
-                                        ),
-                                      ],
-                                      if (statusLabel.isNotEmpty) ...[
-                                        const SizedBox(width: 5),
-                                        Flexible(
-                                          child: Text(statusLabel,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: statusColor)),
-                                        ),
-                                      ],
-                                    ]),
-                                  ),
-                                ),
-
-                                // Linha do poll/evento vinculado
-                                Container(
-                                  height: 22,
-                                  padding: const EdgeInsets.only(top: 4),
-                                  decoration: BoxDecoration(
-                                    border: Border(
-                                      top: BorderSide(
-                                        color: isDark
-                                            ? AppColors.slate700
-                                                .withValues(alpha: .5)
-                                            : AppColors.slate100,
-                                      ),
-                                    ),
-                                  ),
-                                  child: match.linkedEventTitle == null
-                                      ? const SizedBox.shrink()
-                                      : Row(children: [
-                                          Icon(
-                                            match.linkedIsEvent
-                                                ? Icons.how_to_vote_outlined
-                                                : Icons.poll_rounded,
-                                            size: 11,
-                                            color: isDark
-                                                ? AppColors.slate500
-                                                : AppColors.slate400,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Expanded(
-                                            child: Text(
-                                              '${match.linkedEventIcon != null && match.linkedEventIcon!.isNotEmpty ? '${match.linkedEventIcon} ' : ''}${match.linkedEventTitle!}',
-                                              style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: isDark
-                                                      ? AppColors.slate400
-                                                      : AppColors.slate500),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          if (match.myVoteText != null) ...[
-                                            const SizedBox(width: 4),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 5,
-                                                      vertical: 1),
-                                              decoration: BoxDecoration(
-                                                color: AppColors.emerald500
-                                                    .withValues(alpha: .1),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                              ),
-                                              child: Text(
-                                                  '✓ ${match.myVoteText}',
-                                                  style: const TextStyle(
-                                                      fontSize: 9,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      color: AppColors
-                                                          .emerald500)),
-                                            ),
-                                          ] else ...[
-                                            const SizedBox(width: 4),
-                                            const Text('PENDENTE',
-                                                style: TextStyle(
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: AppColors.amber500)),
-                                          ],
-                                        ]),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        Container(
-                          width: 84,
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              left: BorderSide(
-                                color: isDark
-                                    ? AppColors.slate800
-                                    : AppColors.slate100,
-                              ),
-                            ),
-                          ),
-                          child: _UpcomingRightPanel(
-                            match: match,
-                            myPlayer: me,
-                            isDark: isDark,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // ── Footer: Ver times ─────────────────────────────────
-                  Visibility(
-                    visible: canShowField,
-                    maintainSize: true,
-                    maintainAnimation: true,
-                    maintainState: true,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Divider(
-                            height: 1,
-                            color: isDark
-                                ? AppColors.slate800
-                                : AppColors.slate100),
-                        GestureDetector(
-                          onTap: () => onShowFieldChange(!showField),
-                          behavior: HitTestBehavior.opaque,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 8),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  showField
-                                      ? Icons.keyboard_arrow_up_rounded
-                                      : Icons.keyboard_arrow_down_rounded,
-                                  size: 15,
-                                  color: isDark
-                                      ? AppColors.slate400
-                                      : AppColors.slate500,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  showField ? 'OCULTAR TIMES' : 'VER TIMES',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.5,
-                                    color: isDark
-                                        ? AppColors.slate400
-                                        : AppColors.slate500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ]),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Chip de contador (✓2 / ⏰20 / ✗0) ────────────────────────────────────────
-
-class _UpcomingRightPanel extends StatelessWidget {
-  final UpcomingMatchDetails match;
-  final MatchPlayerInfo? myPlayer;
-  final bool isDark;
-
-  const _UpcomingRightPanel({
-    required this.match,
-    required this.myPlayer,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final h = match.header;
-    final step = h.stepKey.toLowerCase();
-    final hasScore = h.teamAGoals != null && h.teamBGoals != null;
-    final score = hasScore
-        ? _ScoreBox(a: h.teamAGoals ?? 0, b: h.teamBGoals ?? 0, isDark: isDark)
-        : null;
-
-    if (step == 'accept' || step == 'acceptation') {
-      if (match.allPlayers.isEmpty) return _Chevron(isDark: isDark);
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          _CountChip(
-            icon: Icons.check_circle_rounded,
-            count: match.acceptedCount,
-            color: AppColors.emerald500,
-          ),
-          const SizedBox(height: 4),
-          _CountChip(
-            icon: Icons.access_time_rounded,
-            count: match.pendingCount,
-            color: AppColors.amber500,
-          ),
-          if (match.refusedCount > 0) ...[
+          // Escalação. Só aparece quando há times montados — antes disso o
+          // botão abriria um campo sem nada para mostrar. Fica atrás de um
+          // toque porque o card abre o dashboard: expandido por padrão,
+          // empurraria todo o resto para fora da tela.
+          if (!canRespond && (teamA.isNotEmpty || teamB.isNotEmpty)) ...[
             const SizedBox(height: 4),
-            _CountChip(
-              icon: Icons.cancel_rounded,
-              count: match.refusedCount,
-              color: AppColors.rose500,
+            _TeamsExpander(
+              expanded: _showTeams,
+              onToggle: () => setState(() => _showTeams = !_showTeams),
+            ),
+            AnimatedCrossFade(
+              duration: const Duration(milliseconds: 220),
+              firstChild: const SizedBox(width: double.infinity),
+              secondChild: Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: MatchPitch(
+                  teamA: teamA,
+                  teamB: teamB,
+                  teamAColor: match.teamAColor?.color ?? AppColors.teamBlue,
+                  teamBColor:
+                      match.teamBColor?.color ?? AppColors.prototypeDanger,
+                  teamALabel: match.teamAColor?.name ?? 'Time A',
+                  teamBLabel: match.teamBColor?.name ?? 'Time B',
+                  // Deitado: dentro do card a largura sobra e a altura é cara.
+                  horizontal: true,
+                ),
+              ),
+              crossFadeState: _showTeams
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Barra de toque que abre e fecha a escalação.
+class _TeamsExpander extends StatelessWidget {
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  const _TeamsExpander({
+    required this.expanded,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final label = expanded ? 'Ocultar escalação' : 'Ver escalação';
+
+    return Semantics(
+      button: true,
+      expanded: expanded,
+      label: label,
+      child: InkWell(
+        onTap: onToggle,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.darkTextMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 4),
+              AnimatedRotation(
+                turns: expanded ? 0.5 : 0,
+                duration: const Duration(milliseconds: 220),
+                child: const Icon(Icons.keyboard_arrow_down_rounded,
+                    size: 18, color: AppColors.darkTextMuted),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Resumo dos times no canto do card, depois que a aceitação fecha.
+///
+/// Mostra as duas cores escolhidas e quantos jogadores há para dividir. As
+/// cores costumam ser definidas antes da escalação, então já dão sinal de que
+/// a partida avançou mesmo sem times montados.
+class _TeamsSummary extends StatelessWidget {
+  final UpcomingMatchDetails match;
+  final bool teamsInFormation;
+  final bool isLive;
+
+  const _TeamsSummary({
+    required this.match,
+    required this.teamsInFormation,
+    required this.isLive,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final a = match.teamAColor;
+    final b = match.teamBColor;
+    final total = match.acceptedCount;
+
+    if (isLive) {
+      return _LiveMatchIndicator(
+        teamAGoals: match.header.teamAGoals ?? 0,
+        teamBGoals: match.header.teamBGoals ?? 0,
       );
     }
 
-    if (step == 'teams' || step == 'matchmaking') {
-      final myTeam = myPlayer?.team ?? 0;
-      final myColor = myTeam == 1
-          ? match.teamAColor
-          : myTeam == 2
-              ? match.teamBColor
-              : null;
-      if (myTeam != 0 && myColor != null) {
-        return Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+    if (match.header.step == MatchStep.ended &&
+        match.header.teamAGoals != null &&
+        match.header.teamBGoals != null) {
+      return _FinishedMatchScore(
+        teamAGoals: match.header.teamAGoals!,
+        teamBGoals: match.header.teamBGoals!,
+      );
+    }
+
+    if (match.header.step == MatchStep.post) {
+      return const _PostMatchIndicator();
+    }
+
+    if (teamsInFormation) {
+      return Semantics(
+        label: 'Times em formação',
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _ColorCircle(hex: myColor.hexValue, size: 10),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    myColor.name,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: isDark ? AppColors.slate200 : AppColors.slate700,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                Icon(Icons.groups_rounded,
+                    size: 15, color: AppColors.primaryHover),
+                SizedBox(width: 5),
+                Text(
+                  'Times',
+                  style: TextStyle(
+                    color: AppColors.onDark,
+                    fontSize: 12,
+                    height: 1,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 2),
+            SizedBox(height: 3),
             Text(
-              'seu time',
+              'em formação',
               style: TextStyle(
+                color: AppColors.primaryHover,
                 fontSize: 10,
-                color: isDark ? AppColors.slate500 : AppColors.slate400,
+                height: 1,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
-        );
-      }
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          _TeamCountLine(
-            color: match.teamAColor,
-            fallback: 'Time A',
-            count: match.allPlayers.where((p) => p.team == 1).length,
-            isDark: isDark,
-          ),
-          const SizedBox(height: 5),
-          _TeamCountLine(
-            color: match.teamBColor,
-            fallback: 'Time B',
-            count: match.allPlayers.where((p) => p.team == 2).length,
-            isDark: isDark,
-          ),
-        ],
+        ),
       );
     }
 
-    if (step == 'playing' || step == 'live') {
-      return score ??
-          const Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (a != null || b != null)
+          Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.blue600,
+              if (a != null) _ColorDot(color: a.color, label: a.name),
+              if (a != null && b != null)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4),
+                  child: Text('×',
+                      style: TextStyle(
+                          color: AppColors.darkTextMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700)),
                 ),
-                child: SizedBox(width: 12, height: 12),
-              ),
-              SizedBox(height: 4),
+              if (b != null) _ColorDot(color: b.color, label: b.name),
+            ],
+          ),
+        const SizedBox(height: 5),
+        Semantics(
+          label: '$total jogadores',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.groups_rounded,
+                  size: 14, color: AppColors.darkTextMuted),
+              const SizedBox(width: 5),
               Text(
-                'vivo',
-                style: TextStyle(
-                  fontSize: 10,
+                '$total',
+                style: const TextStyle(
+                  color: AppColors.onDark,
+                  fontSize: 15,
+                  height: 1,
                   fontWeight: FontWeight.w800,
-                  color: AppColors.blue600,
                 ),
               ),
             ],
-          );
-    }
-
-    if (step == 'post' || step == 'post_game') {
-      final isMvp = myPlayer?.isMvp == true;
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          score ?? const Text('-', style: TextStyle(color: AppColors.slate400)),
-          if (isMvp) ...[
-            const SizedBox(height: 5),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: AppColors.amber500.withValues(alpha: .12),
-                borderRadius: BorderRadius.circular(8),
-                border:
-                    Border.all(color: AppColors.amber500.withValues(alpha: .3)),
-              ),
-              child: const Text(
-                'MVP',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.amber500,
-                ),
-              ),
-            ),
-          ],
-        ],
-      );
-    }
-
-    return score ?? _Chevron(isDark: isDark);
-  }
-}
-
-class _ScoreBox extends StatelessWidget {
-  final int a;
-  final int b;
-  final bool isDark;
-
-  const _ScoreBox({required this.a, required this.b, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.slate700 : AppColors.slate900,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        '$a × $b',
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w900,
-          color: Colors.white,
-        ),
-      ),
-    );
-  }
-}
-
-class _TeamCountLine extends StatelessWidget {
-  final TeamColorInfo? color;
-  final String fallback;
-  final int count;
-  final bool isDark;
-
-  const _TeamCountLine({
-    required this.color,
-    required this.fallback,
-    required this.count,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _ColorCircle(hex: color?.hexValue ?? '', size: 10),
-        const SizedBox(width: 4),
-        Flexible(
-          child: Text(
-            color?.name ?? fallback,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: isDark ? AppColors.slate300 : AppColors.slate600,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          '$count',
-          style: TextStyle(
-            fontSize: 10,
-            color: isDark ? AppColors.slate500 : AppColors.slate400,
           ),
         ),
       ],
@@ -1261,159 +1080,504 @@ class _TeamCountLine extends StatelessWidget {
   }
 }
 
-class _Chevron extends StatelessWidget {
-  final bool isDark;
-  const _Chevron({required this.isDark});
+class _LiveMatchIndicator extends StatefulWidget {
+  final int teamAGoals;
+  final int teamBGoals;
 
-  @override
-  Widget build(BuildContext context) => Center(
-        child: Icon(
-          Icons.chevron_right_rounded,
-          size: 16,
-          color: isDark ? AppColors.slate600 : AppColors.slate300,
-        ),
-      );
-}
-
-class _CountChip extends StatelessWidget {
-  final IconData? icon;
-  final Color? color;
-  final int count;
-
-  const _CountChip({
-    this.icon,
-    this.color,
-    required this.count,
+  const _LiveMatchIndicator({
+    required this.teamAGoals,
+    required this.teamBGoals,
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(width: 13, child: Icon(icon, size: 11, color: color)),
-        SizedBox(
-          width: 22,
-          child: Text('$count',
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.w600, color: color)),
-        ),
-      ],
-    );
-  }
+  State<_LiveMatchIndicator> createState() => _LiveMatchIndicatorState();
 }
 
-// ── Bolinha colorida de time ──────────────────────────────────────────────────
-
-class _ColorCircle extends StatelessWidget {
-  final String hex;
-  final double size;
-  const _ColorCircle({required this.hex, this.size = 12});
-
-  static bool _isLight(Color c) => c.computeLuminance() > 0.7;
+class _LiveMatchIndicatorState extends State<_LiveMatchIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseController;
 
   @override
-  Widget build(BuildContext context) {
-    Color? c;
-    try {
-      c = Color(int.parse('0xFF${hex.replaceAll('#', '')}'));
-    } catch (_) {}
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final light = c != null && _isLight(c);
-    final borderColor = c == null
-        ? Colors.transparent
-        : light
-            ? (isDark ? AppColors.slate500 : AppColors.slate300)
-            : Colors.white.withValues(alpha: .35);
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: c ?? (isDark ? AppColors.slate700 : AppColors.slate200),
-        border: Border.all(color: borderColor, width: 1.5),
-      ),
-    );
-  }
-}
-
-// ── Carrossel: Próximos Eventos (sem header) ─────────────────────────────────
-
-class _UpcomingEventsCarousel extends ConsumerStatefulWidget {
-  final String groupId;
-  final bool isDark;
-  const _UpcomingEventsCarousel({required this.groupId, required this.isDark});
-
-  @override
-  ConsumerState<_UpcomingEventsCarousel> createState() =>
-      _UpcomingEventsCarouselState();
-}
-
-class _UpcomingEventsCarouselState
-    extends ConsumerState<_UpcomingEventsCarousel> {
-  final _ctrl = PageController();
-  int _page = 0;
-  int _count = 0;
-  Timer? _timer;
-
-  void _startTimer() {
-    _timer?.cancel();
-    if (_count <= 1) return;
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (!mounted || !_ctrl.hasClients) return;
-      final next = (_page + 1) % _count;
-      _ctrl.animateToPage(next,
-          duration: const Duration(milliseconds: 400), curve: Curves.easeInOut);
-    });
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 850),
+    )..repeat(reverse: true);
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
-    _ctrl.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(upcomingEventsProvider(widget.groupId));
-    return async.when(
-      loading: () => const _Skeleton(height: 86),
-      error: (_, __) => const SizedBox.shrink(),
-      data: (events) {
-        if (events.isEmpty) {
-          return _DashedEmpty(
-            icon: Icons.event_rounded,
-            title: 'Nenhum evento próximo',
-            sub: 'Eventos dos próximos meses aparecerão aqui.',
-            isDark: widget.isDark,
-          );
-        }
-        final visible = events.take(5).toList();
-        if (_count != visible.length) {
-          _count = visible.length;
-          if (_page >= _count) _page = 0;
-          WidgetsBinding.instance.addPostFrameCallback((_) => _startTimer());
-        }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              height: 86,
-              child: PageView.builder(
-                controller: _ctrl,
-                itemCount: visible.length,
-                onPageChanged: (i) => setState(() => _page = i),
-                itemBuilder: (context, i) =>
-                    _UpcomingEventTile(ev: visible[i], isDark: widget.isDark),
+    return Semantics(
+      label: 'Partida ao vivo',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FadeTransition(
+                opacity:
+                    Tween<double>(begin: .35, end: 1).animate(_pulseController),
+                child: const DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: AppColors.prototypeDanger,
+                    shape: BoxShape.circle,
+                  ),
+                  child: SizedBox(width: 10, height: 10),
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Text(
+                'AO VIVO',
+                style: TextStyle(
+                  color: AppColors.prototypeDanger,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: .6,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(
+            '${widget.teamAGoals} × ${widget.teamBGoals}',
+            style: TextStyle(
+              color: AppColors.onDark,
+              fontSize: 20,
+              height: 1,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FinishedMatchScore extends StatelessWidget {
+  final int teamAGoals;
+  final int teamBGoals;
+
+  const _FinishedMatchScore({
+    required this.teamAGoals,
+    required this.teamBGoals,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Placar final: $teamAGoals a $teamBGoals',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          const Text(
+            'FINAL',
+            style: TextStyle(
+              color: AppColors.darkTextMuted,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: .7,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '$teamAGoals × $teamBGoals',
+            style: const TextStyle(
+              color: AppColors.onDark,
+              fontSize: 20,
+              height: 1,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PostMatchIndicator extends StatelessWidget {
+  const _PostMatchIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Pós-jogo',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.emoji_events_outlined,
+                  size: 14, color: AppColors.warning),
+              SizedBox(width: 5),
+              Text(
+                'PÓS-JOGO',
+                style: TextStyle(
+                  color: AppColors.warning,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: .5,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ColorDot extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _ColorDot({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    // O nome da cor vai só no rótulo acessível: no espaço do canto ele não
+    // caberia sem espremer o resto.
+    return Semantics(
+      label: label,
+      child: Container(
+        width: 14,
+        height: 14,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(color: AppColors.onDark.withValues(alpha: .5)),
+        ),
+      ),
+    );
+  }
+}
+
+/// Evento ou votação vinculado à partida, numa linha discreta abaixo da data.
+///
+/// Fica em tom apagado de propósito: é contexto, não chamada para ação. O card
+/// já tem dois botões disputando atenção e a contagem no canto — mais um
+/// elemento com peso brigaria com eles.
+class _LinkedEventLine extends StatelessWidget {
+  final UpcomingMatchDetails match;
+
+  const _LinkedEventLine({required this.match});
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = match.linkedEventIcon;
+    final hasEmoji = icon != null && icon.isNotEmpty;
+    final vote = match.myVoteText?.trim();
+    final normalizedVote = vote?.toLowerCase();
+    final didNotVote = vote == null || vote.isEmpty;
+    final votedYes = normalizedVote == 'sim' || normalizedVote == 'yes';
+    final votedNo = normalizedVote == 'não' ||
+        normalizedVote == 'nao' ||
+        normalizedVote == 'no';
+    final votedMaybe = normalizedVote == 'talvez' || normalizedVote == 'maybe';
+    final voteLabel = didNotVote
+        ? 'Não votou'
+        : votedYes
+            ? 'Votou sim'
+            : votedNo
+                ? 'Votou não'
+                : votedMaybe
+                    ? 'Votou talvez'
+                    : 'Votou: $vote';
+    final voteColor = didNotVote
+        ? AppColors.warning
+        : votedYes
+            ? AppColors.primaryHover
+            : votedNo
+                ? AppColors.prototypeDanger
+                : votedMaybe
+                    ? AppColors.warning
+                    : AppColors.blue200;
+    final voteSymbol = didNotVote
+        ? '−'
+        : votedYes
+            ? '✓'
+            : votedNo
+                ? '×'
+                : votedMaybe
+                    ? '?'
+                    : '•';
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 5),
+      child: Row(
+        children: [
+          if (hasEmoji)
+            Padding(
+              padding: const EdgeInsets.only(right: 5),
+              child: Text(icon, style: const TextStyle(fontSize: 11)),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(right: 5),
+              child: Icon(
+                match.linkedIsEvent
+                    ? Icons.event_rounded
+                    : Icons.how_to_vote_rounded,
+                size: 12,
+                color: AppColors.darkTextMuted,
               ),
             ),
-            if (visible.length > 1) ...[
-              const SizedBox(height: 8),
-              _DotsIndicator(
-                  count: visible.length, current: _page, isDark: widget.isDark),
-            ],
+          Flexible(
+            child: Text(
+              match.linkedEventTitle!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.darkTextMuted,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          const Text(
+            'Você:',
+            style: TextStyle(
+              color: AppColors.darkTextSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(width: 3),
+          Semantics(
+            label: voteLabel,
+            child: SizedBox(
+              width: 16,
+              height: 16,
+              child: Center(
+                child: Text(
+                  voteSymbol,
+                  style: TextStyle(
+                    color: voteColor,
+                    fontSize: 15,
+                    height: 1,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Confirmados / pendentes / recusados, empilhados no canto do card da próxima
+/// pelada. Ocupa o lugar onde antes ficava o dia do mês.
+///
+/// Some as linhas zeradas em vez de mostrar "0": depois que a aceitação fecha,
+/// `pendingCount` é sempre 0 por definição, e um zero fixo ali só vira ruído.
+/// Confirmados aparece sempre — é o número que dá sentido ao card.
+class _InviteTally extends StatelessWidget {
+  final int accepted;
+  final int pending;
+  final int refused;
+
+  const _InviteTally({
+    required this.accepted,
+    required this.pending,
+    required this.refused,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        _TallyRow(
+          icon: Icons.check_circle_rounded,
+          count: accepted,
+          color: AppColors.emerald500,
+          semantic: 'confirmados',
+        ),
+        if (pending > 0) ...[
+          const SizedBox(height: 5),
+          _TallyRow(
+            icon: Icons.schedule_rounded,
+            count: pending,
+            color: AppColors.warning,
+            semantic: 'pendentes',
+          ),
+        ],
+        if (refused > 0) ...[
+          const SizedBox(height: 5),
+          _TallyRow(
+            icon: Icons.cancel_rounded,
+            count: refused,
+            color: AppColors.rose400,
+            semantic: 'recusados',
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _TallyRow extends StatelessWidget {
+  final IconData icon;
+  final int count;
+  final Color color;
+  final String semantic;
+
+  const _TallyRow({
+    required this.icon,
+    required this.count,
+    required this.color,
+    required this.semantic,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: '$count $semantic',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 5),
+          // Largura fixa para os números alinharem à direita entre si — sem
+          // isso, um "11" empurra a linha e as três ficam desencontradas.
+          SizedBox(
+            width: 20,
+            child: Text(
+              '$count',
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: AppColors.onDark,
+                fontSize: 15,
+                height: 1,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionGrid extends StatelessWidget {
+  final int? pendingPayments;
+  final int? pendingPolls;
+  final int? registeredEvents;
+  final int? upcomingEvents;
+  final VoidCallback onPayments;
+  final VoidCallback onPolls;
+  final VoidCallback onEvents;
+  final VoidCallback onCalendar;
+  final VoidCallback onStats;
+
+  const _ActionGrid({
+    required this.pendingPayments,
+    required this.pendingPolls,
+    required this.registeredEvents,
+    required this.upcomingEvents,
+    required this.onPayments,
+    required this.onPolls,
+    required this.onEvents,
+    required this.onCalendar,
+    required this.onStats,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      (
+        Icons.account_balance_wallet_outlined,
+        'Pagamentos',
+        pendingPayments == null
+            ? 'Carregando'
+            : pendingPayments == 0
+                ? 'Tudo em dia'
+                : '$pendingPayments pendência${pendingPayments == 1 ? '' : 's'}',
+        onPayments,
+      ),
+      (
+        Icons.calendar_today_outlined,
+        'Eventos',
+        registeredEvents == null
+            ? 'Carregando'
+            : registeredEvents == 0
+                ? 'Nenhum cadastrado'
+                : '$registeredEvents cadastrado${registeredEvents == 1 ? '' : 's'}',
+        onEvents,
+      ),
+      (
+        Icons.how_to_vote_outlined,
+        'Votações',
+        pendingPolls == null
+            ? 'Carregando'
+            : pendingPolls == 0
+                ? 'Nenhuma pendente'
+                : '$pendingPolls para responder',
+        onPolls,
+      ),
+      (
+        Icons.calendar_month_outlined,
+        'Calendário',
+        upcomingEvents == null
+            ? 'Carregando'
+            : '$upcomingEvents próximo${upcomingEvents == 1 ? '' : 's'}',
+        onCalendar,
+      ),
+      (
+        Icons.bar_chart_outlined,
+        'Estatísticas',
+        'Temporada ${DateTime.now().year}',
+        onStats,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 9.0;
+        final width = (constraints.maxWidth - gap) / 2;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final item in items)
+              SizedBox(
+                width: width,
+                child: PrototypeCard(
+                  onTap: item.$4,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        item.$1,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(height: 10),
+                      Text(item.$2,
+                          style: Theme.of(context).textTheme.titleSmall),
+                      const SizedBox(height: 2),
+                      Text(
+                        item.$3,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
           ],
         );
       },
@@ -1421,466 +1585,189 @@ class _UpcomingEventsCarouselState
   }
 }
 
-class _UpcomingEventTile extends StatelessWidget {
-  final CalendarEvent ev;
-  final bool isDark;
-  const _UpcomingEventTile({required this.ev, required this.isDark});
+class _UpcomingEventsCard extends StatelessWidget {
+  final List<CalendarEvent> events;
+  final bool loading;
+  final bool error;
+  final VoidCallback onOpenCalendar;
+
+  const _UpcomingEventsCard({
+    required this.events,
+    required this.loading,
+    required this.error,
+    required this.onOpenCalendar,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final catColor = _hexColor(ev.categoryColor) ?? AppColors.violet600;
-    DateTime? d;
+    return PrototypeCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PrototypeSectionTitle(
+            title: 'Próximos eventos',
+            count: loading ? '—' : '${events.length}',
+            actionLabel: 'Calendário',
+            onAction: onOpenCalendar,
+          ),
+          const SizedBox(height: 10),
+          if (loading)
+            const SizedBox(
+              height: 86,
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (events.isEmpty)
+            SizedBox(
+              height: 72,
+              child: Center(
+                child: Text(
+                  error
+                      ? 'Não foi possível carregar os eventos.'
+                      : 'Nenhum evento próximo.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            )
+          else
+            SizedBox(
+              height: 96,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: events.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 9),
+                itemBuilder: (context, index) {
+                  final event = events[index];
+                  return _EventTile(
+                    event: event,
+                    onTap: onOpenCalendar,
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EventTile extends StatelessWidget {
+  final CalendarEvent event;
+  final VoidCallback onTap;
+
+  const _EventTile({required this.event, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    DateTime? date;
     try {
-      d = DateTime.parse(ev.date);
+      date = DateTime.parse(event.date);
     } catch (_) {}
+    final day = date == null ? '--' : DateFormat('dd').format(date);
+    final month =
+        date == null ? '---' : DateFormat('MMM', 'pt_BR').format(date);
 
     return SizedBox(
-      height: 86,
-      child: GestureDetector(
-        onTap: () => context.go('/app/calendar'),
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 1),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.slate900 : Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isDark ? AppColors.slate700 : AppColors.slate200,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: .04),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(children: [
-            Container(
-              width: 64,
-              decoration: BoxDecoration(
-                color: catColor.withValues(alpha: .08),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(13),
-                  bottomLeft: Radius.circular(13),
-                ),
-                border: Border(
-                  right: BorderSide(color: catColor.withValues(alpha: .2)),
-                ),
-              ),
-              child: d == null
-                  ? Center(
-                      child:
-                          Icon(Icons.event_rounded, size: 20, color: catColor))
-                  : Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(_kMonths[d.month - 1],
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: catColor,
-                              letterSpacing: 0.5,
-                            )),
-                        Text(d.day.toString().padLeft(2, '0'),
-                            style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                              height: 1.0,
-                              color: isDark
-                                  ? AppColors.slate100
-                                  : AppColors.slate900,
-                            )),
-                      ],
-                    ),
-            ),
-            Expanded(
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(ev.title,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color:
-                              isDark ? AppColors.slate100 : AppColors.slate900,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 6),
-                    Row(children: [
-                      if (!ev.timeTBD &&
-                          ev.time != null &&
-                          ev.time!.isNotEmpty) ...[
-                        Icon(Icons.access_time_rounded,
-                            size: 12,
-                            color: isDark
-                                ? AppColors.slate400
-                                : AppColors.slate500),
-                        const SizedBox(width: 3),
-                        Text(
-                          ev.time!.length >= 5
-                              ? ev.time!.substring(0, 5)
-                              : ev.time!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark
-                                ? AppColors.slate400
-                                : AppColors.slate500,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      if (ev.categoryName != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: catColor.withValues(alpha: .12),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(ev.categoryName!,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: catColor,
-                              )),
-                        ),
-                    ]),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: Icon(Icons.chevron_right_rounded,
-                  size: 18,
-                  color: isDark ? AppColors.slate600 : AppColors.slate300),
-            ),
-          ]),
+      width: 210,
+      child: Material(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
         ),
-      ),
-    );
-  }
-}
-
-// ── Link de ação na header da SectionCard ─────────────────────────────────────
-
-class _SectionLink extends StatelessWidget {
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-  const _SectionLink(
-      {required this.label, required this.color, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-        onTap: onTap,
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text(label,
-              style: TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w500, color: color)),
-          Icon(Icons.chevron_right_rounded, size: 14, color: color),
-        ]),
-      );
-}
-
-// ── Header gradiente ──────────────────────────────────────────────────────────
-
-class _DashboardHeader extends StatelessWidget {
-  final String subtitle;
-  const _DashboardHeader({required this.subtitle});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: .18),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          // Ícone
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: .1),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withValues(alpha: .2)),
-            ),
-            child: const Icon(Icons.dashboard_rounded,
-                size: 26, color: Colors.white),
-          ),
-          const SizedBox(width: 16),
-          // Textos
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Dashboard',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    height: 1.1,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: .5),
-                    fontSize: 13,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Section Card ──────────────────────────────────────────────────────────────
-
-class _SectionCard extends StatelessWidget {
-  final bool isDark;
-  final IconData iconData;
-  final String title;
-  final Widget? trailing;
-  final Widget child;
-
-  const _SectionCard({
-    required this.isDark,
-    required this.iconData,
-    required this.title,
-    required this.child,
-    this.trailing,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cardBg = isDark ? AppColors.slate900 : Colors.white;
-    final headerBg = isDark
-        ? AppColors.slate800.withValues(alpha: .8)
-        : AppColors.slate50.withValues(alpha: .9);
-    final borderColor = isDark ? AppColors.slate700 : AppColors.slate200;
-    final divColor = isDark ? AppColors.slate800 : AppColors.slate100;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: .03),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: headerBg,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
-              ),
-              border: Border(bottom: BorderSide(color: divColor)),
-            ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
             child: Row(
               children: [
-                Icon(iconData,
-                    size: 14,
-                    color: isDark ? AppColors.slate500 : AppColors.slate400),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? AppColors.slate100 : AppColors.slate800,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                Container(
+                  width: 46,
+                  height: 64,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        day,
+                        style: TextStyle(
+                          color:
+                              Theme.of(context).colorScheme.onPrimaryContainer,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      Text(
+                        month.toUpperCase(),
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onPrimaryContainer,
+                            ),
+                      ),
+                    ],
                   ),
                 ),
-                if (trailing != null) trailing!,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        event.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        event.timeTBD
+                            ? 'Horário a definir'
+                            : event.time ?? event.categoryName ?? 'Evento',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-          // Content
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: child,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Botão atualizar ────────────────────────────────────────────────────────────
-
-class _RefreshBtn extends StatelessWidget {
-  final bool isLoading;
-  final VoidCallback onTap;
-  const _RefreshBtn({required this.isLoading, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return GestureDetector(
-      onTap: isLoading ? null : onTap,
-      child: AnimatedOpacity(
-        opacity: isLoading ? .6 : 1,
-        duration: const Duration(milliseconds: 150),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.slate900 : Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isDark ? AppColors.slate700 : AppColors.slate200,
-            ),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.black.withValues(alpha: .04), blurRadius: 2),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              isLoading
-                  ? SizedBox(
-                      width: 11,
-                      height: 11,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.5,
-                        color: isDark ? AppColors.slate400 : AppColors.slate500,
-                      ),
-                    )
-                  : Icon(
-                      Icons.refresh_rounded,
-                      size: 12,
-                      color: isDark ? AppColors.slate400 : AppColors.slate600,
-                    ),
-              const SizedBox(width: 4),
-              Text(
-                'Atualizar',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isDark ? AppColors.slate400 : AppColors.slate600,
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );
   }
 }
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
-
-class _Skeleton extends StatelessWidget {
-  final double height;
-  final double bottom;
-  const _Skeleton({required this.height, this.bottom = 0});
+class _DashboardEmptyState extends StatelessWidget {
+  const _DashboardEmptyState();
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
-      padding: EdgeInsets.only(bottom: bottom),
-      child: Container(
-        height: height,
-        decoration: BoxDecoration(
-          color: isDark ? AppColors.slate800 : AppColors.slate100,
-          borderRadius: BorderRadius.circular(14),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Empty state com borda tracejada ───────────────────────────────────────────
-
-class _DashedEmpty extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String sub;
-  final bool isDark;
-  const _DashedEmpty({
-    required this.icon,
-    required this.title,
-    required this.sub,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 32),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isDark ? AppColors.slate700 : AppColors.slate200,
-        ),
-      ),
+      padding: const EdgeInsets.only(top: 80),
       child: Column(
         children: [
-          Icon(icon,
-              size: 32,
-              color: isDark ? AppColors.slate600 : AppColors.slate300),
-          const SizedBox(height: 8),
+          const PrototypeIconBox(
+            size: 52,
+            icon: Icon(Icons.groups_outlined, size: 26),
+          ),
+          const SizedBox(height: 14),
           Text(
-            title,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: isDark ? AppColors.slate400 : AppColors.slate500,
-            ),
-            textAlign: TextAlign.center,
+            'Nenhuma patota ativa',
+            style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Text(
-              sub,
-              style: TextStyle(
-                fontSize: 12,
-                color: isDark ? AppColors.slate500 : AppColors.slate400,
-              ),
-              textAlign: TextAlign.center,
-            ),
+          Text(
+            'Crie uma patota ou aceite um convite para começar.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
         ],
       ),
@@ -1888,59 +1775,99 @@ class _DashedEmpty extends StatelessWidget {
   }
 }
 
-// ── Mensagem centrada simples ──────────────────────────────────────────────────
-
-class _CenteredMsg extends StatelessWidget {
-  final String msg;
-  final bool isDark;
-  const _CenteredMsg({required this.msg, required this.isDark});
+class _DashboardLoadingState extends StatelessWidget {
+  const _DashboardLoadingState();
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 20),
-      child: Text(
-        msg,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 13,
-          color: isDark ? AppColors.slate500 : AppColors.slate400,
-        ),
+    return const Padding(
+      padding: EdgeInsets.only(top: 96),
+      child: Column(
+        children: [
+          SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+          SizedBox(height: 16),
+          Text('Carregando sua patota...'),
+        ],
       ),
     );
   }
 }
 
-// ── Payment summary row ───────────────────────────────────────────────────────
+class _DashboardLoadErrorState extends StatelessWidget {
+  final VoidCallback onRetry;
 
-class _PaymentSummaryRow extends StatelessWidget {
+  const _DashboardLoadErrorState({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return _DashboardMessageState(
+      icon: Icons.cloud_off_outlined,
+      title: 'Não foi possível carregar sua patota',
+      message: 'Verifique sua conexão e tente novamente.',
+      onRetry: onRetry,
+    );
+  }
+}
+
+class _DashboardPlayerMissingState extends StatelessWidget {
+  final VoidCallback onRetry;
+
+  const _DashboardPlayerMissingState({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return _DashboardMessageState(
+      icon: Icons.person_search_outlined,
+      title: 'Patota encontrada',
+      message: 'Não encontramos o jogador vinculado à sua conta.',
+      onRetry: onRetry,
+    );
+  }
+}
+
+class _DashboardMessageState extends StatelessWidget {
   final IconData icon;
-  final String label;
-  final bool isDark;
-  final bool isAlert;
+  final String title;
+  final String message;
+  final VoidCallback onRetry;
 
-  const _PaymentSummaryRow({
+  const _DashboardMessageState({
     required this.icon,
-    required this.label,
-    required this.isDark,
-    this.isAlert = false,
+    required this.title,
+    required this.message,
+    required this.onRetry,
   });
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Row(children: [
-          Icon(icon,
-              size: 15,
-              color: isAlert
-                  ? (isDark ? AppColors.amber400 : AppColors.amber500)
-                  : AppColors.green600),
-          const SizedBox(width: 8),
-          Text(label,
-              style: TextStyle(
-                fontSize: 13,
-                color: isDark ? AppColors.slate400 : AppColors.slate500,
-              )),
-        ]),
-      );
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 80),
+      child: Column(
+        children: [
+          PrototypeIconBox(
+            size: 52,
+            icon: Icon(icon, size: 26),
+          ),
+          const SizedBox(height: 14),
+          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Tentar novamente'),
+          ),
+        ],
+      ),
+    );
+  }
 }

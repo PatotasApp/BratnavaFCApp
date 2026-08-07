@@ -17,11 +17,11 @@ class GroupInvite extends Equatable {
   });
 
   factory GroupInvite.fromJson(Map<String, dynamic> j) => GroupInvite(
-        id:            j['id'] as String,
-        groupId:       j['groupId'] as String,
-        groupName:     j['groupName'] as String? ?? '',
+        id: j['id'] as String,
+        groupId: j['groupId'] as String,
+        groupName: j['groupName'] as String? ?? '',
         invitedByName: j['invitedByName'] as String?,
-        createdAt:     AppDateUtils.parseOrNow(j['createdAt'] as String?),
+        createdAt: AppDateUtils.parseOrNow(j['createdAt'] as String?),
       );
 
   @override

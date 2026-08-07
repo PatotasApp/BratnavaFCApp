@@ -518,6 +518,7 @@ class MatchState {
   const MatchState({
     this.loading = false,
     this.mutating = false,
+    this.pendingPlayerIds = const {},
     this.error,
     this.matchId,
     this.groupId = '',
@@ -562,7 +563,19 @@ class MatchState {
   });
 
   final bool loading;
+
+  /// Trava a tela inteira. Use só para ações que mudam o passo do fluxo
+  /// (avançar, voltar, gerar times) — não para ações por jogador.
   final bool mutating;
+
+  /// playerIds com uma ação de aceite/recusa em voo.
+  ///
+  /// Aceitar jogador a jogador é um trabalho em lote: o admin percorre a lista
+  /// tocando em vários seguidos. Com o [mutating] global, cada toque congelava
+  /// a tela toda até o request voltar e só dava para aceitar um por vez.
+  /// Marcando só quem está em voo, os demais botões continuam ativos.
+  final Set<String> pendingPlayerIds;
+
   final String? error;
   final String? matchId;
   final String groupId;
@@ -638,6 +651,7 @@ class MatchState {
   MatchState copyWith({
     bool? loading,
     bool? mutating,
+    Set<String>? pendingPlayerIds,
     String? error,
     String? matchId,
     String? groupId,
@@ -682,6 +696,7 @@ class MatchState {
       MatchState(
         loading: loading ?? this.loading,
         mutating: mutating ?? this.mutating,
+        pendingPlayerIds: pendingPlayerIds ?? this.pendingPlayerIds,
         error: error ?? this.error,
         matchId: matchId ?? this.matchId,
         groupId: groupId ?? this.groupId,

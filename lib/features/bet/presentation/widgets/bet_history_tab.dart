@@ -84,6 +84,7 @@ class _BetHistoryTabState extends ConsumerState<BetHistoryTab>
         itemBuilder: (_, i) {
           if (i == 0) {
             return _BetHistoryPagerHeader(
+              totalMatches: _history!.length,
               pageSize: _pageSize,
               options: _pageSizeOptions,
               isDark: isDark,
@@ -112,12 +113,14 @@ class _BetHistoryTabState extends ConsumerState<BetHistoryTab>
 }
 
 class _BetHistoryPagerHeader extends StatelessWidget {
+  final int totalMatches;
   final int pageSize;
   final List<int> options;
   final bool isDark;
   final ValueChanged<int> onChanged;
 
   const _BetHistoryPagerHeader({
+    required this.totalMatches,
     required this.pageSize,
     required this.options,
     required this.isDark,
@@ -126,27 +129,79 @@ class _BetHistoryPagerHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        Text('Por pagina',
-            style: TextStyle(
-              fontSize: 12,
-              color: isDark ? AppColors.slate400 : AppColors.slate500,
-            )),
-        const SizedBox(width: 8),
-        DropdownButton<int>(
-          value: pageSize,
-          isDense: true,
-          dropdownColor: isDark ? AppColors.slate800 : Colors.white,
-          items: options
-              .map((n) => DropdownMenuItem(value: n, child: Text('$n')))
-              .toList(),
-          onChanged: (n) {
-            if (n != null) onChanged(n);
-          },
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.slate800 : AppColors.onDark,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? AppColors.slate700 : AppColors.slate200,
         ),
-      ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: AppColors.accentOf(
+                isDark ? Brightness.dark : Brightness.light,
+              ).withAlpha(28),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.history_rounded,
+              size: 18,
+              color: AppColors.accentOf(
+                isDark ? Brightness.dark : Brightness.light,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Partidas apostadas',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? AppColors.onDark : AppColors.slate900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$totalMatches partida${totalMatches != 1 ? 's' : ''} no histórico',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? AppColors.slate400 : AppColors.slate500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<int>(
+              value: pageSize,
+              isDense: true,
+              dropdownColor: isDark ? AppColors.slate800 : AppColors.onDark,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: isDark ? AppColors.slate200 : AppColors.slate700,
+              ),
+              items: options
+                  .map((n) => DropdownMenuItem(value: n, child: Text('$n')))
+                  .toList(),
+              onChanged: (n) {
+                if (n != null) onChanged(n);
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -212,7 +267,7 @@ class _MatchHistoryCardState extends State<_MatchHistoryCard> {
   Widget build(BuildContext context) {
     final m = widget.match;
     final isDark = widget.isDark;
-    final bg = isDark ? AppColors.slate800 : Colors.white;
+    final bg = isDark ? AppColors.slate800 : AppColors.onDark;
     final border = isDark ? AppColors.slate700 : AppColors.slate200;
     final date = _formatDate(m.playedAt);
 
@@ -223,8 +278,15 @@ class _MatchHistoryCardState extends State<_MatchHistoryCard> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: border),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
+          Container(
+            height: 3,
+            color: AppColors.accentOf(
+              isDark ? Brightness.dark : Brightness.light,
+            ),
+          ),
           // ── Header ──────────────────────────────────────────────────────
           InkWell(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
@@ -236,32 +298,67 @@ class _MatchHistoryCardState extends State<_MatchHistoryCard> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: isDark ? AppColors.slate700 : AppColors.slate100,
+                    color: AppColors.accentOf(
+                      isDark ? Brightness.dark : Brightness.light,
+                    ).withAlpha(isDark ? 48 : 24),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(Icons.sports_soccer,
                       size: 20,
-                      color: isDark ? AppColors.slate300 : AppColors.slate500),
+                      color: AppColors.accentOf(
+                        isDark ? Brightness.dark : Brightness.light,
+                      )),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(date,
+                      Text('PARTIDA ENCERRADA · $date',
                           style: TextStyle(
                               fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                              color:
-                                  isDark ? Colors.white : AppColors.slate900)),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${m.teamAGoals} × ${m.teamBGoals}  ·  ${m.userBets.length} aposta${m.userBets.length != 1 ? "s" : ""}',
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: isDark
-                                ? AppColors.slate400
-                                : AppColors.slate500),
+                              fontSize: 10,
+                              letterSpacing: .3,
+                              color: isDark
+                                  ? AppColors.slate400
+                                  : AppColors.slate500)),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Text(
+                            '${m.teamAGoals} × ${m.teamBGoals}',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              color: isDark
+                                  ? AppColors.onDark
+                                  : AppColors.slate900,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppColors.slate700
+                                  : AppColors.slate100,
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                            child: Text(
+                              '${m.userBets.length} aposta${m.userBets.length != 1 ? 's' : ''}',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: isDark
+                                    ? AppColors.slate300
+                                    : AppColors.slate600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -340,7 +437,7 @@ class _UserBetRowState extends State<_UserBetRow> {
                     style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white : AppColors.slate800)),
+                        color: isDark ? AppColors.onDark : AppColors.slate800)),
               ),
               Text(
                 '${total >= 0 ? "+" : ""}$total BC',
@@ -417,15 +514,15 @@ class _SelectionResultRow extends StatelessWidget {
     String statusLabel;
 
     if (sel.isCorrect == true) {
-      statusColor = const Color(0xFF34D399);
+      statusColor = AppColors.primaryHover;
       statusIcon = Icons.check_circle_outline;
       statusLabel = '+${sel.fichasEarned ?? 0}';
     } else if (sel.isPartialCredit == true) {
-      statusColor = const Color(0xFFFBBF24);
+      statusColor = AppColors.warning;
       statusIcon = Icons.remove_circle_outline;
       statusLabel = 'Reemb.';
     } else if (sel.isCorrect == false) {
-      statusColor = const Color(0xFFF87171);
+      statusColor = AppColors.prototypeDanger;
       statusIcon = Icons.cancel_outlined;
       statusLabel = '−${sel.fichasWagered}';
     } else {
@@ -452,7 +549,7 @@ class _SelectionResultRow extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white : AppColors.slate800)),
+                      color: isDark ? AppColors.onDark : AppColors.slate800)),
               if (actual != null)
                 Text('Real: $actual',
                     style: TextStyle(
@@ -508,11 +605,12 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, size: 44, color: Color(0xFFF87171)),
+            const Icon(Icons.error_outline,
+                size: 44, color: AppColors.prototypeDanger),
             const SizedBox(height: 12),
             Text(message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Color(0xFFF87171))),
+                style: const TextStyle(color: AppColors.prototypeDanger)),
             const SizedBox(height: 16),
             TextButton.icon(
               onPressed: onRetry,

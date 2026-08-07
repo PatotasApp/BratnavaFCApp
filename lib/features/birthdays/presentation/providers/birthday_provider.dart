@@ -9,6 +9,5 @@ final birthdayDsProvider = Provider<BirthdayRemoteDataSource>(
 
 final birthdayStatusProvider =
     FutureProvider.autoDispose.family<List<BirthdayStatus>, String>(
-  (ref, groupId) =>
-      ref.watch(birthdayDsProvider).fetchBirthdayStatus(groupId),
+  (ref, groupId) => ref.watch(birthdayDsProvider).fetchBirthdayStatus(groupId),
 );

@@ -4,7 +4,7 @@ import '../../domain/entities/calendar_event.dart';
 import 'calendar_utils.dart';
 
 class WeekView extends StatelessWidget {
-  final DateTime            cursor;
+  final DateTime cursor;
   final List<CalendarEvent> events;
   final void Function(CalendarEvent) onEventTap;
 
@@ -18,14 +18,14 @@ class WeekView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final days   = getWeekDays(cursor);
+    final days = getWeekDays(cursor);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: days.map((day) {
-        final ds     = toDateStr(day);
+        final ds = toDateStr(day);
         final dayEvs = events.where((e) => e.date == ds).toList();
-        final today  = isToday(day);
+        final today = isToday(day);
 
         return Expanded(
           child: Container(
@@ -43,7 +43,7 @@ class WeekView extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   decoration: BoxDecoration(
                     color: today
-                        ? (isDark ? Colors.white : AppColors.slate900)
+                        ? (isDark ? AppColors.onDark : AppColors.slate900)
                         : (isDark ? AppColors.slate800 : AppColors.slate50),
                     border: Border(
                       bottom: BorderSide(
@@ -60,19 +60,23 @@ class WeekView extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                           letterSpacing: .8,
                           color: today
-                              ? (isDark ? AppColors.slate900 : Colors.white)
-                              : (isDark ? AppColors.slate400 : AppColors.slate500),
+                              ? (isDark ? AppColors.slate900 : AppColors.onDark)
+                              : (isDark
+                                  ? AppColors.slate400
+                                  : AppColors.slate500),
                         ),
                       ),
                       Text(
                         '${day.day}',
                         style: TextStyle(
-                          fontSize:   16,
+                          fontSize: 16,
                           fontWeight: FontWeight.w800,
-                          height:     1.1,
+                          height: 1.1,
                           color: today
-                              ? (isDark ? AppColors.slate900 : Colors.white)
-                              : (isDark ? Colors.white : AppColors.slate900),
+                              ? (isDark ? AppColors.slate900 : AppColors.onDark)
+                              : (isDark
+                                  ? AppColors.onDark
+                                  : AppColors.slate900),
                         ),
                       ),
                     ],
@@ -87,13 +91,13 @@ class WeekView extends StatelessWidget {
                       children: [
                         if (dayEvs.isEmpty) const SizedBox(height: 40),
                         ...dayEvs.map((ev) => Padding(
-                          padding: const EdgeInsets.only(bottom: 3),
-                          child: EventPill(
-                            ev: ev,
-                            onTap: () => onEventTap(ev),
-                            compact: true,
-                          ),
-                        )),
+                              padding: const EdgeInsets.only(bottom: 3),
+                              child: EventPill(
+                                ev: ev,
+                                onTap: () => onEventTap(ev),
+                                compact: true,
+                              ),
+                            )),
                       ],
                     ),
                   ),

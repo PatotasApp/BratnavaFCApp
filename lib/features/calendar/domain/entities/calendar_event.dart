@@ -5,11 +5,11 @@ import '../../../../core/utils/date_utils.dart';
 
 class CalendarEvent extends Equatable {
   final String? id;
-  final String  type;          // 'manual' | 'birthday' | 'match' | 'holiday' | 'event'
-  final String  title;
-  final String  date;          // "YYYY-MM-DD"
+  final String type; // 'manual' | 'birthday' | 'match' | 'holiday' | 'event'
+  final String title;
+  final String date; // "YYYY-MM-DD"
   final String? time;
-  final bool    timeTBD;
+  final bool timeTBD;
   final String? categoryId;
   final String? categoryName;
   final String? categoryColor;
@@ -35,36 +35,39 @@ class CalendarEvent extends Equatable {
   });
 
   factory CalendarEvent.fromJson(Map<String, dynamic> j) => CalendarEvent(
-    id:            j['id']            as String?,
-    type:          j['type']          as String? ?? 'manual',
-    title:         j['title']         as String? ?? '',
-    date:          j['date']          as String? ?? '',
-    time:          j['time']          as String?,
-    timeTBD:       j['timeTBD']       as bool?   ?? false,
-    categoryId:    j['categoryId']    as String?,
-    categoryName:  j['categoryName']  as String?,
-    categoryColor: j['categoryColor'] as String?,
-    categoryIcon:  j['categoryIcon']  as String?,
-    icon:          j['icon']          as String?,
-    sourceId:      j['sourceId']      as String?,
-    description:   j['description']   as String?,
-  );
+        id: j['id'] as String?,
+        type: j['type'] as String? ?? 'manual',
+        title: j['title'] as String? ?? '',
+        date: j['date'] as String? ?? '',
+        time: j['time'] as String?,
+        timeTBD: j['timeTBD'] as bool? ?? false,
+        categoryId: j['categoryId'] as String?,
+        categoryName: j['categoryName'] as String?,
+        categoryColor: j['categoryColor'] as String?,
+        categoryIcon: j['categoryIcon'] as String?,
+        icon: j['icon'] as String?,
+        sourceId: j['sourceId'] as String?,
+        description: j['description'] as String?,
+      );
 
   Map<String, dynamic> toJson() => {
-    if (id != null) 'id': id,
-    'type':          type,
-    'title':         title,
-    'date':          date,
-    if (time != null) 'time': time,
-    'timeTBD':       timeTBD,
-    if (categoryId != null) 'categoryId': categoryId,
-    if (description != null) 'description': description,
-    if (icon != null) 'icon': icon,
-  };
+        if (id != null) 'id': id,
+        'type': type,
+        'title': title,
+        'date': date,
+        if (time != null) 'time': time,
+        'timeTBD': timeTBD,
+        if (categoryId != null) 'categoryId': categoryId,
+        if (description != null) 'description': description,
+        if (icon != null) 'icon': icon,
+      };
 
   bool get isPast {
-    try { return DateTime.now().isAfter(AppDateUtils.parseOrNow(date)); }
-    catch (_) { return false; }
+    try {
+      return DateTime.now().isAfter(AppDateUtils.parseOrNow(date));
+    } catch (_) {
+      return false;
+    }
   }
 
   @override
@@ -74,11 +77,11 @@ class CalendarEvent extends Equatable {
 // ── CalendarCategory ──────────────────────────────────────────────────────────
 
 class CalendarCategory extends Equatable {
-  final String  id;
-  final String  name;
+  final String id;
+  final String name;
   final String? color;
   final String? icon;
-  final bool    isSystem;
+  final bool isSystem;
 
   const CalendarCategory({
     required this.id,
@@ -89,18 +92,18 @@ class CalendarCategory extends Equatable {
   });
 
   factory CalendarCategory.fromJson(Map<String, dynamic> j) => CalendarCategory(
-    id:       j['id']       as String? ?? '',
-    name:     j['name']     as String? ?? '',
-    color:    j['color']    as String?,
-    icon:     j['icon']     as String?,
-    isSystem: j['isSystem'] as bool?   ?? false,
-  );
+        id: j['id'] as String? ?? '',
+        name: j['name'] as String? ?? '',
+        color: j['color'] as String?,
+        icon: j['icon'] as String?,
+        isSystem: j['isSystem'] as bool? ?? false,
+      );
 
   Map<String, dynamic> toJson() => {
-    'name':  name,
-    if (color != null) 'color': color,
-    if (icon  != null) 'icon':  icon,
-  };
+        'name': name,
+        if (color != null) 'color': color,
+        if (icon != null) 'icon': icon,
+      };
 
   @override
   List<Object?> get props => [id, name, color, icon];

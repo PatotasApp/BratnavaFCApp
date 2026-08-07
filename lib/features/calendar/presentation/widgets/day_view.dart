@@ -4,11 +4,11 @@ import '../../domain/entities/calendar_event.dart';
 import 'calendar_utils.dart';
 
 class DayView extends StatelessWidget {
-  final DateTime            cursor;
+  final DateTime cursor;
   final List<CalendarEvent> events;
-  final bool                isAdmin;
+  final bool isAdmin;
   final void Function(CalendarEvent) onEventTap;
-  final void Function(String date)   onNewEvent;
+  final void Function(String date) onNewEvent;
 
   const DayView({
     super.key,
@@ -22,7 +22,7 @@ class DayView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final ds     = toDateStr(cursor);
+    final ds = toDateStr(cursor);
     final dayEvs = events.where((e) => e.date == ds).toList();
 
     if (dayEvs.isEmpty) {
@@ -50,8 +50,10 @@ class DayView extends StatelessWidget {
                 icon: const Icon(Icons.add, size: 16),
                 label: const Text('Criar evento'),
                 style: FilledButton.styleFrom(
-                  backgroundColor: isDark ? Colors.white : AppColors.slate900,
-                  foregroundColor: isDark ? AppColors.slate900 : Colors.white,
+                  backgroundColor:
+                      isDark ? AppColors.onDark : AppColors.slate900,
+                  foregroundColor:
+                      isDark ? AppColors.slate900 : AppColors.onDark,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -69,7 +71,7 @@ class DayView extends StatelessWidget {
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
         final ev = dayEvs[i];
-        final c  = eventColors(ev);
+        final c = eventColors(ev);
         final ic = eventIcon(ev);
 
         return GestureDetector(
@@ -77,9 +79,9 @@ class DayView extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color:        c.bg,
+              color: c.bg,
               borderRadius: BorderRadius.circular(14),
-              border:       Border.all(color: c.border),
+              border: Border.all(color: c.border),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -93,22 +95,27 @@ class DayView extends StatelessWidget {
                       Text(
                         ev.title,
                         style: TextStyle(
-                          fontSize:   14,
+                          fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color:      c.fg,
+                          color: c.fg,
                         ),
                       ),
-                      if (!ev.timeTBD && ev.time != null && ev.time!.isNotEmpty) ...[
+                      if (!ev.timeTBD &&
+                          ev.time != null &&
+                          ev.time!.isNotEmpty) ...[
                         const SizedBox(height: 3),
                         Text(
                           ev.time!,
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDark ? AppColors.slate400 : AppColors.slate500,
+                            color: isDark
+                                ? AppColors.slate400
+                                : AppColors.slate500,
                           ),
                         ),
                       ],
-                      if (ev.description != null && ev.description!.isNotEmpty) ...[
+                      if (ev.description != null &&
+                          ev.description!.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(
                           ev.description!,
@@ -116,14 +123,17 @@ class DayView extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDark ? AppColors.slate400 : AppColors.slate500,
+                            color: isDark
+                                ? AppColors.slate400
+                                : AppColors.slate500,
                           ),
                         ),
                       ],
                     ],
                   ),
                 ),
-                Icon(Icons.chevron_right_rounded, size: 18,
+                Icon(Icons.chevron_right_rounded,
+                    size: 18,
                     color: isDark ? AppColors.slate600 : AppColors.slate400),
               ],
             ),
