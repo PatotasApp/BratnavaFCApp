@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -315,15 +316,11 @@ class _InviteCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.emerald500.withAlpha(30),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.group,
-                    color: AppColors.emerald500, size: 22),
+              AvatarWidget(
+                name: invite.groupName,
+                photoUrl: invite.groupLogoUrl,
+                size: 40,
+                fit: BoxFit.cover,
               ),
               const SizedBox(width: 12),
               Expanded(

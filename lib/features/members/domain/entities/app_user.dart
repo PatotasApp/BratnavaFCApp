@@ -16,6 +16,8 @@ class AppUser extends Equatable {
   final String? createdAt;
   final String? updatedAt;
   final String? inactivatedAt;
+  final String? photoUrl;
+  final String? photoUpdatedAt;
 
   const AppUser({
     required this.id,
@@ -30,6 +32,8 @@ class AppUser extends Equatable {
     this.createdAt,
     this.updatedAt,
     this.inactivatedAt,
+    this.photoUrl,
+    this.photoUpdatedAt,
   });
 
   String get fullName {
@@ -82,6 +86,8 @@ class AppUser extends Equatable {
         createdAt: _fmtDate(j['createdAt'] ?? j['createdDate']),
         updatedAt: _fmtDate(j['updatedAt'] ?? j['updatedDate']),
         inactivatedAt: _fmtDate(j['inactivatedAt']),
+        photoUrl: j['photoUrl'] as String?,
+        photoUpdatedAt: j['photoUpdatedAt']?.toString(),
       );
 
   @override
@@ -98,5 +104,7 @@ class AppUser extends Equatable {
         createdAt,
         updatedAt,
         inactivatedAt,
+        photoUrl,
+        photoUpdatedAt,
       ];
 }

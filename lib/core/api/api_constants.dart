@@ -8,10 +8,12 @@ class ApiConstants {
   // Users
   static const String users = '/api/Users';
   static String userById(String id) => '/api/Users/$id';
+  static String userPhoto(String id) => '/api/Users/$id/photo';
 
   // Groups
   static const String groups = '/api/Groups';
   static String groupById(String id) => '/api/Groups/$id';
+  static String groupLogo(String id) => '/api/Groups/$id/logo';
   static String groupsByAdmin(String adminId) => '/api/Groups/admin/$adminId';
   static String groupsByFinanceiro(String finId) =>
       '/api/Groups/financeiro/$finId';

@@ -7,6 +7,7 @@ class GroupInvite extends Equatable {
   final String groupName;
   final String? invitedByName;
   final DateTime createdAt;
+  final String? groupLogoUrl;
 
   const GroupInvite({
     required this.id,
@@ -14,6 +15,7 @@ class GroupInvite extends Equatable {
     required this.groupName,
     this.invitedByName,
     required this.createdAt,
+    this.groupLogoUrl,
   });
 
   factory GroupInvite.fromJson(Map<String, dynamic> j) => GroupInvite(
@@ -22,6 +24,7 @@ class GroupInvite extends Equatable {
         groupName: j['groupName'] as String? ?? '',
         invitedByName: j['invitedByName'] as String?,
         createdAt: AppDateUtils.parseOrNow(j['createdAt'] as String?),
+        groupLogoUrl: j['groupLogoUrl'] as String?,
       );
 
   @override

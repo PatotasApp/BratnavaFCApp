@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
@@ -12,6 +14,7 @@ import '../../../dashboard/domain/entities/my_player.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../groups/presentation/providers/group_invites_provider.dart';
 import '../../../notifications/presentation/providers/notifications_provider.dart';
+import '../../../members/presentation/providers/members_provider.dart';
 
 class MyAccountPage extends ConsumerWidget {
   const MyAccountPage({super.key});
@@ -122,18 +125,19 @@ class MyAccountPage extends ConsumerWidget {
   }
 }
 
-class _ProfileTab extends StatelessWidget {
+class _ProfileTab extends ConsumerWidget {
   final Account account;
   final MyPlayer? activePlayer;
 
   const _ProfileTab({required this.account, required this.activePlayer});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final displayName = activePlayer?.playerName.isNotEmpty == true
         ? activePlayer!.playerName
         : account.name;
+    final profile = ref.watch(myProfileProvider).valueOrNull;
 
     return PrototypeScrollView(
       child: PrototypeCard(
@@ -142,7 +146,11 @@ class _ProfileTab extends StatelessWidget {
           children: [
             Row(
               children: [
-                AvatarWidget(name: displayName, size: 46),
+                _EditableProfileAvatar(
+                  account: account,
+                  name: displayName,
+                  photoUrl: profile?.photoUrl ?? activePlayer?.photoUrl,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -187,6 +195,201 @@ class _ProfileTab extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _EditableProfileAvatar extends ConsumerStatefulWidget {
+  final Account account;
+  final String name;
+  final String? photoUrl;
+
+  const _EditableProfileAvatar({
+    required this.account,
+    required this.name,
+    required this.photoUrl,
+  });
+
+  @override
+  ConsumerState<_EditableProfileAvatar> createState() =>
+      _EditableProfileAvatarState();
+}
+
+class _EditableProfileAvatarState
+    extends ConsumerState<_EditableProfileAvatar> {
+  bool _busy = false;
+
+  Future<void> _chooseSource() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Foto do perfil',
+                  style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const Icon(Icons.camera_alt_rounded),
+                title: const Text('Tirar foto'),
+                subtitle: const Text('Usar a câmera do aparelho'),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_rounded),
+                title: const Text('Escolher da galeria'),
+                subtitle: const Text('Carregar uma foto existente'),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (source != null) await _pick(source);
+  }
+
+  Future<void> _pick(ImageSource source) async {
+    final picked = await ImagePicker().pickImage(
+      source: source,
+      maxWidth: 1600,
+      maxHeight: 1600,
+      imageQuality: 92,
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      final compressed = await FlutterImageCompress.compressWithFile(
+        picked.path,
+        minWidth: 720,
+        minHeight: 720,
+        quality: 82,
+        format: CompressFormat.jpeg,
+      );
+      if (compressed == null)
+        throw Exception('Não foi possível processar a foto.');
+      if (compressed.length > 5 * 1024 * 1024) {
+        throw Exception('A foto deve ter no máximo 5 MB.');
+      }
+
+      await ref
+          .read(membersDsProvider)
+          .uploadProfilePhoto(widget.account.userId, compressed);
+      _refreshPhoto();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Foto atualizada com sucesso.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(error.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _remove() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Excluir foto?'),
+        content:
+            const Text('As iniciais voltarão a ser exibidas no seu perfil.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Excluir')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(membersDsProvider)
+          .deleteProfilePhoto(widget.account.userId);
+      _refreshPhoto();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Foto removida.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _refreshPhoto() {
+    ref.invalidate(myProfileProvider);
+    ref.invalidate(myPlayersProvider);
+    ref.invalidate(usersProvider);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            AvatarWidget(
+                name: widget.name, photoUrl: widget.photoUrl, size: 64),
+            Positioned(
+              right: -5,
+              bottom: -5,
+              child: Material(
+                color: colors.primary,
+                borderRadius: BorderRadius.circular(10),
+                child: InkWell(
+                  onTap: _busy ? null : _chooseSource,
+                  borderRadius: BorderRadius.circular(10),
+                  child: SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: _busy
+                        ? Padding(
+                            padding: const EdgeInsets.all(7),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: colors.onPrimary,
+                            ),
+                          )
+                        : Icon(Icons.camera_alt_rounded,
+                            size: 15, color: colors.onPrimary),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (widget.photoUrl != null) ...[
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: _busy ? null : _remove,
+            child: Text('Excluir',
+                style: TextStyle(
+                    color: colors.error,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -339,8 +542,11 @@ class _GroupsTab extends StatelessWidget {
                   for (var index = 0; index < players.length; index++) ...[
                     ListTile(
                       onTap: () => onSwitch(players[index]),
-                      leading: const PrototypeIconBox(
-                        icon: Icon(Icons.groups_outlined),
+                      leading: AvatarWidget(
+                        name: players[index].groupName,
+                        photoUrl: players[index].groupLogoUrl,
+                        size: 40,
+                        fit: BoxFit.cover,
                       ),
                       title: Text(players[index].groupName),
                       subtitle: Column(

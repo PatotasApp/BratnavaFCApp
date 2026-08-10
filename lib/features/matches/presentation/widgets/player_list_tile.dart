@@ -69,7 +69,8 @@ class PlayerListTile extends StatelessWidget {
       child: ListTile(
         dense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-        leading: AvatarWidget(name: player.playerName, size: 36),
+        leading: AvatarWidget(
+            name: player.playerName, photoUrl: player.photoUrl, size: 36),
         title: Row(
           children: [
             Flexible(

@@ -9,6 +9,7 @@ class GroupPlayer extends Equatable {
   final bool isGuest;
   final bool isActive;
   final String? userId;
+  final String? photoUrl;
 
   const GroupPlayer({
     required this.id,
@@ -19,6 +20,7 @@ class GroupPlayer extends Equatable {
     required this.isGuest,
     required this.isActive,
     this.userId,
+    this.photoUrl,
   });
 
   factory GroupPlayer.fromJson(Map<String, dynamic> j) => GroupPlayer(
@@ -30,6 +32,7 @@ class GroupPlayer extends Equatable {
         isGuest: j['isGuest'] as bool? ?? false,
         isActive: j['isActive'] as bool? ?? true,
         userId: j['userId'] as String?,
+        photoUrl: j['photoUrl'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -49,6 +52,7 @@ class GroupPlayer extends Equatable {
     bool? isGuest,
     bool? isActive,
     String? userId,
+    String? photoUrl,
   }) =>
       GroupPlayer(
         id: id ?? this.id,
@@ -59,6 +63,7 @@ class GroupPlayer extends Equatable {
         isGuest: isGuest ?? this.isGuest,
         isActive: isActive ?? this.isActive,
         userId: userId ?? this.userId,
+        photoUrl: photoUrl ?? this.photoUrl,
       );
 
   @override
@@ -71,5 +76,6 @@ class GroupPlayer extends Equatable {
         isGuest,
         isActive,
         userId,
+        photoUrl,
       ];
 }

@@ -8,6 +8,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/football_pitch.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
+import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../calendar/domain/entities/calendar_event.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
@@ -235,8 +236,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           _PlayerIdentityCard(
             groupId: groupId,
             groupName: activePlayer.groupName,
+            groupLogoUrl: activePlayer.groupLogoUrl,
             playerName: activePlayer.playerName,
             username: username,
+            photoUrl: profile?.photoUrl ?? activePlayer.photoUrl,
             isGoalkeeper: activePlayer.isGoalkeeper,
             summary: summary,
             loading: historyAsync.isLoading,
@@ -329,8 +332,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 class _PlayerIdentityCard extends ConsumerWidget {
   final String groupId;
   final String groupName;
+  final String? groupLogoUrl;
   final String playerName;
   final String username;
+  final String? photoUrl;
   final bool isGoalkeeper;
   final PlayerHistorySummary? summary;
   final bool loading;
@@ -339,8 +344,10 @@ class _PlayerIdentityCard extends ConsumerWidget {
   const _PlayerIdentityCard({
     required this.groupId,
     required this.groupName,
+    required this.groupLogoUrl,
     required this.playerName,
     required this.username,
+    required this.photoUrl,
     required this.isGoalkeeper,
     required this.summary,
     required this.loading,
@@ -386,7 +393,7 @@ class _PlayerIdentityCard extends ConsumerWidget {
                 children: [
                   Container(
                     width: 82,
-                    height: 92,
+                    height: 82,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color:
@@ -395,11 +402,17 @@ class _PlayerIdentityCard extends ConsumerWidget {
                           color: AppColors.accentOf(theme.brightness)),
                       borderRadius: BorderRadius.circular(15),
                     ),
-                    child: renderGroupIcon(
-                      isGoalkeeper ? icons.goalkeeper : icons.player,
-                      size: 34,
-                      color: AppColors.darkTextMuted,
-                    ),
+                    child: photoUrl != null
+                        ? AvatarWidget(
+                            name: playerName,
+                            photoUrl: photoUrl,
+                            size: 80,
+                          )
+                        : renderGroupIcon(
+                            isGoalkeeper ? icons.goalkeeper : icons.player,
+                            size: 34,
+                            color: AppColors.darkTextMuted,
+                          ),
                   ),
                   const SizedBox(height: 7),
                   Text(
@@ -417,16 +430,29 @@ class _PlayerIdentityCard extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      groupName,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.3,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        AvatarWidget(
+                          name: groupName,
+                          photoUrl: groupLogoUrl,
+                          size: 28,
+                          fit: BoxFit.cover,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            groupName,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.3,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Wrap(

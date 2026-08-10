@@ -1,4 +1,6 @@
 import 'package:dio/dio.dart';
+import 'dart:typed_data';
+import 'package:http_parser/http_parser.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../domain/entities/group_settings.dart';
 
@@ -122,6 +124,23 @@ class GroupSettingsRemoteDataSource {
   Future<GroupDetail> fetchGroupDetail(String groupId) async {
     final res = await _dio.get(ApiConstants.groupById(groupId));
     return GroupDetail.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  Future<void> uploadGroupLogo(String groupId, Uint8List bytes) async {
+    final form = FormData.fromMap({
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: 'group-logo.jpg',
+        contentType: MediaType('image', 'jpeg'),
+      ),
+    });
+    final res = await _dio.post(ApiConstants.groupLogo(groupId), data: form);
+    _throwIfError(res.data);
+  }
+
+  Future<void> deleteGroupLogo(String groupId) async {
+    final res = await _dio.delete(ApiConstants.groupLogo(groupId));
+    _throwIfError(res.data);
   }
 
   // ── Admins ────────────────────────────────────────────────────────────────

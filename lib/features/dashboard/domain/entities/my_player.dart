@@ -8,6 +8,8 @@ class MyPlayer extends Equatable {
   final bool isGoalkeeper;
   final int skillPoints;
   final bool isGuest;
+  final String? photoUrl;
+  final String? groupLogoUrl;
 
   const MyPlayer({
     required this.playerId,
@@ -17,6 +19,8 @@ class MyPlayer extends Equatable {
     required this.isGoalkeeper,
     required this.skillPoints,
     required this.isGuest,
+    this.photoUrl,
+    this.groupLogoUrl,
   });
 
   factory MyPlayer.fromJson(Map<String, dynamic> j) => MyPlayer(
@@ -27,6 +31,8 @@ class MyPlayer extends Equatable {
         isGoalkeeper: j['isGoalkeeper'] as bool? ?? false,
         skillPoints: j['skillPoints'] as int? ?? 0,
         isGuest: j['isGuest'] as bool? ?? false,
+        photoUrl: j['photoUrl'] as String?,
+        groupLogoUrl: j['groupLogoUrl'] as String?,
       );
 
   @override
@@ -37,6 +43,8 @@ class MyPlayer extends Equatable {
         playerName,
         isGoalkeeper,
         skillPoints,
-        isGuest
+        isGuest,
+        photoUrl,
+        groupLogoUrl,
       ];
 }

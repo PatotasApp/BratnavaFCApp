@@ -67,6 +67,8 @@ class GroupDetail {
   final List<GroupMember> adminUsers;
   final List<String> financeiroIds;
   final List<GroupMember> financeiroUsers;
+  final String? logoUrl;
+  final DateTime? logoUpdatedAt;
 
   const GroupDetail({
     required this.id,
@@ -76,6 +78,8 @@ class GroupDetail {
     this.adminUsers = const [],
     this.financeiroIds = const [],
     this.financeiroUsers = const [],
+    this.logoUrl,
+    this.logoUpdatedAt,
   });
 
   factory GroupDetail.fromJson(Map<String, dynamic> json) {
@@ -147,6 +151,8 @@ class GroupDetail {
       adminUsers: adminUsers,
       financeiroIds: financeiroIds,
       financeiroUsers: financeiroUsers,
+      logoUrl: j['logoUrl'] as String?,
+      logoUpdatedAt: DateTime.tryParse(j['logoUpdatedAt'] as String? ?? ''),
     );
   }
 }

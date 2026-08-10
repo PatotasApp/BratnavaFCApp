@@ -47,6 +47,10 @@
 				</array>
 			</dict>
 		</dict>
+		<key>NSCameraUsageDescription</key>
+		<string>O PatotasApp usa a câmera para você tirar sua foto de perfil.</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>O PatotasApp acessa suas fotos para você escolher uma foto de perfil.</string>
 		<key>UIBackgroundModes</key>
 		<array>
 			<string>fetch</string>

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/entities/account.dart';
@@ -11,6 +13,7 @@ import '../../data/datasources/group_settings_remote_datasource.dart';
 import '../../domain/entities/group_settings.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/group_settings_provider.dart';
+import '../../../../shared/presentation/widgets/avatar_widget.dart';
 
 // ── Icon types ────────────────────────────────────────────────────────────────
 
@@ -371,6 +374,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   // ── Save state ────────────────────────────────────────────────────────────
   bool _saving = false;
+  bool _logoBusy = false;
   bool _isPersisted = false;
   String? _saveMsg;
   bool _saveMsgOk = false;
@@ -1161,6 +1165,93 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
   // ── Tab bar ───────────────────────────────────────────────────────────────
 
   static const _kTabLabels = ['Geral', 'Pagamento', 'MVP', 'Ícones', 'Equipe'];
+  Future<void> _pickGroupLogo() async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1600,
+      maxHeight: 1600,
+      imageQuality: 92,
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() => _logoBusy = true);
+    try {
+      final compressed = await FlutterImageCompress.compressWithFile(
+        picked.path,
+        minWidth: 720,
+        minHeight: 720,
+        quality: 84,
+        format: CompressFormat.jpeg,
+      );
+      if (compressed == null) {
+        throw Exception('Não foi possível processar a logo.');
+      }
+      if (compressed.length > 5 * 1024 * 1024) {
+        throw Exception('A logo deve ter no máximo 5 MB.');
+      }
+
+      await ref
+          .read(groupSettingsDsProvider)
+          .uploadGroupLogo(widget.groupId, compressed);
+      ref.invalidate(groupDetailProvider(widget.groupId));
+      ref.invalidate(myPlayersProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Logo da patota atualizada.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao atualizar a logo: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _logoBusy = false);
+    }
+  }
+
+  Future<void> _deleteGroupLogo() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remover logo?'),
+        content: const Text('A patota voltará a usar a inicial do nome.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remover'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _logoBusy = true);
+    try {
+      await ref.read(groupSettingsDsProvider).deleteGroupLogo(widget.groupId);
+      ref.invalidate(groupDetailProvider(widget.groupId));
+      ref.invalidate(myPlayersProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Logo removida.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao remover a logo: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _logoBusy = false);
+    }
+  }
+
   static const _kTabIcons = [
     Icons.tune_rounded,
     Icons.account_balance_wallet_outlined,
@@ -1179,7 +1270,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
         children: [
           _buildTabBar(isDark),
           const SizedBox(height: 16),
-          if (_activeTab == 0) _buildTabGeral(isDark),
+          if (_activeTab == 0) _buildTabGeral(isDark, detail),
           if (_activeTab == 1) _buildTabPagamento(isDark),
           if (_activeTab == 2) _buildTabMvp(isDark),
           if (_activeTab == 3) _buildIcons(isDark),
@@ -1265,9 +1356,59 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   // ── Tab 0: Geral ──────────────────────────────────────────────────────────
 
-  Widget _buildTabGeral(bool isDark) => Column(
+  Widget _buildTabGeral(bool isDark, GroupDetail? detail) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _subCard(
+            isDark: isDark,
+            accentBg: AppColors.emerald50,
+            accentFg: AppColors.emerald500,
+            icon: Icons.image_outlined,
+            title: 'Logo da patota',
+            subtitle: 'Identidade visual do grupo',
+            child: Row(
+              children: [
+                AvatarWidget(
+                  name: detail?.name ?? 'Patota',
+                  photoUrl: detail?.logoUrl,
+                  size: 64,
+                  fit: BoxFit.cover,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: _logoBusy ? null : _pickGroupLogo,
+                        icon: _logoBusy
+                            ? const SizedBox(
+                                width: 15,
+                                height: 15,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.upload_rounded, size: 18),
+                        label: Text(detail?.logoUrl != null
+                            ? 'Alterar logo'
+                            : 'Carregar logo'),
+                      ),
+                      if (detail?.logoUrl != null) ...[
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: _logoBusy ? null : _deleteGroupLogo,
+                          icon: const Icon(Icons.delete_outline_rounded,
+                              size: 18),
+                          label: const Text('Remover'),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
           _subCard(
             isDark: isDark,
             accentBg: AppColors.blue50,

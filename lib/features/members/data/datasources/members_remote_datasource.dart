@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:http_parser/http_parser.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../domain/entities/app_user.dart';
 import '../../domain/entities/group_player.dart';
@@ -61,6 +62,23 @@ class MembersRemoteDataSource {
         'newPassword': newPassword,
       },
     );
+    _throwIfError(res.data);
+  }
+
+  Future<void> uploadProfilePhoto(String id, List<int> bytes) async {
+    final form = FormData.fromMap({
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: 'profile.jpg',
+        contentType: MediaType('image', 'jpeg'),
+      ),
+    });
+    final res = await _dio.post(ApiConstants.userPhoto(id), data: form);
+    _throwIfError(res.data);
+  }
+
+  Future<void> deleteProfilePhoto(String id) async {
+    final res = await _dio.delete(ApiConstants.userPhoto(id));
     _throwIfError(res.data);
   }
 

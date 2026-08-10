@@ -186,6 +186,7 @@ class MatchPlayerInfo {
   final String matchPlayerId;
   final String playerId;
   final String playerName;
+  final String? photoUrl;
   final bool isGoalkeeper;
   final bool isGuest;
   final int team; // 0=não atribuído, 1=timeA, 2=timeB
@@ -205,6 +206,7 @@ class MatchPlayerInfo {
     required this.matchPlayerId,
     required this.playerId,
     required this.playerName,
+    this.photoUrl,
     required this.isGoalkeeper,
     required this.isGuest,
     required this.team,
@@ -231,6 +233,7 @@ class MatchPlayerInfo {
             j['name'] as String? ??
             j['Name'] as String? ??
             '',
+        photoUrl: j['photoUrl'] as String? ?? j['PhotoUrl'] as String?,
         isGoalkeeper:
             j['isGoalkeeper'] as bool? ?? j['IsGoalkeeper'] as bool? ?? false,
         isGuest: j['isGuest'] as bool? ?? j['IsGuest'] as bool? ?? false,

@@ -632,7 +632,8 @@ class _UserMenuButton extends ConsumerWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AvatarWidget(name: displayName, size: 24),
+            AvatarWidget(
+                name: displayName, photoUrl: activePlayer?.photoUrl, size: 24),
             const SizedBox(width: 6),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 100),
@@ -918,7 +919,8 @@ class _PlayerTile extends StatelessWidget {
 
     return ListTile(
       onTap: onTap,
-      leading: AvatarWidget(name: player.playerName, size: 32),
+      leading: AvatarWidget(
+          name: player.playerName, photoUrl: player.photoUrl, size: 32),
       title: ConfiguredPlayerName(
         groupId: player.groupId,
         name: player.playerName,

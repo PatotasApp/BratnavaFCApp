@@ -352,7 +352,8 @@ class _UserCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AvatarWidget(name: user.fullName, size: 38),
+                AvatarWidget(
+                    name: user.fullName, photoUrl: user.photoUrl, size: 38),
                 const Spacer(),
                 if (isCurrentUser)
                   Container(
@@ -993,15 +994,11 @@ class _InviteRow extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppColors.emerald500.withAlpha(30),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.group,
-                    color: AppColors.emerald500, size: 20),
+              AvatarWidget(
+                name: invite.groupName,
+                photoUrl: invite.groupLogoUrl,
+                size: 36,
+                fit: BoxFit.cover,
               ),
               const SizedBox(width: 10),
               Expanded(

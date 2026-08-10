@@ -139,7 +139,8 @@ class _PlayerRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Row(
         children: [
-          AvatarWidget(name: player.playerName, size: 28),
+          AvatarWidget(
+              name: player.playerName, photoUrl: player.photoUrl, size: 28),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
