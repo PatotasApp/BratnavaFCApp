@@ -96,14 +96,17 @@ class AppTopBar extends ConsumerWidget implements PreferredSizeWidget {
   }
 }
 
-class _AccountButton extends StatelessWidget {
+class _AccountButton extends ConsumerWidget {
   const _AccountButton();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasAccount =
+        ref.watch(accountStoreProvider).activeAccount?.userId.isNotEmpty ==
+            true;
     return IconButton(
       tooltip: 'Minha conta',
-      onPressed: () => context.go('/app/account'),
+      onPressed: hasAccount ? () => context.go('/app/account') : null,
       icon: const Icon(Icons.keyboard_arrow_down_rounded),
     );
   }
@@ -618,7 +621,7 @@ class _UserMenuButton extends ConsumerWidget {
         accounts.length > 1 ? '${accounts.length} contas' : displayName;
 
     return GestureDetector(
-      onTap: () => _openMenu(context, ref),
+      onTap: () => _openMenu(context),
       child: Container(
         height: 36,
         padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -660,70 +663,15 @@ class _UserMenuButton extends ConsumerWidget {
     );
   }
 
-  void _openMenu(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _UserMenuSheet(
-        accounts: accounts,
-        activeId: activeId,
-        players: players,
-        activePlayer: activePlayer,
-        onAccountSwitch: (userId) {
-          // Zera a seleção manual de jogador antes de qualquer coisa.
-          ref.read(activePlayerIdProvider.notifier).state = null;
-          // Ativa a conta destino limpando activeGroupId/activePlayerId dela,
-          // evitando dados contaminados de trocas anteriores.
-          ref.read(accountStoreProvider.notifier).switchTo(userId);
-          // Reseta o guard de 401 para que o interceptor não trate a nova
-          // conta como se já estivesse em processo de logout.
-          ref.read(authInterceptorProvider).resetUnauthorizedGuard();
-          // Força re-fetch imediato dos jogadores da nova conta.
-          ref.invalidate(myPlayersProvider);
-          // Invalida caches de notificações/convites (sempre assistidos, nunca
-          // se auto-dispõem).
-          ref.invalidate(notifUnreadCountProvider);
-          ref.invalidate(myGroupInviteCountProvider);
-          // Busca roles e grupo correto para a conta recém-ativada.
-          ref.read(authNotifierProvider.notifier).refreshGroupMembership();
-          context.go('/app');
-        },
-        onPlayerSwitch: (player) {
-          ref.read(accountStoreProvider.notifier).patchActive(
-                (a) => a.copyWith(
-                  activePlayerId: player.playerId,
-                  activeGroupId: player.groupId,
-                  activeGroupIsAdmin: false,
-                  activeGroupIsFinanceiro: false,
-                ),
-              );
-          ref.read(activePlayerIdProvider.notifier).state = player.playerId;
-          ref
-              .read(authNotifierProvider.notifier)
-              .refreshMyGroupRoles(player.groupId);
-          context.go('/app');
-        },
-        onAddAccount: () {
-          // Pequeno delay para garantir que o modal já fechou
-          // antes de disparar a navegação do GoRouter.
-          Future.microtask(() {
-            if (context.mounted) context.go('/login?add=1');
-          });
-        },
-        onLogout: () async {
-          await ref.read(authNotifierProvider.notifier).logout();
-          if (context.mounted) context.go('/login');
-        },
-      ),
-    );
+  void _openMenu(BuildContext context) {
+    context.go('/app/account');
   }
 }
 
 // ── Bottom Sheet ──────────────────────────────────────────────────────────────
 
+// TODO: remover junto com o menu legado após a migração visual da top bar.
+// ignore: unused_element
 class _UserMenuSheet extends StatelessWidget {
   final List<Account> accounts;
   final String? activeId;

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/realtime/realtime_provider.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/datasources/polls_remote_datasource.dart';
@@ -42,14 +43,14 @@ class _PollsPageState extends ConsumerState<PollsPage> {
     // O jogador manda no grupo: `activeGroupId` da conta pode apontar
     // para uma patota sem jogador nosso, e aí toda rota por grupo
     // responde 403. Ver dashboard_page para o diagnóstico completo.
-    return player?.groupId ?? acc?.activeGroupId;
+    return acc?.activeGroupId ?? player?.groupId;
   }
 
   bool get _isAdmin {
     final acc = ref.read(accountStoreProvider).activeAccount;
     final gid = _groupId;
     if (acc == null || gid == null) return false;
-    return acc.isAdmin || acc.isGroupAdmin(gid);
+    return acc.isGroupAdmin(gid);
   }
 
   PollsRemoteDataSource get _ds => ref.read(pollsDsProvider);
@@ -163,7 +164,7 @@ class _PollsPageState extends ConsumerState<PollsPage> {
     // watch para reagir quando activePlayer carrega após navegação
     final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
-    final groupId = activePlayer?.groupId ?? account?.activeGroupId;
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (groupId != null && groupId.isNotEmpty) {
@@ -203,8 +204,6 @@ class _PollsPageState extends ConsumerState<PollsPage> {
           groupId: groupId,
           activeTab: _activeTab,
           isAdmin: _isAdmin,
-          isDark: isDark,
-          onTabChange: (t) => setState(() => _activeTab = t),
           onItemTap: _openDetail,
           onRefresh: _refresh,
           onCreateTap: _openCreate,
@@ -225,51 +224,36 @@ class _PollsMenu extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-          children: [
-            Row(
+      body: Column(
+        children: [
+          const AppPageHeader(
+            title: 'Eventos e votações',
+            subtitle: 'Escolha qual área deseja acessar',
+            icon: Icons.how_to_vote_outlined,
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
               children: [
-                IconButton(
-                  onPressed: () => context.go('/app'),
-                  tooltip: 'Voltar',
-                  icon: const Icon(Icons.arrow_back_rounded),
+                _PollsMenuCard(
+                  icon: Icons.calendar_today_outlined,
+                  title: 'Eventos',
+                  description: 'Confirme presença e acompanhe os eventos.',
+                  color: AppColors.violet600,
+                  onTap: () => context.push('/app/polls/events'),
                 ),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Votações',
-                          style: TextStyle(
-                              fontSize: 20, fontWeight: FontWeight.w800)),
-                      Text('Eventos e enquetes da patota',
-                          style: TextStyle(
-                              fontSize: 13, color: AppColors.slate500)),
-                    ],
-                  ),
+                const SizedBox(height: 14),
+                _PollsMenuCard(
+                  icon: Icons.how_to_vote_outlined,
+                  title: 'Votações',
+                  description: 'Participe das enquetes criadas pela patota.',
+                  color: AppColors.blue500,
+                  onTap: () => context.push('/app/polls/votes'),
                 ),
               ],
             ),
-            const SizedBox(height: 28),
-            _PollsMenuCard(
-              icon: Icons.calendar_today_outlined,
-              title: 'Eventos',
-              description: 'Confirme presença e acompanhe os eventos.',
-              color: AppColors.violet600,
-              onTap: () => context.push('/app/polls/events'),
-            ),
-            const SizedBox(height: 14),
-            _PollsMenuCard(
-              icon: Icons.how_to_vote_outlined,
-              title: 'Votações',
-              description: 'Participe das enquetes criadas pela patota.',
-              color: AppColors.blue500,
-              onTap: () => context.push('/app/polls/votes'),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -349,8 +333,6 @@ class _Body extends ConsumerWidget {
   final String groupId;
   final _Tab activeTab;
   final bool isAdmin;
-  final bool isDark;
-  final ValueChanged<_Tab> onTabChange;
   final ValueChanged<PollSummary> onItemTap;
   final VoidCallback onRefresh;
   final VoidCallback onCreateTap;
@@ -360,8 +342,6 @@ class _Body extends ConsumerWidget {
     required this.groupId,
     required this.activeTab,
     required this.isAdmin,
-    required this.isDark,
-    required this.onTabChange,
     required this.onItemTap,
     required this.onRefresh,
     required this.onCreateTap,
@@ -376,10 +356,7 @@ class _Body extends ConsumerWidget {
       loading: () => _Layout(
         activeTab: activeTab,
         isAdmin: isAdmin,
-        isDark: isDark,
-        onTabChange: onTabChange,
         onCreateTap: onCreateTap,
-        showTabs: false,
         eventCount: 0,
         pollCount: 0,
         child: _Skeleton(),
@@ -387,10 +364,7 @@ class _Body extends ConsumerWidget {
       error: (e, _) => _Layout(
         activeTab: activeTab,
         isAdmin: isAdmin,
-        isDark: isDark,
-        onTabChange: onTabChange,
         onCreateTap: onCreateTap,
-        showTabs: false,
         eventCount: 0,
         pollCount: 0,
         child: _ErrorState(onRetry: onRefresh),
@@ -411,10 +385,7 @@ class _Body extends ConsumerWidget {
           child: _Layout(
             activeTab: activeTab,
             isAdmin: isAdmin,
-            isDark: isDark,
-            onTabChange: onTabChange,
             onCreateTap: onCreateTap,
-            showTabs: false,
             eventCount: activeEventCount,
             pollCount: activePollCount,
             child: tabList.isEmpty
@@ -439,23 +410,17 @@ class _Body extends ConsumerWidget {
 class _Layout extends StatelessWidget {
   final _Tab activeTab;
   final bool isAdmin;
-  final bool isDark;
   final int eventCount;
   final int pollCount;
-  final ValueChanged<_Tab> onTabChange;
   final VoidCallback onCreateTap;
-  final bool showTabs;
   final Widget child;
 
   const _Layout({
     required this.activeTab,
     required this.isAdmin,
-    required this.isDark,
     required this.eventCount,
     required this.pollCount,
-    required this.onTabChange,
     required this.onCreateTap,
-    required this.showTabs,
     required this.child,
   });
 
@@ -464,18 +429,13 @@ class _Layout extends StatelessWidget {
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
-          child: _PollsTopHeader(isEvents: activeTab == _Tab.events),
+          child: _PollsTopHeader(
+            isEvents: activeTab == _Tab.events,
+            isAdmin: isAdmin,
+            count: activeTab == _Tab.events ? eventCount : pollCount,
+            onCreateTap: onCreateTap,
+          ),
         ),
-        SliverToBoxAdapter(
-            child: _Header(
-          activeTab: activeTab,
-          isAdmin: isAdmin,
-          eventCount: eventCount,
-          pollCount: pollCount,
-          onTabChange: onTabChange,
-          onCreateTap: onCreateTap,
-          showTabs: showTabs,
-        )),
         SliverFillRemaining(
           hasScrollBody: false,
           child: child,
@@ -489,74 +449,37 @@ class _Layout extends StatelessWidget {
 
 class _PollsTopHeader extends StatelessWidget {
   final bool isEvents;
+  final bool isAdmin;
+  final int count;
+  final VoidCallback onCreateTap;
 
-  const _PollsTopHeader({required this.isEvents});
+  const _PollsTopHeader({
+    required this.isEvents,
+    required this.isAdmin,
+    required this.count,
+    required this.onCreateTap,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.slate950 : AppColors.onDark,
-        border: Border(
-          bottom: BorderSide(
-            color: isDark ? AppColors.slate800 : AppColors.slate200,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/app');
-              }
-            },
-            tooltip: 'Voltar',
-            icon: const Icon(Icons.arrow_back_rounded),
-            style: IconButton.styleFrom(
-              foregroundColor: isDark ? AppColors.slate100 : AppColors.slate700,
-              backgroundColor: isDark ? AppColors.slate900 : AppColors.onDark,
-              side: BorderSide(
-                color: isDark ? AppColors.slate700 : AppColors.slate200,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isEvents ? 'Eventos' : 'Votações',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: isDark ? AppColors.onDark : AppColors.slate900,
+  Widget build(BuildContext context) => AppPageHeader(
+        title: isEvents ? 'Eventos' : 'Votações',
+        subtitle: isEvents
+            ? 'Presenças e encontros da patota · $count aberto${count != 1 ? 's' : ''}'
+            : 'Decisões e enquetes da patota · $count aberta${count != 1 ? 's' : ''}',
+        icon: isEvents ? Icons.event_outlined : Icons.how_to_vote_outlined,
+        footer: isAdmin
+            ? AppPageHeaderActionBar(
+                actions: [
+                  AppPageHeaderButton(
+                    label: isEvents ? 'Novo evento' : 'Nova votação',
+                    icon: Icons.add_rounded,
+                    tone: AppPageHeaderButtonTone.primary,
+                    onPressed: onCreateTap,
                   ),
-                ),
-                Text(
-                  isEvents
-                      ? 'Presenças e encontros da patota'
-                      : 'Decisões e enquetes da patota',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? AppColors.slate400 : AppColors.slate500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+                ],
+              )
+            : null,
+      );
 }
 
 class _Header extends StatelessWidget {

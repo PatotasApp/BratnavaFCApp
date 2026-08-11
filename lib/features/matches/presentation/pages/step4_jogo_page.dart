@@ -33,8 +33,7 @@ class _Step4State extends ConsumerState<Step4JogoPage> {
   bool get _isAdmin {
     final acc = ref.read(accountStoreProvider).activeAccount;
     final gid = acc?.activeGroupId ?? '';
-    return (acc?.isAdmin ?? false) ||
-        (gid.isNotEmpty && (acc?.isGroupAdmin(gid) ?? false));
+    return gid.isNotEmpty && (acc?.isGroupAdmin(gid) ?? false);
   }
 
   void _resetGoalForm() {

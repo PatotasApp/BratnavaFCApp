@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/datasources/calendar_remote_datasource.dart';
@@ -47,7 +47,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     // O jogador manda no grupo: `activeGroupId` da conta pode apontar
     // para uma patota sem jogador nosso, e aí toda rota por grupo
     // responde 403. Ver dashboard_page para o diagnóstico completo.
-    return player?.groupId ?? acc?.activeGroupId ?? '';
+    return acc?.activeGroupId ?? player?.groupId ?? '';
   }
 
   bool get _isAdmin {
@@ -313,7 +313,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
-    final resolvedId = activePlayer?.groupId ?? account?.activeGroupId ?? '';
+    final resolvedId = account?.activeGroupId ?? activePlayer?.groupId ?? '';
 
     // Re-busca quando o grupo resolve (bootstrap async) ou troca de conta.
     if (resolvedId.isNotEmpty &&
@@ -445,266 +445,60 @@ class _CalendarHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.lightText,
-            AppColors.darkCard,
-            AppColors.lightText
+    return AppPageHeader(
+      title: 'Calendário',
+      subtitle: loading ? 'Carregando calendário...' : title,
+      icon: Icons.calendar_month_rounded,
+      footer: Column(
+        children: [
+          if (isAdmin) ...[
+            AppPageHeaderActionBar(
+              actions: [
+                AppPageHeaderButton(
+                  label: 'Categorias',
+                  icon: Icons.tune_rounded,
+                  onPressed: onCategories,
+                ),
+                AppPageHeaderButton(
+                  label: 'Novo evento',
+                  icon: Icons.add_rounded,
+                  tone: AppPageHeaderButtonTone.primary,
+                  onPressed: onNew,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
           ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          child: Column(
+          Row(
             children: [
-              // Row 1: ícone + título + ações admin
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () {
-                      if (context.canPop()) {
-                        context.pop();
-                      } else {
-                        context.go('/app');
-                      }
-                    },
-                    tooltip: 'Voltar',
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppColors.onDark.withAlpha(20),
-                      foregroundColor: AppColors.onDark,
-                      side: BorderSide(color: AppColors.onDark.withAlpha(40)),
-                    ),
-                    icon: const Icon(Icons.arrow_back_rounded),
-                  ),
-                  const SizedBox(width: 4),
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.onDark.withValues(alpha: .1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: AppColors.onDark.withValues(alpha: .2)),
-                    ),
-                    child: const Icon(Icons.calendar_month_rounded,
-                        size: 20, color: AppColors.onDark),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Calendário',
-                            style: TextStyle(
-                              color: AppColors.onDark,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w900,
-                            )),
-                        loading
-                            ? Row(children: [
-                                const SizedBox(
-                                  width: 10,
-                                  height: 10,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 1.5,
-                                    color: AppColors.onDark54,
-                                  ),
-                                ),
-                                const SizedBox(width: 5),
-                                Text('Carregando...',
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        color: AppColors.onDark
-                                            .withValues(alpha: .5))),
-                              ])
-                            : Text(
-                                title,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.onDark.withValues(alpha: .5),
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                      ],
-                    ),
-                  ),
-                  if (isAdmin) ...[
-                    // Categorias
-                    _HdrBtn(
-                      icon: Icons.tune_rounded,
-                      onTap: onCategories,
-                      tooltip: 'Categorias',
-                    ),
-                    const SizedBox(width: 6),
-                    // Novo evento
-                    GestureDetector(
-                      onTap: onNew,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: AppColors.onDark,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.add,
-                                size: 14, color: AppColors.lightText),
-                            SizedBox(width: 4),
-                            Text('Evento',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.lightText,
-                                )),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
+              IconButton(
+                tooltip: 'Período anterior',
+                onPressed: onPrev,
+                icon: const Icon(Icons.chevron_left_rounded),
               ),
-
-              const SizedBox(height: 12),
-
-              // Row 2: prev/next + hoje + view toggle
-              Row(
-                children: [
-                  // Prev
-                  _HdrBtn(icon: Icons.chevron_left_rounded, onTap: onPrev),
-                  const SizedBox(width: 6),
-                  // Next
-                  _HdrBtn(icon: Icons.chevron_right_rounded, onTap: onNext),
-                  const SizedBox(width: 6),
-                  // Hoje
-                  GestureDetector(
-                    onTap: onToday,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: AppColors.onDark.withValues(alpha: .1),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                            color: AppColors.onDark.withValues(alpha: .2)),
-                      ),
-                      child: Text('Hoje',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.onDark.withValues(alpha: .9),
-                          )),
-                    ),
-                  ),
-                  const Spacer(),
-                  // View toggle
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                          color: AppColors.onDark.withValues(alpha: .2)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Ordem e nomes seguem o Segmented do protótipo:
-                        // "Diário · Semanal · Mensal", do menor período ao maior.
-                        _ViewBtn(
-                            label: 'Diário',
-                            mode: _ViewMode.day,
-                            current: view,
-                            onTap: onView),
-                        _ViewBtn(
-                            label: 'Semanal',
-                            mode: _ViewMode.week,
-                            current: view,
-                            onTap: onView),
-                        _ViewBtn(
-                            label: 'Mensal',
-                            mode: _ViewMode.month,
-                            current: view,
-                            onTap: onView),
-                      ],
-                    ),
-                  ),
-                ],
+              IconButton(
+                tooltip: 'Próximo período',
+                onPressed: onNext,
+                icon: const Icon(Icons.chevron_right_rounded),
               ),
+              TextButton(onPressed: onToday, child: const Text('Hoje')),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HdrBtn extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  final String? tooltip;
-  const _HdrBtn({required this.icon, required this.onTap, this.tooltip});
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip ?? '',
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: AppColors.onDark.withValues(alpha: .1),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.onDark.withValues(alpha: .2)),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<_ViewMode>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: _ViewMode.day, label: Text('Diário')),
+                ButtonSegment(value: _ViewMode.week, label: Text('Semanal')),
+                ButtonSegment(value: _ViewMode.month, label: Text('Mensal')),
+              ],
+              selected: {view},
+              onSelectionChanged: (selection) => onView(selection.first),
+            ),
           ),
-          child: Icon(icon, size: 18, color: AppColors.onDark),
-        ),
-      ),
-    );
-  }
-}
-
-class _ViewBtn extends StatelessWidget {
-  final String label;
-  final _ViewMode mode;
-  final _ViewMode current;
-  final void Function(_ViewMode) onTap;
-
-  const _ViewBtn({
-    required this.label,
-    required this.mode,
-    required this.current,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final selected = mode == current;
-    return GestureDetector(
-      onTap: () => onTap(mode),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.onDark : AppColors.transparent,
-          borderRadius: BorderRadius.circular(9),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: selected
-                ? AppColors.lightText
-                : AppColors.onDark.withValues(alpha: .8),
-          ),
-        ),
+        ],
       ),
     );
   }

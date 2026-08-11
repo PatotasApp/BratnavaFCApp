@@ -13,8 +13,11 @@ import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
+import '../../../../shared/presentation/widgets/avatar_widget.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
+import '../../../../shared/presentation/widgets/user_profile_link.dart';
 
 extension _FirstOrNullExt<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
@@ -28,6 +31,7 @@ class _PlayerDto {
   final String id;
   final String? userId;
   final String? userName;
+  final String? photoUrl;
   final String name;
   final int skillPoints;
   final bool isGoalkeeper;
@@ -43,6 +47,7 @@ class _PlayerDto {
     required this.id,
     this.userId,
     this.userName,
+    this.photoUrl,
     required this.name,
     required this.skillPoints,
     required this.isGoalkeeper,
@@ -68,6 +73,7 @@ class _PlayerDto {
         id: j['id'] as String? ?? '',
         userId: j['userId'] as String?,
         userName: j['userName'] as String?,
+        photoUrl: j['photoUrl'] as String?,
         name: j['name'] as String? ?? '',
         skillPoints: j['skillPoints'] as int? ?? 0,
         isGoalkeeper: j['isGoalkeeper'] as bool? ?? false,
@@ -88,6 +94,7 @@ String _normId(String? id) =>
 class _GroupDto {
   final String id;
   final String name;
+  final String? logoUrl;
   final List<String> adminIds;
 
   /// Vem no mesmo payload que `adminIds` — é assim que o site monta a lista de
@@ -102,6 +109,7 @@ class _GroupDto {
   const _GroupDto({
     required this.id,
     required this.name,
+    this.logoUrl,
     required this.adminIds,
     required this.financeiroIds,
     required this.players,
@@ -111,6 +119,7 @@ class _GroupDto {
   factory _GroupDto.fromJson(Map<String, dynamic> j) => _GroupDto(
         id: j['id'] as String? ?? '',
         name: j['name'] as String? ?? '',
+        logoUrl: j['logoUrl'] as String?,
         adminIds: List<String>.from(j['adminIds'] as List? ?? const []),
         financeiroIds:
             List<String>.from(j['financeiroIds'] as List? ?? const []),
@@ -258,6 +267,14 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
   bool _isGroupAdmin(String groupId) {
     final account = ref.read(accountStoreProvider).activeAccount;
     if (account == null) return false;
+
+    // Depois que o detalhe da patota carregou, a lista de vínculos do próprio
+    // grupo é a fonte autoritativa. Isso também impede que um papel de
+    // plataforma (ou um cache do grupo anterior) libere edição nesta tela.
+    final group = _group;
+    if (group != null && _sameId(group.id, groupId)) {
+      return group.adminIds.any((id) => _sameId(id, account.userId));
+    }
     return account.isGroupAdmin(groupId);
   }
 
@@ -269,15 +286,14 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     // e quem cuida disso é o financeiro — administrar a patota (marcar partida,
     // montar time, editar jogador) não dá acesso a quem está devendo.
     // Admin global também não entra: o papel é operacional, não financeiro.
-    if (account.isGroupFinanceiro(groupId)) return true;
-
-    // A conta guarda o papel a partir de `refreshMyGroupRoles`, que depende de
-    // uma chamada extra ter dado certo. O payload da patota traz a lista
-    // autoritativa de financeiros e já está carregado aqui — se o meu userId
-    // está nela, eu sou financeiro, independentemente daquela chamada.
+    // O payload da patota traz a lista autoritativa de financeiros. Quando ele
+    // já está disponível, inclusive uma resposta negativa deve prevalecer
+    // sobre flags antigos ou papéis de plataforma.
     final group = _group;
-    if (group == null || !_sameId(group.id, groupId)) return false;
-    return group.financeiroIds.any((id) => _sameId(id, account.userId));
+    if (group != null && _sameId(group.id, groupId)) {
+      return group.financeiroIds.any((id) => _sameId(id, account.userId));
+    }
+    return account.isGroupFinanceiro(groupId);
   }
 
   static bool _sameId(String a, String b) {
@@ -377,8 +393,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
   List<_PlayerDto> get _inactivePlayers {
     final account = ref.read(accountStoreProvider).activeAccount;
     if (account == null) return [];
-    final isAdminHere = account.isAdmin ||
-        (_expandedGroupId != null && account.isGroupAdmin(_expandedGroupId!));
+    final isAdminHere =
+        _expandedGroupId != null && account.isGroupAdmin(_expandedGroupId!);
     if (!isAdminHere) return [];
     return _group?.players.where((p) => p.status != 1).toList() ?? [];
   }
@@ -454,6 +470,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
       _groupLoading = true;
       _groupError = null;
       _group = null;
+      _paymentMap = {};
     });
 
     try {
@@ -477,15 +494,15 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
   /// porque é o papel mais específico — quem acumula os dois aparece como
   /// Financeiro, igual ao protótipo (Maria é "Financeiro", não "Admin").
   /// Chaveado por userId normalizado — ver [_normId].
-  Map<String, String> _roleLabels() {
-    final labels = <String, String>{};
+  Map<String, List<String>> _roleLabels() {
+    final labels = <String, List<String>>{};
     for (final id in _group?.adminIds ?? const <String>[]) {
       final key = _normId(id);
-      if (key.isNotEmpty) labels[key] = 'Admin';
+      if (key.isNotEmpty) (labels[key] ??= <String>[]).add('Admin');
     }
     for (final id in _group?.financeiroIds ?? const <String>[]) {
       final key = _normId(id);
-      if (key.isNotEmpty) labels[key] = 'Financeiro';
+      if (key.isNotEmpty) (labels[key] ??= <String>[]).add('Financeiro');
     }
     return labels;
   }
@@ -643,8 +660,12 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Garante rebuild quando activeGroupId muda (troca de patota na topbar)
-    ref.watch(accountStoreProvider);
+    // Garante rebuild quando a patota ativa ou suas permissões mudam.
+    final account = ref.watch(accountStoreProvider).activeAccount;
+    final activeGroupId = account?.activeGroupId ?? _expandedGroupId;
+    final canConfigure = activeGroupId != null &&
+        activeGroupId.isNotEmpty &&
+        _isGroupAdmin(activeGroupId);
     final activeGroupName = _group?.name ??
         (_myGroups.isNotEmpty ? _myGroups.first['groupName'] : null);
 
@@ -654,8 +675,10 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
         children: [
           _GroupsHeader(
             groupName: activeGroupName,
-            onSettings:
-                _myGroups.isEmpty ? null : () => context.push('/app/settings'),
+            logoUrl: _group?.logoUrl,
+            onSettings: canConfigure && _myGroups.isNotEmpty
+                ? () => context.push('/app/settings')
+                : null,
           ),
           Expanded(
             child: SingleChildScrollView(
@@ -797,6 +820,14 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                         strokeWidth: 2,
                         color: AppColors.onDark70,
                       ),
+                    )
+                  else if (_group?.logoUrl?.trim().isNotEmpty == true)
+                    AvatarWidget(
+                      name: groupName,
+                      photoUrl: _group!.logoUrl,
+                      size: 50,
+                      fit: BoxFit.cover,
+                      borderRadius: 16,
                     )
                   else
                     _GroupAvatar(
@@ -978,52 +1009,38 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
 
 class _GroupsHeader extends StatelessWidget {
   final String? groupName;
+  final String? logoUrl;
   final VoidCallback? onSettings;
 
   const _GroupsHeader({
     required this.groupName,
+    required this.logoUrl,
     required this.onSettings,
   });
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      height: 72,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
-        ),
+    return AppPageHeader.main(
+      title: 'Minha patota',
+      subtitle: groupName?.isNotEmpty == true
+          ? groupName!
+          : 'Organize seus jogadores',
+      icon: Icons.groups_outlined,
+      iconWidget: AvatarWidget(
+        name: groupName ?? 'Patota',
+        photoUrl: logoUrl,
+        size: 42,
+        borderRadius: 13,
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Minha patota', style: theme.textTheme.titleLarge),
-                const SizedBox(height: 2),
-                Text(
-                  groupName?.isNotEmpty == true
-                      ? groupName!
-                      : 'Organize seus jogadores',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: onSettings,
-            tooltip: 'Configurações da patota',
-            icon: const Icon(Icons.settings_outlined),
-          ),
-        ],
-      ),
+      actions: onSettings == null
+          ? const []
+          : [
+              AppPageHeaderAction(
+                onPressed: onSettings,
+                tooltip: 'Configurações da patota',
+                icon: Icons.settings_outlined,
+              ),
+            ],
     );
   }
 }
@@ -1481,7 +1498,7 @@ class _GroupContent extends StatefulWidget {
   final void Function(_PlayerDto) onEditRatings;
 
   /// userId -> rótulo do papel ("Admin" / "Financeiro").
-  final Map<String, String> roleLabels;
+  final Map<String, List<String>> roleLabels;
 
   const _GroupContent({
     required this.group,
@@ -1615,32 +1632,35 @@ class _GroupContentState extends State<_GroupContent> {
 
         // ── Tab content ──────────────────────────────────────────────
         if (_tab == 0 || !isAdminHere) ...[
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _PlayerFilterChip(
+          Row(
+            children: [
+              Expanded(
+                child: _PlayerFilterChip(
                   label: 'Mensalistas',
                   count: activePlayers.length,
                   selected: _playerFilter == 0,
                   onTap: () => setState(() => _playerFilter = 0),
                 ),
-                const SizedBox(width: 7),
-                _PlayerFilterChip(
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _PlayerFilterChip(
                   label: 'Convidados',
                   count: guestPlayers.length,
                   selected: _playerFilter == 1,
                   onTap: () => setState(() => _playerFilter = 1),
                 ),
-                const SizedBox(width: 7),
-                _PlayerFilterChip(
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _PlayerFilterChip(
                   label: 'Inativos',
                   count: inactivePlayers.length,
                   selected: _playerFilter == 2,
                   onTap: () => setState(() => _playerFilter = 2),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           _FilteredPlayerSection(
@@ -1699,18 +1719,26 @@ class _PlayerFilterChip extends StatelessWidget {
         // A versão anterior usava labelLarge (14px) com padding 14, ficava larga
         // demais e o terceiro chip ("Inativos") saía da tela.
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 44),
+          constraints: const BoxConstraints(minHeight: 40),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Center(
-              child: Text(
-                '$label · $count',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: selected
-                      ? theme.colorScheme.onPrimary
-                      : theme.colorScheme.onSurfaceVariant,
+              // A contagem é informação funcional e nunca pode virar
+              // reticências. Em larguras menores, reduzimos suavemente o
+              // conjunto completo em vez de cortar justamente o número.
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  '$label · $count',
+                  maxLines: 1,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: selected
+                        ? theme.colorScheme.onPrimary
+                        : theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ),
@@ -1733,7 +1761,7 @@ class _FilteredPlayerSection extends StatelessWidget {
   final GroupIcons icons;
   final bool isDark;
   final void Function(_PlayerDto) onEdit;
-  final Map<String, String> roleLabels;
+  final Map<String, List<String>> roleLabels;
 
   const _FilteredPlayerSection({
     required this.filter,
@@ -1985,7 +2013,7 @@ class _RatingsTab extends StatefulWidget {
 
 class _RatingsTabState extends State<_RatingsTab> {
   // 0=Overall, 1=Ataque, 2=Defesa, 3=Físico
-  int _sortBy = 0;
+  final int _sortBy = 0;
 
   double? _sortValue(_PlayerDto p) {
     switch (_sortBy) {
@@ -2134,23 +2162,33 @@ class _RatingListRow extends StatelessWidget {
         padding: PrototypeLayout.listRowPadding,
         child: Row(
           children: [
-            Container(
-              width: PrototypeLayout.avatarSize,
-              height: PrototypeLayout.avatarSize,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppColors.accentBgOf(theme.brightness),
-                borderRadius:
-                    BorderRadius.circular(PrototypeLayout.avatarRadius),
-              ),
-              child: Text(
-                _initials(player.name),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.accentTextOf(theme.brightness),
-                ),
-              ),
+            UserProfileLink(
+              userId: player.userId,
+              child: player.photoUrl?.trim().isNotEmpty == true
+                  ? AvatarWidget(
+                      name: player.name,
+                      photoUrl: player.photoUrl,
+                      size: PrototypeLayout.avatarSize,
+                      borderRadius: 8,
+                    )
+                  : Container(
+                      width: PrototypeLayout.avatarSize,
+                      height: PrototypeLayout.avatarSize,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: AppColors.accentBgOf(theme.brightness),
+                        borderRadius:
+                            BorderRadius.circular(PrototypeLayout.avatarRadius),
+                      ),
+                      child: Text(
+                        _initials(player.name),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.accentTextOf(theme.brightness),
+                        ),
+                      ),
+                    ),
             ),
             const SizedBox(width: PrototypeLayout.rowGap),
             Expanded(
@@ -2158,14 +2196,17 @@ class _RatingListRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    player.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: isDark ? AppColors.onDark : AppColors.lightText,
+                  UserProfileLink(
+                    userId: player.userId,
+                    child: Text(
+                      player.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? AppColors.onDark : AppColors.lightText,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -2240,7 +2281,7 @@ class _PlayerSection extends StatelessWidget {
   final void Function(_PlayerDto) onEdit;
 
   /// Ação à direita do título — `action="Adicionar"` no protótipo.
-  final Map<String, String> roleLabels;
+  final Map<String, List<String>> roleLabels;
 
   const _PlayerSection({
     required this.label,
@@ -2335,7 +2376,7 @@ class _PlayerSection extends StatelessWidget {
                         activePlayerId: activePlayerId,
                         isAdminHere: isAdminHere,
                         pmt: isFinanceiroHere ? paymentMap[p.id] : null,
-                        roleLabel: roleLabels[_normId(p.userId)],
+                        roles: roleLabels[_normId(p.userId)] ?? const [],
                         icons: icons,
                         dim: dim,
                         isDark: isDark,
@@ -2358,9 +2399,9 @@ class _PlayerCard extends StatelessWidget {
   final bool isAdminHere;
   final _PaymentBadge? pmt; // null = sem permissão ou sem dados
 
-  /// "Admin" / "Financeiro" — nulo para jogador comum. O protótipo mostra o
-  /// papel como chip ao lado do nome; antes só existia o selo "Você".
-  final String? roleLabel;
+  /// Papéis do jogador na patota ("Admin"/"Financeiro"). Pode ter os dois —
+  /// cada um vira um chip ao lado do nome (igual à aba "Equipe").
+  final List<String> roles;
   final GroupIcons icons;
   final bool dim;
   final bool isDark;
@@ -2374,14 +2415,14 @@ class _PlayerCard extends StatelessWidget {
     required this.isDark,
     required this.onEdit,
     this.pmt,
-    this.roleLabel,
+    this.roles = const [],
     this.icons = GroupIcons.defaults,
   });
 
   @override
   Widget build(BuildContext context) {
     final isMe = player.id == activePlayerId;
-    final canEdit = isAdminHere || isMe;
+    final canEdit = isAdminHere;
 
     final parts = player.name.trim().split(RegExp(r'\s+'));
     final initials = parts.take(2).map((w) => w[0]).join().toUpperCase();
@@ -2434,22 +2475,32 @@ class _PlayerCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: avatarBg,
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    initials,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: avatarFg,
-                    ),
-                  ),
+                UserProfileLink(
+                  userId: player.userId,
+                  child: player.photoUrl?.trim().isNotEmpty == true
+                      ? AvatarWidget(
+                          name: player.name,
+                          photoUrl: player.photoUrl,
+                          size: 40,
+                          borderRadius: 8,
+                        )
+                      : Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: avatarBg,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            initials,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: avatarFg,
+                            ),
+                          ),
+                        ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -2463,16 +2514,19 @@ class _PlayerCard extends StatelessWidget {
                       Row(
                         children: [
                           Flexible(
-                            child: Text(
-                              player.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: isDark
-                                    ? AppColors.onDark
-                                    : AppColors.lightText,
+                            child: UserProfileLink(
+                              userId: player.userId,
+                              child: Text(
+                                player.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark
+                                      ? AppColors.onDark
+                                      : AppColors.lightText,
+                                ),
                               ),
                             ),
                           ),
@@ -2486,28 +2540,35 @@ class _PlayerCard extends StatelessWidget {
                                 ? AppColors.darkTextSecondary
                                 : AppColors.lightTextSecondary,
                           ),
-                          if (roleLabel != null) ...[
+                          // Mesmo estilo da aba "Equipe" em Configurações:
+                          // Adm. = azul (info), Fin. = verde (emerald500).
+                          // Um chip por papel — mostra os dois se for ambos.
+                          for (final role in roles) ...[
                             const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? AppColors.neutralBackground
-                                    : AppColors.neutralBackgroundLight,
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                roleLabel!,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: isDark
-                                      ? AppColors.darkTextSecondary
-                                      : AppColors.lightTextSecondary,
+                            Builder(builder: (_) {
+                              final isAdm = role == 'Admin';
+                              final color =
+                                  isAdm ? AppColors.info : AppColors.emerald500;
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 5, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: color.withAlpha(30),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border:
+                                      Border.all(color: color.withAlpha(70)),
                                 ),
-                              ),
-                            ),
+                                child: Text(
+                                  isAdm ? 'Adm.' : 'Fin.',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w600,
+                                    color: color,
+                                    height: 1.2,
+                                  ),
+                                ),
+                              );
+                            }),
                           ],
                         ],
                       ),

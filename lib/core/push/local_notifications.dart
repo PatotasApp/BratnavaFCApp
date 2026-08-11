@@ -23,12 +23,12 @@ const _kCategoryEventPoll = 'EVENT_POLL';
 // ─── Canais Android ───────────────────────────────────────────────────────────
 
 const _channelId = 'bratnavafc_high';
-const _channelName = 'BratnavaFC';
-const _channelDesc = 'Notificações do BratnavaFC';
+const _channelName = 'PatotasApp';
+const _channelDesc = 'Notificações do PatotasApp';
 
 const _inviteChannelId = 'bratnavafc_match_invite';
-const _inviteChannelName = 'Convites de Partida';
-const _inviteChannelDesc = 'Convites para participar de partidas';
+const _inviteChannelName = 'Partidas';
+const _inviteChannelDesc = 'Convites e confirmações de presença em partidas';
 
 const _pollChannelId = 'bratnavafc_event_poll';
 const _pollChannelName = 'Votações de Evento';
@@ -52,15 +52,20 @@ Future<void> onNotificationActionBackground(
     final groupId = parts[0];
     final matchId = parts[1];
 
-    final accessToken = await _readAccessToken();
-    if (accessToken == null) return;
+    final session = await _readStoredSession();
+    if (session == null) return;
 
     final isAccept = actionId == _kActionAccept;
     final path = isAccept
         ? ApiConstants.matchMyInviteAccept(groupId, matchId)
         : ApiConstants.matchMyInviteReject(groupId, matchId);
 
-    await _callApi('PATCH', path, null, accessToken);
+    final succeeded = await _callAuthorizedApi(
+      method: 'PATCH',
+      path: path,
+      session: session,
+    );
+    if (succeeded) await _cancelHandledNotification(response.id);
     return;
   }
 
@@ -84,44 +89,170 @@ Future<void> onNotificationActionBackground(
     };
     if (optionId == null) return;
 
-    final accessToken = await _readAccessToken();
-    if (accessToken == null) return;
+    final session = await _readStoredSession();
+    if (session == null) return;
 
     final path = ApiConstants.castVote(groupId, pollId);
     final body = jsonEncode({
       'optionIds': [optionId]
     });
-    await _callApi('POST', path, body, accessToken);
+    final succeeded = await _callAuthorizedApi(
+      method: 'POST',
+      path: path,
+      body: body,
+      session: session,
+    );
+    if (succeeded) await _cancelHandledNotification(response.id);
   }
 }
 
 // ─── Helpers internos ─────────────────────────────────────────────────────────
 
-Future<String?> _readAccessToken() async {
+class _StoredPushSession {
+  const _StoredPushSession({
+    required this.preferences,
+    required this.accounts,
+    required this.accountIndex,
+  });
+
+  final SharedPreferences preferences;
+  final List<Map<String, dynamic>> accounts;
+  final int accountIndex;
+
+  Map<String, dynamic> get account => accounts[accountIndex];
+  String? get accessToken => account['accessToken'] as String?;
+  String? get refreshToken => account['refreshToken'] as String?;
+
+  Future<void> updateTokens(String accessToken, String refreshToken) async {
+    account['accessToken'] = accessToken;
+    account['refreshToken'] = refreshToken;
+    await preferences.setString(
+      AppConstants.accountsStorageKey,
+      jsonEncode(accounts),
+    );
+  }
+}
+
+class _PushHttpResponse {
+  const _PushHttpResponse(this.statusCode, this.body);
+
+  final int statusCode;
+  final String body;
+
+  bool get succeeded => statusCode >= 200 && statusCode < 300;
+}
+
+Future<_StoredPushSession?> _readStoredSession() async {
   try {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.reload();
     final raw = prefs.getString(AppConstants.accountsStorageKey);
     final activeId = prefs.getString(AppConstants.activeAccountKey);
     if (raw == null) return null;
 
-    final accounts = jsonDecode(raw) as List;
-    final account = accounts.firstWhere(
-      (a) => a['userId'] == activeId,
-      orElse: () => accounts.first,
-    ) as Map<String, dynamic>;
-    return account['accessToken'] as String?;
+    final decoded = jsonDecode(raw);
+    if (decoded is! List || decoded.isEmpty) return null;
+    final accounts = decoded
+        .whereType<Map>()
+        .map((item) => item.map(
+              (key, value) => MapEntry(key.toString(), value),
+            ))
+        .toList();
+    if (accounts.isEmpty) return null;
+
+    final activeIndex = accounts.indexWhere(
+      (account) => account['userId']?.toString() == activeId,
+    );
+    final session = _StoredPushSession(
+      preferences: prefs,
+      accounts: accounts,
+      accountIndex: activeIndex >= 0 ? activeIndex : 0,
+    );
+    if (session.accessToken == null || session.accessToken!.isEmpty) {
+      return null;
+    }
+    return session;
   } catch (_) {
     return null;
   }
 }
 
-Future<void> _callApi(
-    String method, String path, String? body, String token) async {
+Future<bool> _callAuthorizedApi({
+  required String method,
+  required String path,
+  required _StoredPushSession session,
+  String? body,
+}) async {
+  var response = await _callApi(method, path, body, session.accessToken!);
+
+  if (response?.statusCode == HttpStatus.unauthorized) {
+    final refreshed = await _refreshPushSession(session);
+    if (refreshed) {
+      response = await _callApi(method, path, body, session.accessToken!);
+    }
+  }
+
+  final succeeded = response?.succeeded ?? false;
+  // ignore: avoid_print
+  print(
+    '[Push Action] $method $path: '
+    '${succeeded ? 'success' : 'failure'} '
+    '(HTTP ${response?.statusCode ?? 'no response'})',
+  );
+  return succeeded;
+}
+
+Future<bool> _refreshPushSession(_StoredPushSession session) async {
+  final refreshToken = session.refreshToken;
+  if (refreshToken == null || refreshToken.isEmpty) return false;
+
+  final response = await _callApi(
+    'POST',
+    ApiConstants.refreshToken,
+    jsonEncode({'refreshToken': refreshToken}),
+    '',
+  );
+  if (response == null || !response.succeeded) return false;
+
   try {
-    final client = HttpClient();
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) return false;
+    final envelope = decoded.map(
+      (key, value) => MapEntry(key.toString(), value),
+    );
+    final rawData = envelope['data'] ?? envelope;
+    if (rawData is! Map) return false;
+    final data = rawData.map(
+      (key, value) => MapEntry(key.toString(), value),
+    );
+    final access =
+        (data['token'] ?? data['accessToken'] ?? data['jwt'])?.toString();
+    final refresh = (data['refreshToken'] ?? data['refresh'])?.toString();
+    if (access == null ||
+        access.isEmpty ||
+        refresh == null ||
+        refresh.isEmpty) {
+      return false;
+    }
+    await session.updateTokens(access, refresh);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+Future<_PushHttpResponse?> _callApi(
+    String method, String path, String? body, String token) async {
+  HttpClient? client;
+  try {
+    client = HttpClient()
+      ..connectionTimeout = AppConstants.connectTimeout
+      ..idleTimeout = AppConstants.receiveTimeout;
     final uri = Uri.parse('${AppConstants.apiUrl}$path');
     final request = await client.openUrl(method, uri);
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    if (token.isNotEmpty) {
+      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    }
     request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
     if (body != null) {
       final bytes = utf8.encode(body);
@@ -131,13 +262,20 @@ Future<void> _callApi(
       request.contentLength = 0;
     }
     final resp = await request.close();
-    client.close();
-    // ignore: avoid_print
-    print('[Push Action] $method $path — HTTP ${resp.statusCode}');
+    final responseBody = await utf8.decoder.bind(resp).join();
+    return _PushHttpResponse(resp.statusCode, responseBody);
   } catch (e) {
     // ignore: avoid_print
     print('[Push Action] Erro ao chamar API: $e');
+    return null;
+  } finally {
+    client?.close(force: true);
   }
+}
+
+Future<void> _cancelHandledNotification(int? notificationId) async {
+  if (notificationId == null) return;
+  await LocalNotifications.plugin.cancel(notificationId);
 }
 
 // ─── Classe principal ─────────────────────────────────────────────────────────
@@ -156,6 +294,9 @@ class LocalNotifications {
 
   /// Callback chamado quando o usuário toca no corpo do lembrete de poll de evento.
   static void Function(String groupId, String pollId)? onEventPollTapped;
+
+  /// Callback para notificações locais comuns exibidas com o app aberto.
+  static void Function(Map<String, dynamic> data)? onNotificationTapped;
 
   static FlutterLocalNotificationsPlugin get plugin => _plugin;
 
@@ -183,6 +324,19 @@ class LocalNotifications {
         // Convite de partida: groupId::matchId
         onMatchInviteTapped?.call(parts[0], parts[1]);
       }
+    } else {
+      final payload = response.payload;
+      if (payload == null || payload.isEmpty) return;
+      try {
+        final decoded = jsonDecode(payload);
+        if (decoded is Map) {
+          onNotificationTapped?.call(
+            decoded.map((key, value) => MapEntry(key.toString(), value)),
+          );
+        }
+      } catch (_) {
+        // Payloads de versões antigas podem não estar em JSON.
+      }
     }
   }
 
@@ -193,7 +347,7 @@ class LocalNotifications {
 
     const android = AndroidInitializationSettings('@drawable/ic_notification');
 
-    // Categoria iOS para convites de partida com botões SIM / NÃO
+    // Categoria iOS para convites de partida com ações de presença.
     final ios = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
@@ -202,10 +356,10 @@ class LocalNotifications {
         DarwinNotificationCategory(
           _kCategoryMatchInvite,
           actions: [
-            DarwinNotificationAction.plain(_kActionAccept, 'SIM ✅'),
+            DarwinNotificationAction.plain(_kActionAccept, 'Confirmar'),
             DarwinNotificationAction.plain(
               _kActionReject,
-              'NÃO ❌',
+              'Não vou',
               options: <DarwinNotificationActionOption>{
                 DarwinNotificationActionOption.destructive,
               },
@@ -275,6 +429,7 @@ class LocalNotifications {
   static Future<void> show({
     required String title,
     required String body,
+    Map<String, dynamic>? data,
   }) async {
     const androidDetails = AndroidNotificationDetails(
       _channelId,
@@ -296,6 +451,7 @@ class LocalNotifications {
       title,
       body,
       const NotificationDetails(android: androidDetails, iOS: iosDetails),
+      payload: data == null ? null : jsonEncode(data),
     );
   }
 
@@ -316,7 +472,7 @@ class LocalNotifications {
     final payload =
         '$groupId::$pollId::$optionSimId::$optionTalvezId::$optionNaoId';
 
-    final androidDetails = AndroidNotificationDetails(
+    const androidDetails = AndroidNotificationDetails(
       _pollChannelId,
       _pollChannelName,
       channelDescription: _pollChannelDesc,
@@ -324,24 +480,24 @@ class LocalNotifications {
       priority: Priority.high,
       playSound: true,
       icon: '@drawable/ic_notification',
-      actions: const [
+      actions: [
         AndroidNotificationAction(
           _kPollActionSim,
           'Sim ✅',
           showsUserInterface: false,
-          cancelNotification: true,
+          cancelNotification: false,
         ),
         AndroidNotificationAction(
           _kPollActionTalvez,
           'Talvez 🤷',
           showsUserInterface: false,
-          cancelNotification: true,
+          cancelNotification: false,
         ),
         AndroidNotificationAction(
           _kPollActionNao,
           'Não ❌',
           showsUserInterface: false,
-          cancelNotification: true,
+          cancelNotification: false,
         ),
       ],
     );
@@ -356,12 +512,12 @@ class LocalNotifications {
       _nextId++,
       title,
       body,
-      NotificationDetails(android: androidDetails, iOS: iosDetails),
+      const NotificationDetails(android: androidDetails, iOS: iosDetails),
       payload: payload,
     );
   }
 
-  // ── Notificação de convite de partida com botões SIM / NÃO ─────────────────
+  // ── Notificação de convite de partida com ações de presença ────────────────
 
   static Future<void> showMatchInvite({
     required String title,
@@ -371,7 +527,7 @@ class LocalNotifications {
   }) async {
     final payload = '$groupId::$matchId';
 
-    final androidDetails = AndroidNotificationDetails(
+    const androidDetails = AndroidNotificationDetails(
       _inviteChannelId,
       _inviteChannelName,
       channelDescription: _inviteChannelDesc,
@@ -379,18 +535,18 @@ class LocalNotifications {
       priority: Priority.high,
       playSound: true,
       icon: '@drawable/ic_notification',
-      actions: const [
+      actions: [
         AndroidNotificationAction(
           _kActionAccept,
-          'SIM ✅',
+          'Confirmar',
           showsUserInterface: false,
-          cancelNotification: true,
+          cancelNotification: false,
         ),
         AndroidNotificationAction(
           _kActionReject,
-          'NÃO ❌',
+          'Não vou',
           showsUserInterface: false,
-          cancelNotification: true,
+          cancelNotification: false,
         ),
       ],
     );
@@ -405,7 +561,7 @@ class LocalNotifications {
       _nextId++,
       title,
       body,
-      NotificationDetails(android: androidDetails, iOS: iosDetails),
+      const NotificationDetails(android: androidDetails, iOS: iosDetails),
       payload: payload,
     );
   }

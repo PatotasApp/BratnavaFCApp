@@ -17,7 +17,6 @@ class ApiConstants {
   static String groupsByAdmin(String adminId) => '/api/Groups/admin/$adminId';
   static String groupsByFinanceiro(String finId) =>
       '/api/Groups/financeiro/$finId';
-  static String myGroupRoles(String groupId) => '/api/Groups/$groupId/my-roles';
 
   // Players
   static const String playersMe = '/api/Players/mine';
@@ -301,6 +300,7 @@ class ApiConstants {
 
   // Push Notifications
   static const String pushRegisterToken = '/api/push/register-token';
+  static const String pushUnregisterToken = '/api/push/register-token';
 
   // Notifications inbox
   static const String myNotifications = '/api/Notifications/mine';

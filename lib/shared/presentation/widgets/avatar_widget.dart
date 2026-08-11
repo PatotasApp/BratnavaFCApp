@@ -14,6 +14,7 @@ class AvatarWidget extends StatelessWidget {
   final double size;
   final String? photoUrl;
   final BoxFit fit;
+  final double? borderRadius;
 
   /// Mantém o visual antigo (círculo + gradiente). Usado onde o gradiente é
   /// intencional, como nos cards de destaque do God Mode.
@@ -25,6 +26,7 @@ class AvatarWidget extends StatelessWidget {
     this.size = PrototypeLayout.avatarSize,
     this.photoUrl,
     this.fit = BoxFit.cover,
+    this.borderRadius,
     this.gradient = false,
   });
 
@@ -34,6 +36,7 @@ class AvatarWidget extends StatelessWidget {
     this.size = PrototypeLayout.avatarSize,
     this.photoUrl,
     this.fit = BoxFit.cover,
+    this.borderRadius,
   }) : gradient = true;
 
   @override
@@ -45,8 +48,11 @@ class AvatarWidget extends StatelessWidget {
     if (resolvedPhotoUrl != null) {
       final radius = gradient
           ? size / 2
-          : (size * (PrototypeLayout.avatarRadius / PrototypeLayout.avatarSize))
-              .clamp(8.0, 18.0);
+          : borderRadius ??
+              (size *
+                      (PrototypeLayout.avatarRadius /
+                          PrototypeLayout.avatarSize))
+                  .clamp(8.0, 18.0);
       return ClipRRect(
         borderRadius: BorderRadius.circular(radius),
         child: Image.network(
@@ -58,6 +64,7 @@ class AvatarWidget extends StatelessWidget {
             name: name,
             size: size,
             gradient: gradient,
+            borderRadius: borderRadius,
           ),
         ),
       );
@@ -86,7 +93,7 @@ class AvatarWidget extends StatelessWidget {
     // Proporções do protótipo: 34px de lado, raio 12, fonte 11, peso 800.
     // O raio acompanha o tamanho para o avatar não ficar quadrado demais quando
     // usado grande (46) nem redondo demais quando pequeno (24).
-    final radius =
+    final radius = borderRadius ??
         (size * (PrototypeLayout.avatarRadius / PrototypeLayout.avatarSize))
             .clamp(8.0, 18.0);
 
@@ -129,14 +136,20 @@ class _InitialsAvatar extends StatelessWidget {
   final String name;
   final double size;
   final bool gradient;
+  final double? borderRadius;
 
-  const _InitialsAvatar(
-      {required this.name, required this.size, required this.gradient});
+  const _InitialsAvatar({
+    required this.name,
+    required this.size,
+    required this.gradient,
+    this.borderRadius,
+  });
 
   @override
   Widget build(BuildContext context) => AvatarWidget(
         name: name,
         size: size,
         gradient: gradient,
+        borderRadius: borderRadius,
       );
 }

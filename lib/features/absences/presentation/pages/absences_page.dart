@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/datasources/absences_remote_datasource.dart';
@@ -257,7 +257,7 @@ class _AbsencesPageState extends ConsumerState<AbsencesPage> {
     // O jogador manda no grupo: `activeGroupId` da conta pode apontar
     // para uma patota sem jogador nosso, e aí toda rota por grupo
     // responde 403. Ver dashboard_page para o diagnóstico completo.
-    final groupId = activePlayer?.groupId ?? account?.activeGroupId ?? '';
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId ?? '';
     final activePlayerId =
         account?.activePlayerId ?? activePlayer?.playerId ?? '';
 
@@ -467,119 +467,22 @@ class _Header extends StatelessWidget {
         ? 'Carregando...'
         : '$total ausência${total != 1 ? 's' : ''} ativa${total != 1 ? 's' : ''} ou futura${total != 1 ? 's' : ''}';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.slate900,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        children: [
-          Positioned.fill(child: CustomPaint(painter: _HeaderDotsPainter())),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    IconButton(
-                      onPressed: () {
-                        if (context.canPop()) {
-                          context.pop();
-                        } else {
-                          context.go('/app');
-                        }
-                      },
-                      tooltip: 'Voltar',
-                      style: IconButton.styleFrom(
-                        backgroundColor: AppColors.onDark.withAlpha(20),
-                        foregroundColor: AppColors.onDark,
-                        side: BorderSide(color: AppColors.onDark.withAlpha(40)),
-                      ),
-                      icon: const Icon(Icons.arrow_back_rounded),
-                    ),
-                    const SizedBox(width: 4),
-                    Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: AppColors.onDark.withAlpha(20),
-                        borderRadius: BorderRadius.circular(10),
-                        border:
-                            Border.all(color: AppColors.onDark.withAlpha(36)),
-                      ),
-                      child: const Icon(
-                        Icons.event_busy_outlined,
-                        color: AppColors.onDark,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Ausências',
-                            style: TextStyle(
-                              color: AppColors.onDark,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            subtitle,
-                            style: const TextStyle(
-                              color: AppColors.onDark60,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                FilledButton.icon(
-                  onPressed: onAddTap,
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Nova ausência'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.onDark,
-                    foregroundColor: AppColors.slate900,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 11,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+    return AppPageHeader(
+      title: 'Ausências',
+      subtitle: subtitle,
+      icon: Icons.event_busy_outlined,
+      footer: AppPageHeaderActionBar(
+        actions: [
+          AppPageHeaderButton(
+            label: 'Nova ausência',
+            icon: Icons.add_rounded,
+            tone: AppPageHeaderButtonTone.primary,
+            onPressed: onAddTap,
           ),
         ],
       ),
     );
   }
-}
-
-class _HeaderDotsPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = AppColors.onDark.withAlpha(12);
-    for (var x = 0.0; x < size.width; x += 22) {
-      for (var y = 0.0; y < size.height; y += 22) {
-        canvas.drawCircle(Offset(x, y), 1, paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _SectionTitle extends StatelessWidget {

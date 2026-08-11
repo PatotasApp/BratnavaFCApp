@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../domain/entities/history_match.dart';
@@ -48,7 +49,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
     // O jogador manda no grupo: `activeGroupId` da conta pode apontar
     // para uma patota sem jogador nosso, e aí toda rota por grupo
     // responde 403. Ver dashboard_page para o diagnóstico completo.
-    final groupId = activePlayer?.groupId ?? account?.activeGroupId;
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId;
     final playerId = account?.activePlayerId ?? activePlayer?.playerId;
     final filterPlayerId = _onlyMine ? playerId : null;
 
@@ -172,56 +173,10 @@ class _HistoryHeader extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final subtitle = loading
-        ? 'Carregando partidas'
-        : total == null
-            ? 'Histórico da patota'
-            : '$total partida${total == 1 ? '' : 's'}';
-
-    // O shell só coloca AppBar na aba Dashboard; as demais desenham a partir do
-    // topo absoluto. Sem somar o inset o conteúdo fica sob a status bar.
-    final topInset = MediaQuery.of(context).padding.top;
-    return Container(
-      height: 72 + topInset,
-      padding: EdgeInsets.fromLTRB(16, 12 + topInset, 16, 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
-        ),
-      ),
-      child: Row(
-        children: [
-          const PrototypeIconBox(icon: Icon(Icons.history_rounded)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Histórico', style: theme.textTheme.titleLarge),
-                const SizedBox(height: 2),
-                Text(subtitle, style: theme.textTheme.bodySmall),
-              ],
-            ),
-          ),
-          if (onRefresh != null)
-            IconButton(
-              tooltip: 'Atualizar',
-              onPressed: loading ? null : onRefresh,
-              icon: loading
-                  ? const SizedBox.square(
-                      dimension: 17,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.refresh_rounded),
-            ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const AppPageHeader.main(
+        title: 'Histórico',
+        icon: Icons.history_rounded,
+      );
 }
 
 class _HistoryFilter extends StatelessWidget {

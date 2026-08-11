@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../domain/entities/birthday_status.dart';
 import '../providers/birthday_provider.dart';
@@ -48,11 +48,16 @@ class BirthdayPage extends ConsumerWidget {
 
     if (groupId == null || groupId.isEmpty) {
       return Scaffold(
-        appBar: AppBar(
-          leading: const BackButton(),
-          title: const Text('Aniversários'),
+        body: const Column(
+          children: [
+            AppPageHeader(
+              title: 'Aniversários',
+              subtitle: 'Datas especiais dos jogadores da patota',
+              icon: Icons.cake_outlined,
+            ),
+            Expanded(child: _NoGroupState()),
+          ],
         ),
-        body: const _NoGroupState(),
       );
     }
 
@@ -65,11 +70,7 @@ class BirthdayPage extends ConsumerWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverToBoxAdapter(
-              child: _Header(
-                async: async,
-                onRefresh: () =>
-                    ref.invalidate(birthdayStatusProvider(groupId)),
-              ),
+              child: _Header(async: async),
             ),
             async.when(
               loading: () => const SliverToBoxAdapter(child: _SkeletonList()),
@@ -92,9 +93,8 @@ class BirthdayPage extends ConsumerWidget {
 
 class _Header extends StatelessWidget {
   final AsyncValue<List<BirthdayStatus>> async;
-  final VoidCallback onRefresh;
 
-  const _Header({required this.async, required this.onRefresh});
+  const _Header({required this.async});
 
   @override
   Widget build(BuildContext context) {
@@ -103,110 +103,12 @@ class _Header extends StatelessWidget {
     final withBd = players.where((p) => p.hasBirthday).length;
     final total = players.length;
 
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.lightText,
-            AppColors.darkCard,
-            AppColors.lightText
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-          child: Row(
-            children: [
-              IconButton(
-                onPressed: () {
-                  if (context.canPop()) {
-                    context.pop();
-                  } else {
-                    context.go('/app');
-                  }
-                },
-                tooltip: 'Voltar',
-                style: IconButton.styleFrom(
-                  backgroundColor: AppColors.onDark.withAlpha(20),
-                  foregroundColor: AppColors.onDark,
-                  side: BorderSide(color: AppColors.onDark.withAlpha(40)),
-                ),
-                icon: const Icon(Icons.arrow_back_rounded),
-              ),
-              const SizedBox(width: 4),
-              // Icon box
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: AppColors.onDark.withAlpha(25),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.onDark.withAlpha(50)),
-                ),
-                child: const Icon(Icons.cake_outlined,
-                    size: 26, color: AppColors.onDark),
-              ),
-              const SizedBox(width: 16),
-              // Title + subtitle
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Aniversários',
-                      style: TextStyle(
-                        color: AppColors.onDark,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      loading
-                          ? 'Carregando...'
-                          : '$withBd de $total com data cadastrada',
-                      style: TextStyle(
-                        color: AppColors.onDark.withAlpha(128),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Refresh button
-              TextButton.icon(
-                onPressed: loading ? null : onRefresh,
-                icon: loading
-                    ? const SizedBox(
-                        width: 13,
-                        height: 13,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 1.8, color: AppColors.onDark))
-                    : const Icon(Icons.refresh_rounded,
-                        size: 14, color: AppColors.onDark),
-                label: const Text('Atualizar',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.onDark)),
-                style: TextButton.styleFrom(
-                  backgroundColor: AppColors.onDark.withAlpha(25),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: AppColors.onDark.withAlpha(50))),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return AppPageHeader(
+      title: 'Aniversários',
+      subtitle: loading
+          ? 'Carregando aniversários...'
+          : '$withBd de $total jogadores com data cadastrada',
+      icon: Icons.cake_outlined,
     );
   }
 }

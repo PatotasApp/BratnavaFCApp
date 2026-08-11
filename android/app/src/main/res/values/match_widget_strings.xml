@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="match_widget_name">Partida da Patota</string>
+    <string name="match_widget_description">Próxima partida, placar ao vivo e resultado da patota ativa.</string>
+</resources>

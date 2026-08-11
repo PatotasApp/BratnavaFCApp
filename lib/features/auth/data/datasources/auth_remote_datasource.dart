@@ -45,7 +45,11 @@ class AuthRemoteDataSource {
         throw const AppException('ID do usuário não encontrado no token.');
       }
 
-      final roles = JwtHelper.getRoles(access);
+      // GodMode é uma função administrativa da plataforma/site e não existe
+      // no aplicativo. As permissões móveis são sempre as da patota ativa.
+      final roles = JwtHelper.getRoles(access)
+          .where((role) => role.trim().toLowerCase() != 'godmode')
+          .toList(growable: false);
       final payload = JwtHelper.decode(access) ?? {};
 
       // Tenta pegar nome/email do campo user (se vier), senão usa claims do JWT.
@@ -124,25 +128,6 @@ class AuthRemoteDataSource {
         'adminIds': extractIds(results[0]),
         'financeiroIds': extractIds(results[1]),
       };
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Verifica se o usuário logado é admin e/ou financeiro de um grupo específico.
-  ///
-  /// Devolve `null` em caso de falha — ver a justificativa em [fetchGroupRoles].
-  Future<({bool isAdmin, bool isFinanceiro})?> fetchMyGroupRoles(
-      String groupId) async {
-    try {
-      final res = await _dio.get(ApiConstants.myGroupRoles(groupId));
-      final data = (res.data as Map<String, dynamic>?)?['data']
-              as Map<String, dynamic>? ??
-          {};
-      return (
-        isAdmin: data['isAdmin'] == true,
-        isFinanceiro: data['isFinanceiro'] == true
-      );
     } catch (_) {
       return null;
     }

@@ -9,6 +9,9 @@ import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/avatar_widget.dart';
+import '../../../../shared/presentation/widgets/user_profile_link.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../matches/presentation/providers/match_provider.dart';
@@ -367,59 +370,15 @@ class _DetailsBody extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                height: 72 + MediaQuery.paddingOf(context).top,
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  MediaQuery.paddingOf(context).top + 12,
-                  16,
-                  12,
-                ),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  border: Border(
-                    bottom: BorderSide(
-                      color: Theme.of(context).colorScheme.outlineVariant,
-                    ),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    IconButton(
-                      onPressed: onBack,
-                      tooltip: 'Voltar',
-                      icon: const Icon(Icons.arrow_back_rounded),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Detalhes da partida',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            [
-                              if (data.playedAt != null)
-                                DateFormat(
-                                  'dd/MM/yyyy',
-                                  'pt_BR',
-                                ).format(data.playedAt!),
-                              if (data.placeName?.isNotEmpty == true)
-                                data.placeName!,
-                            ].join(' · '),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+              AppPageHeader(
+                title: 'Detalhes da partida',
+                subtitle: [
+                  if (data.playedAt != null)
+                    DateFormat('dd/MM/yyyy', 'pt_BR').format(data.playedAt!),
+                  if (data.placeName?.isNotEmpty == true) data.placeName!,
+                ].join(' · '),
+                icon: Icons.sports_soccer_outlined,
+                onBack: onBack,
               ),
 
               // Hero score card
@@ -1489,22 +1448,33 @@ class _PrototypeTeamColumn extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: AppColors.amber50,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          _initials(player.playerName),
-                          style: const TextStyle(
-                            color: AppColors.primaryPressed,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
+                      UserProfileLink(
+                        userId: player.userId,
+                        child: player.photoUrl?.trim().isNotEmpty == true
+                            ? AvatarWidget(
+                                name: player.playerName,
+                                photoUrl: player.photoUrl,
+                                size: 32,
+                                fit: BoxFit.cover,
+                                borderRadius: 10,
+                              )
+                            : Container(
+                                width: 32,
+                                height: 32,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: AppColors.amber50,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  _initials(player.playerName),
+                                  style: const TextStyle(
+                                    color: AppColors.primaryPressed,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
                       ),
                       const SizedBox(width: 9),
                       Expanded(
@@ -1515,16 +1485,19 @@ class _PrototypeTeamColumn extends StatelessWidget {
                             Row(
                               children: [
                                 Flexible(
-                                  child: Text(
-                                    player.playerName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w800,
-                                      color: isDark
-                                          ? AppColors.slate100
-                                          : AppColors.slate900,
+                                  child: UserProfileLink(
+                                    userId: player.userId,
+                                    child: Text(
+                                      player.playerName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                        color: isDark
+                                            ? AppColors.slate100
+                                            : AppColors.slate900,
+                                      ),
                                     ),
                                   ),
                                 ),

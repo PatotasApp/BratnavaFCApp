@@ -2,9 +2,13 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../../../core/api/dio_client.dart';
 import '../../../../core/api/interceptors/auth_interceptor.dart';
 import '../../../../core/auth/jwt_helper.dart';
+import '../../../../core/push/push_token_api.dart';
+import '../../../../core/push/local_notifications.dart';
+import '../../../../core/home_widget/match_home_widget_service.dart';
 import '../../data/datasources/auth_remote_datasource.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../domain/repositories/auth_repository.dart';
@@ -29,9 +33,15 @@ final authInterceptorProvider = Provider<AuthInterceptor>((ref) {
       await notifier.updateTokens(access, refresh);
     },
     onUnauthorized: () async {
+      await notifier.clearActiveTokens();
+      try {
+        // Sem sessao valida nao e possivel chamar o endpoint autenticado de
+        // logout. Invalidar o token local impede novos pushes no aparelho.
+        await FirebaseMessaging.instance.deleteToken();
+      } catch (_) {}
+      await LocalNotifications.plugin.cancelAll();
       // Limpa os tokens sem remover a conta — o router redireciona para /login
       // e a conta permanece na lista para re-autenticação.
-      await notifier.clearActiveTokens();
     },
   );
 });
@@ -157,7 +167,7 @@ class AuthNotifier extends AsyncNotifier<void> {
       // Confirma o papel na patota já no login. Sem isto, quem tem uma patota só
       // entrava com activeGroupIsAdmin nulo e dependia do array de fallback.
       if (activeGroupId != null && activeGroupId.isNotEmpty) {
-        await refreshMyGroupRoles(activeGroupId);
+        await refreshMyGroupRoles(activeGroupId, knownRoles: roles);
       }
     });
   }
@@ -183,32 +193,110 @@ class AuthNotifier extends AsyncNotifier<void> {
   }
 
   Future<void> logout() async {
+    final messaging = FirebaseMessaging.instance;
+    try {
+      final token = await messaging.getToken();
+      if (token != null && token.isNotEmpty) {
+        await PushTokenApi(ref.read(dioProvider)).unregisterToken(token);
+      }
+    } catch (error) {
+      debugPrint('[Logout] Falha ao remover token push: $error');
+    }
+
+    // Limpa a sessao antes de invalidar o FCM. Se o Firebase gerar um novo
+    // token, o listener nao conseguira associa-lo a uma conta deslogada.
     await ref.read(accountStoreProvider.notifier).logout();
+    try {
+      await messaging.deleteToken();
+    } catch (error) {
+      debugPrint('[Logout] Falha ao invalidar token FCM local: $error');
+    }
+    await LocalNotifications.plugin.cancelAll();
+    await MatchHomeWidgetService.clear();
     ref.invalidateSelf();
   }
 
   /// Consulta o backend especificamente para [groupId] e atualiza
   /// [activeGroupIsAdmin] / [activeGroupIsFinanceiro] na conta ativa.
   /// Chamado toda vez que o usuário troca de patota.
-  Future<void> refreshMyGroupRoles(String groupId) async {
-    final account = ref.read(accountStoreProvider).activeAccount;
-    if (account == null) return;
+  Future<void> refreshMyGroupRoles(
+    String groupId, {
+    Map<String, List<String>>? knownRoles,
+  }) async {
+    final requestedAccount = ref.read(accountStoreProvider).activeAccount;
+    if (requestedAccount == null) return;
     try {
       final dataSource = ref.read(_authDataSourceProvider);
-      final roles = await dataSource.fetchMyGroupRoles(groupId);
+      // O mobile não usa o atalho `my-roles`: papéis de plataforma podem ter
+      // bypass nesse endpoint. As listas por usuário contêm apenas vínculos
+      // explícitos e são a fonte de verdade do aplicativo.
+      final roles = knownRoles ??
+          await dataSource.fetchGroupRoles(requestedAccount.userId);
       // Falhou a consulta: não sobrescreve com `false`, senão um erro de rede
       // rebaixa o admin e ele cai na tela "Sem acesso".
       if (roles == null) return;
-      await ref.read(accountStoreProvider.notifier).upsertAccount(
-            account.copyWith(
-              activeGroupIsAdmin: roles.isAdmin,
-              activeGroupIsFinanceiro: roles.isFinanceiro,
+
+      final adminIds = roles['adminIds'] ?? const <String>[];
+      final financeiroIds = roles['financeiroIds'] ?? const <String>[];
+      final normalizedGroupId = _normalizeGroupId(groupId);
+      final isAdmin = adminIds.any(
+        (id) => _normalizeGroupId(id) == normalizedGroupId,
+      );
+      final isFinanceiro = financeiroIds.any(
+        (id) => _normalizeGroupId(id) == normalizedGroupId,
+      );
+
+      // A pessoa pode ter trocado de conta ou de patota enquanto a chamada
+      // estava em andamento. Uma resposta antiga jamais pode sobrescrever as
+      // permissões (nem o activeGroupId) da seleção atual.
+      final current = ref.read(accountStoreProvider).activeAccount;
+      if (current == null ||
+          current.userId != requestedAccount.userId ||
+          !_sameGroupId(current.activeGroupId, groupId)) {
+        return;
+      }
+      await ref.read(accountStoreProvider.notifier).patchActive(
+            (latest) => latest.copyWith(
+              groupAdminIds: adminIds,
+              groupFinanceiroIds: financeiroIds,
+              activeGroupIsAdmin: isAdmin,
+              activeGroupIsFinanceiro: isFinanceiro,
             ),
           );
     } catch (_) {
       // silencioso — UI já usa os arrays de fallback
     }
   }
+
+  /// Troca o contexto ativo de patota de forma atômica para a autorização.
+  ///
+  /// Primeiro revoga localmente os papéis da patota anterior (fail closed),
+  /// depois persiste o novo jogador/grupo e só então consulta os vínculos
+  /// explícitos no backend. Como o AccountStore é observado globalmente,
+  /// menus, providers e páginas deixam de reutilizar permissões antigas já no
+  /// primeiro frame da troca.
+  Future<void> selectActiveGroup({
+    required String groupId,
+    required String playerId,
+  }) async {
+    final account = ref.read(accountStoreProvider).activeAccount;
+    if (account == null) return;
+
+    await ref.read(accountStoreProvider.notifier).patchActive(
+          (current) => current.copyWith(
+            activePlayerId: playerId,
+            activeGroupId: groupId,
+            activeGroupIsAdmin: false,
+            activeGroupIsFinanceiro: false,
+          ),
+        );
+
+    await refreshMyGroupRoles(groupId);
+  }
+
+  static bool _sameGroupId(String? left, String? right) =>
+      (left ?? '').trim().toLowerCase().replaceAll(RegExp(r'[{}]'), '') ==
+      (right ?? '').trim().toLowerCase().replaceAll(RegExp(r'[{}]'), '');
 
   /// Re-busca os groupAdminIds e groupFinanceiroIds da conta ativa.
   /// Chamado no startup e no resume para refletir mudanças de role feitas
@@ -232,7 +320,7 @@ class AuthNotifier extends AsyncNotifier<void> {
       // Reconfirma o papel na patota ativa — é o valor que o isGroupAdmin usa.
       final groupId = account.activeGroupId;
       if (groupId != null && groupId.isNotEmpty) {
-        await refreshMyGroupRoles(groupId);
+        await refreshMyGroupRoles(groupId, knownRoles: roles);
       }
     } catch (_) {
       // Silencioso — permissões desatualizadas são melhor que crash
@@ -276,7 +364,7 @@ class AuthNotifier extends AsyncNotifier<void> {
       // preenchido ao trocar de patota — num login com grupo único ele nunca
       // chegava a ser carregado.
       if (resolvedGroupId != null && resolvedGroupId.isNotEmpty) {
-        await refreshMyGroupRoles(resolvedGroupId);
+        await refreshMyGroupRoles(resolvedGroupId, knownRoles: roles);
       }
     } catch (_) {}
   }

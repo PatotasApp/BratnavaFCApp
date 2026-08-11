@@ -500,13 +500,7 @@ class MatchNotifier extends StateNotifier<MatchState> {
     // União de todas as fontes de jogadores aceitos, deduplicada por matchPlayerId.
     // participants = todos os aceitos; unassigned/teamA/teamB cobrem cenários
     // onde participants está vazio ou incompleto.
-    final seen = <String>{};
-    final allPlayers = [
-      ...state.participants,
-      ...state.unassignedPlayers,
-      ...state.teamAPlayers,
-      ...state.teamBPlayers,
-    ].where((p) => seen.add(p.matchPlayerId)).toList();
+    final allPlayers = state.formationPlayers;
     state = state.copyWith(
         mutating: true, teamGenOptions: [], selectedTeamGenIdx: 0);
     try {
@@ -976,11 +970,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
 final matchNotifierProvider =
     StateNotifierProvider.autoDispose<MatchNotifier, MatchState>((ref) {
   final acc = ref.watch(accountStoreProvider.select((s) => s.activeAccount));
-  // Fallback: usa groupId do player ativo se activeGroupId ainda não está persistido.
   final player = ref.watch(activePlayerProvider);
-  // Ver dashboard_page: o grupo sai do jogador, senão as rotas dão 403.
-  final groupId = player?.groupId ?? acc?.activeGroupId ?? '';
-  final isAdmin = (acc?.isAdmin ?? false) ||
-      (groupId.isNotEmpty && (acc?.isGroupAdmin(groupId) ?? false));
+  final groupId = acc?.activeGroupId ?? player?.groupId ?? '';
+  final isAdmin = groupId.isNotEmpty && (acc?.isGroupAdmin(groupId) ?? false);
   return MatchNotifier(ref.read(matchDsProvider), groupId, isAdmin);
 });

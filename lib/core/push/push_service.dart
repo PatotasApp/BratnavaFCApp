@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/widgets.dart';
@@ -17,7 +18,7 @@ Future<void> firebaseBackgroundMessageHandler(RemoteMessage message) async {
 
   await LocalNotifications.initialize();
 
-  // match_invite é data-only: exibe com botões SIM/NÃO
+  // O convite é data-only para permitir ações de presença na notificação.
   if (data['type'] == 'match_invite') {
     await LocalNotifications.showMatchInvite(
       title: data['title'] ?? 'Convite para partida',
@@ -74,8 +75,11 @@ class PushService {
       _router.push(notificationRoute('poll_reminder', {
         'pollId': pollId,
         'groupId': groupId,
+        'pollType': 'event',
       }));
     };
+
+    LocalNotifications.onNotificationTapped = _navigate;
   }
 
   final PushTokenApi _tokenApi;
@@ -159,16 +163,33 @@ class PushService {
         await LocalNotifications.plugin.getNotificationAppLaunchDetails();
     if (details == null || !details.didNotificationLaunchApp) return;
     final payload = details.notificationResponse?.payload;
-    if (payload == null || !payload.contains('::')) return;
-    // É um match_invite — extrai IDs do payload ("groupId::matchId") e navega
-    final parts = payload.split('::');
-    final groupId = parts.isNotEmpty ? parts[0] : '';
-    final matchId = parts.length >= 2 ? parts[1] : '';
+    if (payload == null || payload.isEmpty) return;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _router.push(notificationRoute('match_invite', {
-        'matchId': matchId,
-        'groupId': groupId,
-      }));
+      if (payload.contains('::')) {
+        final parts = payload.split('::');
+        final groupId = parts.isNotEmpty ? parts[0] : '';
+        final entityId = parts.length >= 2 ? parts[1] : '';
+        final isEventPoll = parts.length >= 5;
+        _navigate({
+          'type': isEventPoll ? 'poll_reminder' : 'match_invite',
+          'groupId': groupId,
+          if (isEventPoll) 'pollId': entityId else 'matchId': entityId,
+          if (isEventPoll) 'pollType': 'event',
+        });
+        return;
+      }
+
+      try {
+        final decoded = jsonDecode(payload);
+        if (decoded is Map) {
+          _navigate(
+            decoded.map((key, value) => MapEntry(key.toString(), value)),
+          );
+        }
+      } catch (error) {
+        _log.w('[Push] Payload local inválido: $error');
+      }
     });
   }
 
@@ -263,6 +284,6 @@ class PushService {
     final body = message.notification?.body ?? data['body'] as String? ?? '';
     if (title.isEmpty && body.isEmpty) return;
 
-    LocalNotifications.show(title: title, body: body);
+    LocalNotifications.show(title: title, body: body, data: data);
   }
 }

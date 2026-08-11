@@ -26,6 +26,8 @@ import '../../features/player_spotlight/presentation/pages/player_spotlight_page
 import '../../features/player_history/presentation/pages/player_history_page.dart';
 import '../../features/groups/presentation/pages/group_invites_page.dart';
 import '../../features/team_builder/presentation/pages/team_builder_page.dart';
+import '../../features/conquistas/presentation/pages/conquistas_page.dart';
+import '../../features/conquistas/presentation/pages/public_profile_page.dart';
 import '../../core/push/local_notifications.dart';
 
 // ── Placeholder para rotas ainda não implementadas ────────────────────────────
@@ -102,29 +104,22 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final isLoggedIn = ref.read(accountStoreProvider).isLoggedIn;
       final path = state.uri.path;
-      final isAddMode = state.uri.queryParameters['add'] == '1';
-
       final isAuthRoute =
           path == '/login' || path == '/register' || path.startsWith('/login');
 
       if (!isLoggedIn && !isAuthRoute) return '/login';
-      // Permite /login?add=1 mesmo estando logado (adicionar segunda conta)
-      if (isLoggedIn && isAuthRoute && !isAddMode) return '/app';
+      if (isLoggedIn && isAuthRoute) return '/app';
       return null;
     },
     routes: [
       // ── Auth ──────────────────────────────────────────────────────
       GoRoute(
         path: '/login',
-        builder: (_, state) => LoginPage(
-          addMode: state.uri.queryParameters['add'] == '1',
-        ),
+        builder: (_, __) => const LoginPage(),
       ),
       GoRoute(
         path: '/register',
-        builder: (_, state) => RegisterPage(
-          addMode: state.uri.queryParameters['add'] == '1',
-        ),
+        builder: (_, __) => const RegisterPage(),
       ),
 
       // ── App shell ─────────────────────────────────────────────────
@@ -227,6 +222,16 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/app/team-builder',
             builder: (_, __) => const TeamBuilderPage(),
+          ),
+          GoRoute(
+            path: '/app/conquistas',
+            builder: (_, __) => const ConquistasPage(),
+          ),
+          GoRoute(
+            path: '/app/profile/:userId',
+            builder: (_, state) => PublicProfilePage(
+              userId: state.pathParameters['userId'] ?? '',
+            ),
           ),
         ],
       ),

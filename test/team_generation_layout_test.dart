@@ -41,6 +41,27 @@ class _FakeAccountStore extends AccountStore {
 }
 
 void main() {
+  test('jogadores continuam disponiveis para refazer times apos atribuicao',
+      () {
+    MatchPlayerInfo player(int index, int team) => MatchPlayerInfo.fromJson({
+          'matchPlayerId': 'match-player-$index',
+          'playerId': 'player-$index',
+          'playerName': 'Jogador $index',
+          'team': team,
+        });
+
+    final teamA = List.generate(6, (index) => player(index, 1));
+    final teamB = List.generate(6, (index) => player(index + 6, 2));
+    final state = MatchState(
+      teamAPlayers: teamA,
+      teamBPlayers: teamB,
+      participants: [teamA.first],
+      acceptedPlayers: const [],
+    );
+
+    expect(state.formationPlayers, hasLength(12));
+  });
+
   testWidgets('geração mostra cinco métodos, goleiros e botão fixo no Pixel 5',
       (tester) async {
     tester.view.physicalSize = const Size(1080, 2340);

@@ -1,14 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/realtime/realtime_provider.dart';
+import '../../../../core/home_widget/match_home_widget_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/football_pitch.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
+import '../../../../shared/presentation/widgets/user_profile_link.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../calendar/domain/entities/calendar_event.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
@@ -118,7 +122,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     // `activePlayerProvider` já escolhe o jogador do grupo da conta quando
     // existe um; nesse caso os dois valores coincidem e nada muda. Quando não
     // existe, é o jogador que está certo: é dele que vêm as permissões.
-    final groupId = activePlayer?.groupId ?? account?.activeGroupId ?? '';
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId ?? '';
     final playerId = activePlayer?.playerId;
 
     if (groupId.isNotEmpty) {
@@ -213,6 +217,21 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       ),
     );
     final matchesAsync = ref.watch(upcomingMatchesFullProvider(groupId));
+
+    ref.listen<AsyncValue<List<UpcomingMatchDetails>>>(
+      upcomingMatchesFullProvider(groupId),
+      (_, next) {
+        next.whenData(
+          (matches) => unawaited(
+            MatchHomeWidgetService.sync(
+              match: matches.firstOrNull,
+              playerId: activePlayer.playerId,
+              groupName: activePlayer.groupName,
+            ),
+          ),
+        );
+      },
+    );
     final paymentAsync = ref.watch(myPaymentSummaryProvider(groupId));
     final pollsAsync = ref.watch(pendingPollsCountProvider(groupId));
     final eventsAsync = ref.watch(upcomingEventsProvider(groupId));
@@ -234,6 +253,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _PlayerIdentityCard(
+            userId: activePlayer.userId ?? account?.userId,
             groupId: groupId,
             groupName: activePlayer.groupName,
             groupLogoUrl: activePlayer.groupLogoUrl,
@@ -330,6 +350,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 }
 
 class _PlayerIdentityCard extends ConsumerWidget {
+  final String? userId;
   final String groupId;
   final String groupName;
   final String? groupLogoUrl;
@@ -342,6 +363,7 @@ class _PlayerIdentityCard extends ConsumerWidget {
   final VoidCallback onOpen;
 
   const _PlayerIdentityCard({
+    required this.userId,
     required this.groupId,
     required this.groupName,
     required this.groupLogoUrl,
@@ -391,28 +413,32 @@ class _PlayerIdentityCard extends ConsumerWidget {
             children: [
               Column(
                 children: [
-                  Container(
-                    width: 82,
-                    height: 82,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color:
-                          isDark ? AppColors.darkSubtle : AppColors.lightSubtle,
-                      border: Border.all(
-                          color: AppColors.accentOf(theme.brightness)),
-                      borderRadius: BorderRadius.circular(15),
+                  UserProfileLink(
+                    userId: userId,
+                    child: Container(
+                      width: 82,
+                      height: 82,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? AppColors.darkSubtle
+                            : AppColors.lightSubtle,
+                        border: Border.all(
+                            color: AppColors.accentOf(theme.brightness)),
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: photoUrl != null
+                          ? AvatarWidget(
+                              name: playerName,
+                              photoUrl: photoUrl,
+                              size: 80,
+                            )
+                          : renderGroupIcon(
+                              isGoalkeeper ? icons.goalkeeper : icons.player,
+                              size: 34,
+                              color: AppColors.darkTextMuted,
+                            ),
                     ),
-                    child: photoUrl != null
-                        ? AvatarWidget(
-                            name: playerName,
-                            photoUrl: photoUrl,
-                            size: 80,
-                          )
-                        : renderGroupIcon(
-                            isGoalkeeper ? icons.goalkeeper : icons.player,
-                            size: 34,
-                            color: AppColors.darkTextMuted,
-                          ),
                   ),
                   const SizedBox(height: 7),
                   Text(
@@ -455,72 +481,78 @@ class _PlayerIdentityCard extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        ConfiguredPlayerName(
-                          groupId: groupId,
-                          name: playerName,
-                          isGoalkeeper: isGoalkeeper,
-                          iconSize: 16,
-                          style: TextStyle(
-                            color: nameColor,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            // O fundo estava fixo num marrom escuro enquanto a
-                            // cor do texto seguia o tema. No tema claro dava
-                            // #96390F sobre #341B0E — 2.2:1, escuro sobre
-                            // escuro. `accentBgOf` é o par desenhado para
-                            // `accentTextOf`: 6.3:1 no claro, 7.8:1 no escuro.
-                            color: AppColors.accentBgOf(theme.brightness),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          // Protótipo: "3ª temporada". A contagem sai da
-                          // primeira partida disputada — não existe data de
-                          // entrada na patota, e a primeira partida é na
-                          // prática quando a pessoa começou.
-                          child: Text(
-                            '${summary?.seasonNumber ?? 1}ª temporada',
+                    UserProfileLink(
+                      userId: userId,
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          ConfiguredPlayerName(
+                            groupId: groupId,
+                            name: playerName,
+                            isGoalkeeper: isGoalkeeper,
+                            iconSize: 16,
                             style: TextStyle(
-                              color: AppColors.accentTextOf(theme.brightness),
-                              fontSize: 11,
+                              color: nameColor,
+                              fontSize: 18,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(
-                            text: '@',
-                            style: TextStyle(
-                              color: theme.colorScheme.primary,
-                              fontWeight: FontWeight.w700,
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              // O fundo estava fixo num marrom escuro enquanto a
+                              // cor do texto seguia o tema. No tema claro dava
+                              // #96390F sobre #341B0E — 2.2:1, escuro sobre
+                              // escuro. `accentBgOf` é o par desenhado para
+                              // `accentTextOf`: 6.3:1 no claro, 7.8:1 no escuro.
+                              color: AppColors.accentBgOf(theme.brightness),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            // Protótipo: "3ª temporada". A contagem sai da
+                            // primeira partida disputada — não existe data de
+                            // entrada na patota, e a primeira partida é na
+                            // prática quando a pessoa começou.
+                            child: Text(
+                              '${summary?.seasonNumber ?? 1}ª temporada',
+                              style: TextStyle(
+                                color: AppColors.accentTextOf(theme.brightness),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
-                          TextSpan(text: username),
                         ],
                       ),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+                    ),
+                    const SizedBox(height: 4),
+                    UserProfileLink(
+                      userId: userId,
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '@',
+                              style: TextStyle(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            TextSpan(text: username),
+                          ],
+                        ),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -718,17 +750,17 @@ class _NextMatchBandState extends State<_NextMatchBand> {
                   widget.error
                       ? 'Não foi possível carregar'
                       : 'Nenhuma partida agendada',
-                  style: const TextStyle(
-                    color: AppColors.onDark,
+                  style: TextStyle(
+                    color: context.appTextPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                   'Toque para abrir Partidas',
-                  style: TextStyle(
-                      color: AppColors.darkTextSecondary, fontSize: 12),
+                  style:
+                      TextStyle(color: context.appTextSecondary, fontSize: 12),
                 ),
               ],
             ),
@@ -787,10 +819,10 @@ class _NextMatchBandState extends State<_NextMatchBand> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      const Text(
+                      Text(
                         'Próxima pelada',
                         style: TextStyle(
-                          color: AppColors.onDark,
+                          color: context.appTextPrimary,
                           fontSize: 23,
                           fontWeight: FontWeight.w800,
                         ),
@@ -800,8 +832,8 @@ class _NextMatchBandState extends State<_NextMatchBand> {
                         '$date · $time · ${header.placeName}',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.darkTextSecondary,
+                        style: TextStyle(
+                          color: context.appTextSecondary,
                           fontSize: 12,
                         ),
                       ),
@@ -957,8 +989,8 @@ class _TeamsExpander extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(
-                  color: AppColors.darkTextMuted,
+                style: TextStyle(
+                  color: context.appTextSecondary,
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                 ),
@@ -967,8 +999,8 @@ class _TeamsExpander extends StatelessWidget {
               AnimatedRotation(
                 turns: expanded ? 0.5 : 0,
                 duration: const Duration(milliseconds: 220),
-                child: const Icon(Icons.keyboard_arrow_down_rounded,
-                    size: 18, color: AppColors.darkTextMuted),
+                child: Icon(Icons.keyboard_arrow_down_rounded,
+                    size: 18, color: context.appTextSecondary),
               ),
             ],
           ),
@@ -1036,7 +1068,7 @@ class _TeamsSummary extends StatelessWidget {
                 Text(
                   'Times',
                   style: TextStyle(
-                    color: AppColors.onDark,
+                    color: context.appTextPrimary,
                     fontSize: 12,
                     height: 1,
                     fontWeight: FontWeight.w800,
@@ -1069,11 +1101,11 @@ class _TeamsSummary extends StatelessWidget {
             children: [
               if (a != null) _ColorDot(color: a.color, label: a.name),
               if (a != null && b != null)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(horizontal: 4),
                   child: Text('×',
                       style: TextStyle(
-                          color: AppColors.darkTextMuted,
+                          color: context.appTextSecondary,
                           fontSize: 11,
                           fontWeight: FontWeight.w700)),
                 ),
@@ -1086,13 +1118,13 @@ class _TeamsSummary extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.groups_rounded,
-                  size: 14, color: AppColors.darkTextMuted),
+              Icon(Icons.groups_rounded,
+                  size: 14, color: context.appTextSecondary),
               const SizedBox(width: 5),
               Text(
                 '$total',
-                style: const TextStyle(
-                  color: AppColors.onDark,
+                style: TextStyle(
+                  color: context.appTextPrimary,
                   fontSize: 15,
                   height: 1,
                   fontWeight: FontWeight.w800,
@@ -1176,7 +1208,7 @@ class _LiveMatchIndicatorState extends State<_LiveMatchIndicator>
           Text(
             '${widget.teamAGoals} × ${widget.teamBGoals}',
             style: TextStyle(
-              color: AppColors.onDark,
+              color: context.appTextPrimary,
               fontSize: 20,
               height: 1,
               fontWeight: FontWeight.w900,
@@ -1205,10 +1237,10 @@ class _FinishedMatchScore extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          const Text(
+          Text(
             'FINAL',
             style: TextStyle(
-              color: AppColors.darkTextMuted,
+              color: context.appTextSecondary,
               fontSize: 10,
               fontWeight: FontWeight.w800,
               letterSpacing: .7,
@@ -1217,8 +1249,8 @@ class _FinishedMatchScore extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             '$teamAGoals × $teamBGoals',
-            style: const TextStyle(
-              color: AppColors.onDark,
+            style: TextStyle(
+              color: context.appTextPrimary,
               fontSize: 20,
               height: 1,
               fontWeight: FontWeight.w900,
@@ -1282,7 +1314,7 @@ class _ColorDot extends StatelessWidget {
         decoration: BoxDecoration(
           color: color,
           shape: BoxShape.circle,
-          border: Border.all(color: AppColors.onDark.withValues(alpha: .5)),
+          border: Border.all(color: context.appBorder),
         ),
       ),
     );
@@ -1356,7 +1388,7 @@ class _LinkedEventLine extends StatelessWidget {
                     ? Icons.event_rounded
                     : Icons.how_to_vote_rounded,
                 size: 12,
-                color: AppColors.darkTextMuted,
+                color: context.appTextSecondary,
               ),
             ),
           Flexible(
@@ -1364,18 +1396,18 @@ class _LinkedEventLine extends StatelessWidget {
               match.linkedEventTitle!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.darkTextMuted,
+              style: TextStyle(
+                color: context.appTextSecondary,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
             ),
           ),
           const SizedBox(width: 6),
-          const Text(
+          Text(
             'Você:',
             style: TextStyle(
-              color: AppColors.darkTextSecondary,
+              color: context.appTextPrimary,
               fontSize: 11,
               fontWeight: FontWeight.w800,
             ),
@@ -1474,27 +1506,35 @@ class _TallyRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       label: '$count $semantic',
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 5),
-          // Largura fixa para os números alinharem à direita entre si — sem
-          // isso, um "11" empurra a linha e as três ficam desencontradas.
-          SizedBox(
-            width: 20,
-            child: Text(
-              '$count',
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                color: AppColors.onDark,
-                fontSize: 15,
-                height: 1,
-                fontWeight: FontWeight.w800,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+        decoration: BoxDecoration(
+          color: context.appSurfaceSubtle,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: context.appBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 5),
+            // Largura fixa para os números alinharem à direita entre si — sem
+            // isso, um "11" empurra a linha e as três ficam desencontradas.
+            SizedBox(
+              width: 20,
+              child: Text(
+                '$count',
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  color: context.appTextPrimary,
+                  fontSize: 15,
+                  height: 1,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1752,9 +1792,11 @@ class _EventTile extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        event.timeTBD
-                            ? 'Horário a definir'
-                            : event.time ?? event.categoryName ?? 'Evento',
+                        event.type == 'birthday'
+                            ? 'Aniversário'
+                            : event.timeTBD
+                                ? 'Horário a definir'
+                                : event.time ?? event.categoryName ?? 'Evento',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall,

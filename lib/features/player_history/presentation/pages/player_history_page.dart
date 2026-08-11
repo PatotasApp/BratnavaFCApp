@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/domain/entities/my_player.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
@@ -23,8 +23,33 @@ class PlayerHistoryPage extends ConsumerStatefulWidget {
 
 enum _HistoryResultFilter { all, wins, draws, losses }
 
+MyPlayer? resolveActiveHistoryPlayer({
+  required List<MyPlayer>? players,
+  required String? groupId,
+  required String? activePlayerId,
+}) {
+  final normalizedGroupId = groupId?.trim().toLowerCase();
+  if (players == null ||
+      normalizedGroupId == null ||
+      normalizedGroupId.isEmpty) {
+    return null;
+  }
+
+  final groupPlayers = players.where(
+    (player) => player.groupId.trim().toLowerCase() == normalizedGroupId,
+  );
+  final normalizedPlayerId = activePlayerId?.trim().toLowerCase();
+  if (normalizedPlayerId?.isNotEmpty == true) {
+    for (final player in groupPlayers) {
+      if (player.playerId.trim().toLowerCase() == normalizedPlayerId) {
+        return player;
+      }
+    }
+  }
+  return groupPlayers.isEmpty ? null : groupPlayers.first;
+}
+
 class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
-  MyPlayer? _selectedPlayer;
   late int _selectedYear;
   _HistoryResultFilter _resultFilter = _HistoryResultFilter.all;
 
@@ -35,13 +60,18 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
   }
 
   void _onRefresh() {
-    // Invalidate players list and history
+    final account = ref.read(accountStoreProvider).activeAccount;
+    final groupId = account?.activeGroupId;
+    final player = resolveActiveHistoryPlayer(
+      players: ref.read(myPlayersProvider).valueOrNull,
+      groupId: groupId,
+      activePlayerId: account?.activePlayerId,
+    );
     ref.invalidate(myPlayersProvider);
-    final groupId = ref.read(accountStoreProvider).activeAccount?.activeGroupId;
-    if (groupId != null && _selectedPlayer != null) {
+    if (groupId != null && player != null) {
       ref.invalidate(playerHistoryProvider((
         groupId: groupId,
-        playerId: _selectedPlayer!.playerId,
+        playerId: player.playerId,
         year: _selectedYear,
       )));
     }
@@ -53,16 +83,26 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
     final groupId = account?.activeGroupId;
 
     if (groupId == null || groupId.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(
-          leading: const BackButton(),
-          title: const Text('Meu histórico'),
+      return const Scaffold(
+        body: Column(
+          children: [
+            AppPageHeader(
+              title: 'Meu histórico',
+              subtitle: 'Resultados e números por partida',
+              icon: Icons.history_rounded,
+            ),
+            Expanded(child: _NoGroupState()),
+          ],
         ),
-        body: const _NoGroupState(),
       );
     }
 
     final playersAsync = ref.watch(myPlayersProvider);
+    final activePlayer = resolveActiveHistoryPlayer(
+      players: playersAsync.valueOrNull,
+      groupId: groupId,
+      activePlayerId: account?.activePlayerId,
+    );
     final icons = GroupIcons.from(
       ref.watch(groupSettingsProvider(groupId)).valueOrNull,
     );
@@ -74,16 +114,26 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             // ── Header ──────────────────────────────────────────────
-            SliverToBoxAdapter(child: _buildHeader(context, icons)),
+            SliverToBoxAdapter(
+              child: _buildHeader(context, icons, activePlayer),
+            ),
 
             // ── Selectors ───────────────────────────────────────────
             SliverToBoxAdapter(
-              child: _buildSelectors(context, playersAsync, groupId, icons),
+              child: _buildSelectors(context),
             ),
 
             // ── History content ──────────────────────────────────────
-            if (_selectedPlayer != null)
-              _buildHistorySliver(context, groupId, icons)
+            if (playersAsync.isLoading)
+              const SliverToBoxAdapter(child: _SkeletonLoader())
+            else if (playersAsync.hasError)
+              SliverToBoxAdapter(
+                child: _ErrorState(
+                  message: extractDioError(playersAsync.error!),
+                ),
+              )
+            else if (activePlayer != null)
+              _buildHistorySliver(context, groupId, activePlayer, icons)
             else
               SliverToBoxAdapter(
                 child: _buildPickPlayerPrompt(context),
@@ -96,94 +146,17 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
 
   // ── Dark gradient header ──────────────────────────────────────────────────
 
-  Widget _buildHeader(BuildContext context, GroupIcons icons) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.lightText,
-            AppColors.darkCard,
-            AppColors.lightText
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-          child: Row(
-            children: [
-              IconButton(
-                onPressed: () {
-                  if (context.canPop()) {
-                    context.pop();
-                  } else {
-                    context.go('/app');
-                  }
-                },
-                tooltip: 'Voltar',
-                style: IconButton.styleFrom(
-                  backgroundColor: AppColors.onDark.withAlpha(20),
-                  foregroundColor: AppColors.onDark,
-                  side: BorderSide(color: AppColors.onDark.withAlpha(40)),
-                ),
-                icon: const Icon(Icons.arrow_back_rounded),
-              ),
-              const SizedBox(width: 4),
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppColors.onDark.withAlpha(25),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.onDark.withAlpha(50)),
-                ),
-                child: const Icon(Icons.history_rounded,
-                    size: 26, color: AppColors.onDark),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Meu Histórico',
-                      style: TextStyle(
-                        color: AppColors.onDark,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    if (_selectedPlayer != null)
-                      PlayerNameWithIcon(
-                        name: _selectedPlayer!.playerName,
-                        icons: icons,
-                        isGoalkeeper: _selectedPlayer!.isGoalkeeper,
-                        iconSize: 10,
-                        style: TextStyle(
-                          color: AppColors.onDark.withAlpha(160),
-                          fontSize: 12,
-                        ),
-                      )
-                    else
-                      Text(
-                        'Selecione um jogador',
-                        style: TextStyle(
-                          color: AppColors.onDark.withAlpha(160),
-                          fontSize: 12,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+  Widget _buildHeader(
+    BuildContext context,
+    GroupIcons icons,
+    MyPlayer? activePlayer,
+  ) {
+    return AppPageHeader(
+      title: 'Meu histórico',
+      subtitle: activePlayer == null
+          ? 'Resultados e números por partida'
+          : 'Histórico de ${activePlayer.playerName}',
+      icon: Icons.history_rounded,
     );
   }
 
@@ -191,9 +164,6 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
 
   Widget _buildSelectors(
     BuildContext context,
-    AsyncValue<List<MyPlayer>> playersAsync,
-    String groupId,
-    GroupIcons icons,
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final currentYear = DateTime.now().year;
@@ -202,132 +172,10 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          // Player dropdown
-          Expanded(
-            child: _buildPlayerDropdown(
-              context,
-              playersAsync,
-              isDark,
-              icons,
-            ),
-          ),
-          const SizedBox(width: 10),
-          // Year dropdown
           _buildYearDropdown(context, years, isDark),
         ],
-      ),
-    );
-  }
-
-  Widget _buildPlayerDropdown(
-    BuildContext context,
-    AsyncValue<List<MyPlayer>> playersAsync,
-    bool isDark,
-    GroupIcons icons,
-  ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.slate800 : AppColors.onDark,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isDark ? AppColors.slate700 : AppColors.slate200,
-        ),
-      ),
-      child: playersAsync.when(
-        loading: () => const SizedBox(
-          height: 40,
-          child: Row(
-            children: [
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              SizedBox(width: 8),
-              Text('Carregando...', style: TextStyle(fontSize: 13)),
-            ],
-          ),
-        ),
-        error: (e, _) => SizedBox(
-          height: 40,
-          child: Row(
-            children: [
-              const Icon(Icons.error_outline,
-                  size: 16, color: AppColors.prototypeDanger),
-              const SizedBox(width: 6),
-              Text('Erro',
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: isDark ? AppColors.slate400 : AppColors.slate500)),
-            ],
-          ),
-        ),
-        data: (players) {
-          if (players.isEmpty) {
-            return SizedBox(
-              height: 40,
-              child: Text(
-                'Nenhum jogador',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: isDark ? AppColors.slate400 : AppColors.slate500,
-                ),
-              ),
-            );
-          }
-
-          // Auto-select first player if none selected
-          if (_selectedPlayer == null && players.isNotEmpty) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) setState(() => _selectedPlayer = players.first);
-            });
-          }
-
-          return DropdownButtonHideUnderline(
-            child: DropdownButton<MyPlayer>(
-              value: _selectedPlayer,
-              isExpanded: true,
-              isDense: true,
-              dropdownColor: isDark ? AppColors.slate800 : AppColors.onDark,
-              hint: Text(
-                'Selecionar jogador',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: isDark ? AppColors.slate400 : AppColors.slate500,
-                ),
-              ),
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: isDark ? AppColors.onDark : AppColors.slate900,
-              ),
-              icon: Icon(Icons.expand_more_rounded,
-                  size: 18,
-                  color: isDark ? AppColors.slate400 : AppColors.slate500),
-              items: players
-                  .map((p) => DropdownMenuItem<MyPlayer>(
-                        value: p,
-                        child: PlayerNameWithIcon(
-                          name: p.playerName,
-                          icons: icons,
-                          isGoalkeeper: p.isGoalkeeper,
-                          iconSize: 11,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color:
-                                isDark ? AppColors.onDark : AppColors.slate900,
-                          ),
-                        ),
-                      ))
-                  .toList(),
-              onChanged: (p) {
-                if (p != null) setState(() => _selectedPlayer = p);
-              },
-            ),
-          );
-        },
       ),
     );
   }
@@ -384,9 +232,9 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
   Widget _buildHistorySliver(
     BuildContext context,
     String groupId,
+    MyPlayer player,
     GroupIcons icons,
   ) {
-    final player = _selectedPlayer!;
     final args = (
       groupId: groupId,
       playerId: player.playerId,
@@ -464,7 +312,7 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
               color: isDark ? AppColors.slate600 : AppColors.slate300),
           const SizedBox(height: 16),
           Text(
-            'Selecione um jogador para ver o histórico.',
+            'Seu jogador não foi encontrado na patota ativa.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,

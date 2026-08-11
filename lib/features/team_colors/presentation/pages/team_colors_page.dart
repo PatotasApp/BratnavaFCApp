@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/datasources/team_color_remote_datasource.dart';
@@ -30,7 +30,7 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
     // O jogador manda no grupo: `activeGroupId` da conta pode apontar
     // para uma patota sem jogador nosso, e aí toda rota por grupo
     // responde 403. Ver dashboard_page para o diagnóstico completo.
-    final groupId = activePlayer?.groupId ?? account?.activeGroupId;
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId;
     final groupIdNN = groupId; // non-null alias used in closures
     final canManage = account != null &&
         groupIdNN != null &&
@@ -51,11 +51,7 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
             SliverToBoxAdapter(
               child: _Header(
                 groupId: groupId,
-                isDark: isDark,
                 canManage: canManage,
-                onRefresh: groupIdNN == null
-                    ? null
-                    : () => ref.invalidate(teamColorsProvider(groupIdNN)),
                 onAdd: canManage
                     ? () => _openEditSheet(
                           context,
@@ -158,16 +154,12 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
 
 class _Header extends ConsumerWidget {
   final String? groupId;
-  final bool isDark;
   final bool canManage;
-  final VoidCallback? onRefresh;
   final VoidCallback? onAdd;
 
   const _Header({
     required this.groupId,
-    required this.isDark,
     required this.canManage,
-    this.onRefresh,
     this.onAdd,
   });
 
@@ -180,193 +172,28 @@ class _Header extends ConsumerWidget {
     final isLoading = colorsAsync.isLoading;
     final count = colorsAsync.valueOrNull?.where((c) => c.isActive).length ?? 0;
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.slate900,
-            AppColors.darkCard,
-            AppColors.slate900,
-          ],
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              IconButton(
-                tooltip: 'Voltar',
-                onPressed: () {
-                  if (context.canPop()) {
-                    context.pop();
-                  } else {
-                    context.go('/app');
-                  }
-                },
-                constraints:
-                    const BoxConstraints.tightFor(width: 48, height: 48),
-                style: IconButton.styleFrom(
-                  backgroundColor: AppColors.onDark.withAlpha(20),
-                  foregroundColor: AppColors.onDark,
-                  side: BorderSide(color: AppColors.onDark.withAlpha(40)),
+    final subtitle = isLoading
+        ? 'Carregando uniformes...'
+        : groupId == null
+            ? 'Crie ou entre em uma patota'
+            : '$count uniforme${count != 1 ? 's' : ''} disponível${count != 1 ? 'eis' : ''}';
+
+    return AppPageHeader(
+      title: 'Uniformes',
+      subtitle: subtitle,
+      icon: Icons.checkroom_rounded,
+      footer: canManage && onAdd != null
+          ? AppPageHeaderActionBar(
+              actions: [
+                AppPageHeaderButton(
+                  label: 'Novo uniforme',
+                  icon: Icons.add_rounded,
+                  tone: AppPageHeaderButtonTone.primary,
+                  onPressed: onAdd,
                 ),
-                icon: const Icon(Icons.arrow_back_rounded,
-                    color: AppColors.onDark),
-              ),
-              const SizedBox(width: 4),
-              // Icon box
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: AppColors.onDark.withAlpha(25),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.onDark.withAlpha(50)),
-                ),
-                child: const Icon(
-                  Icons.palette_rounded,
-                  color: AppColors.onDark,
-                  size: 26,
-                ),
-              ),
-              const SizedBox(width: 16),
-              // Title + subtitle
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Uniformes',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.onDark,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    if (isLoading)
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 10,
-                            height: 10,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.5,
-                              color: AppColors.onDark.withAlpha(128),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Carregando...',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.onDark.withAlpha(128),
-                            ),
-                          ),
-                        ],
-                      )
-                    else if (groupId == null)
-                      Text(
-                        'Crie ou entre em um grupo',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.onDark.withAlpha(128),
-                        ),
-                      )
-                    else
-                      Text(
-                        '$count uniforme${count != 1 ? 's' : ''} disponível${count != 1 ? 'eis' : ''}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.onDark.withAlpha(128),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Buttons row
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Nova cor (admin only)
-              if (canManage && onAdd != null)
-                GestureDetector(
-                  onTap: onAdd,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: AppColors.onDark.withAlpha(25),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.onDark.withAlpha(50)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.add_rounded,
-                          size: 14,
-                          color: AppColors.onDark.withAlpha(204),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Novo uniforme',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.onDark.withAlpha(204),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              if (canManage && onAdd != null && onRefresh != null)
-                const SizedBox(width: 8),
-              // Refresh
-              if (onRefresh != null)
-                GestureDetector(
-                  onTap: isLoading ? null : onRefresh,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: AppColors.onDark.withAlpha(25),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.onDark.withAlpha(50)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.refresh_rounded,
-                          size: 14,
-                          color: AppColors.onDark.withAlpha(204),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Atualizar',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.onDark.withAlpha(204),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
+              ],
+            )
+          : null,
     );
   }
 }

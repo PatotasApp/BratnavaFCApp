@@ -84,8 +84,7 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
   bool get _isAdmin {
     final acc = ref.read(accountStoreProvider).activeAccount;
     final gid = acc?.activeGroupId ?? '';
-    return gid.isNotEmpty && (acc?.isGroupAdmin(gid) ?? false) ||
-        (acc?.isAdmin ?? false);
+    return gid.isNotEmpty && (acc?.isGroupAdmin(gid) ?? false);
   }
 
   @override
@@ -103,7 +102,7 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
       }
       // 6 é só o chute inicial. Com 9 confirmados não dá para montar dois
       // times de 6, e o stepper apareceria acima do próprio teto.
-      final maxPerTeam = s.acceptedPlayers.length ~/ 2;
+      final maxPerTeam = s.formationPlayers.length ~/ 2;
       if (maxPerTeam >= 1 && _playersPerTeam > maxPerTeam) {
         _playersPerTeam = maxPerTeam;
       }
@@ -249,7 +248,7 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
             strategyType: _strategyType,
             playersPerTeam: _playersPerTeam,
             includeGoalkeepers: _includeGoalkeepers,
-            acceptedCount: s.acceptedPlayers.length,
+            acceptedCount: s.formationPlayers.length,
             icons: icons,
             onStrategy: (id) => setState(() => _strategyType = id),
             onPlayersPerTeam: (n) => setState(() => _playersPerTeam = n),

@@ -8,6 +8,7 @@ import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
+import '../../domain/shell_navigation_policy.dart';
 import '../widgets/app_top_bar.dart';
 
 class ShellPage extends ConsumerStatefulWidget {
@@ -68,12 +69,15 @@ class _ShellPageState extends ConsumerState<ShellPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _checkTokenOnResume();
-      // Atualiza roles e grupos ao voltar para o app.
-      Future.microtask(
-        () => ref.read(authNotifierProvider.notifier).refreshGroupMembership(),
-      );
+      Future.microtask(_handleResume);
     }
+  }
+
+  Future<void> _handleResume() async {
+    await ref.read(accountStoreProvider.notifier).reloadFromStorage();
+    await _checkTokenOnResume();
+    if (!mounted) return;
+    await ref.read(authNotifierProvider.notifier).refreshGroupMembership();
   }
 
   Future<void> _checkTokenOnResume() async {
@@ -86,10 +90,7 @@ class _ShellPageState extends ConsumerState<ShellPage>
 
   int _selectedIndex(BuildContext context) {
     final location = GoRouterState.of(context).uri.path;
-    for (var i = 0; i < _tabs.length - 1; i++) {
-      if (location == _tabs[i].path) return i;
-    }
-    return 4;
+    return shellNavigationIndexForPath(location);
   }
 
   @override
@@ -104,26 +105,22 @@ class _ShellPageState extends ConsumerState<ShellPage>
       accountStoreProvider.select((s) => s.activeAccountId),
     );
 
-    final isMainDestination = selected < 4;
-
     return Scaffold(
-      appBar: selected == 0 ? const AppTopBar() : null,
+      appBar: const AppTopBar(),
       body: KeyedSubtree(
         key: ValueKey(accountKey),
         child: widget.child,
       ),
-      bottomNavigationBar: isMainDestination
-          ? _PrototypeBottomNavigation(
-              selectedIndex: selected,
-              onDestinationSelected: (i) {
-                if (_tabs[i].path.isNotEmpty) {
-                  context.go(_tabs[i].path);
-                } else {
-                  _openDrawer(context);
-                }
-              },
-            )
-          : null,
+      bottomNavigationBar: _PrototypeBottomNavigation(
+        selectedIndex: selected,
+        onDestinationSelected: (i) {
+          if (_tabs[i].path.isNotEmpty) {
+            context.go(_tabs[i].path);
+          } else {
+            _openDrawer(context);
+          }
+        },
+      ),
     );
   }
 
@@ -164,8 +161,7 @@ class _PrototypeBottomNavigation extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      height: PrototypeLayout.bottomNavigationHeight,
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: theme.colorScheme.surface.withValues(alpha: .96),
         border: Border(
@@ -174,69 +170,75 @@ class _PrototypeBottomNavigation extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-        minimum: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        child: Row(
-          children: List.generate(_ShellPageState._tabs.length, (index) {
-            final item = _ShellPageState._tabs[index];
-            final selected = selectedIndex == index;
+        child: SizedBox(
+          height: PrototypeLayout.bottomNavigationHeight,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Row(
+              children: List.generate(_ShellPageState._tabs.length, (index) {
+                final item = _ShellPageState._tabs[index];
+                final selected = selectedIndex == index;
 
-            return Expanded(
-              child: Semantics(
-                selected: selected,
-                button: true,
-                label: item.label,
-                child: InkResponse(
-                  radius: 34,
-                  onTap: () => onDestinationSelected(index),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      minWidth: PrototypeLayout.minimumTouchTarget,
-                      minHeight: PrototypeLayout.minimumTouchTarget,
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 160),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 7,
-                          ),
-                          decoration: BoxDecoration(
-                            color: selected
-                                ? theme.colorScheme.primaryContainer
-                                : AppColors.transparent,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            selected ? item.activeIcon : item.icon,
-                            size: 19,
-                            color: selected
-                                ? theme.colorScheme.onPrimaryContainer
-                                : theme.colorScheme.onSurfaceVariant,
-                          ),
+                return Expanded(
+                  child: Semantics(
+                    selected: selected,
+                    button: true,
+                    label: item.label,
+                    child: InkResponse(
+                      radius: 34,
+                      onTap: () => onDestinationSelected(index),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minWidth: PrototypeLayout.minimumTouchTarget,
+                          minHeight: PrototypeLayout.minimumTouchTarget,
                         ),
-                        const SizedBox(height: 3),
-                        Text(
-                          item.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontSize: 10,
-                            color: selected
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurfaceVariant,
-                            fontWeight:
-                                selected ? FontWeight.w700 : FontWeight.w500,
-                          ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 160),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 7,
+                              ),
+                              decoration: BoxDecoration(
+                                color: selected
+                                    ? theme.colorScheme.primaryContainer
+                                    : AppColors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                selected ? item.activeIcon : item.icon,
+                                size: 19,
+                                color: selected
+                                    ? theme.colorScheme.onPrimaryContainer
+                                    : theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              item.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontSize: 10,
+                                color: selected
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurfaceVariant,
+                                fontWeight: selected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ),
-            );
-          }),
+                );
+              }),
+            ),
+          ),
         ),
       ),
     );
@@ -261,6 +263,11 @@ class _MoreSheet extends ConsumerWidget {
           label: 'Meu Histórico',
           path: '/app/player-history',
         ),
+        _MoreItem(
+          icon: Icons.emoji_events_outlined,
+          label: 'Conquistas',
+          path: '/app/conquistas',
+        ),
       ],
     ),
     _MoreGroup(
@@ -280,7 +287,6 @@ class _MoreSheet extends ConsumerWidget {
           icon: Icons.cake_outlined,
           label: 'Aniversários',
           path: '/app/birthdays',
-          adminOnly: true,
         ),
         _MoreItem(
           icon: Icons.palette_outlined,
@@ -291,7 +297,6 @@ class _MoreSheet extends ConsumerWidget {
           icon: Icons.people_alt_outlined,
           label: 'Monte seu Time',
           path: '/app/team-builder',
-          adminOnly: true,
         ),
       ],
     ),
@@ -332,7 +337,6 @@ class _MoreSheet extends ConsumerWidget {
           icon: Icons.settings_outlined,
           label: 'Configurações',
           path: '/app/settings',
-          adminOnly: true,
         ),
       ],
     ),
@@ -366,7 +370,7 @@ class _MoreSheet extends ConsumerWidget {
     // O jogador manda no grupo: `activeGroupId` da conta pode apontar
     // para uma patota sem jogador nosso, e aí toda rota por grupo
     // responde 403. Ver dashboard_page para o diagnóstico completo.
-    final groupId = activePlayer?.groupId ?? account?.activeGroupId;
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId;
 
     final isAdmin = groupId != null &&
         groupId.isNotEmpty &&
@@ -426,11 +430,12 @@ class _MoreSheet extends ConsumerWidget {
                             (constraints.maxWidth - gap * (columns - 1)) /
                                 columns;
                         final visibleItems = group.items.where((item) {
-                          if (item.adminOnly && !isAdmin) return false;
-                          if (item.statsPermission && !canSeeStats) {
-                            return false;
-                          }
-                          return true;
+                          return isShellMenuItemVisible(
+                            path: item.path,
+                            isAdmin: isAdmin,
+                            canSeeStats: canSeeStats,
+                            requiresStatsPermission: item.statsPermission,
+                          );
                         });
 
                         return Wrap(
@@ -476,14 +481,12 @@ class _MoreItem {
   final IconData icon;
   final String label;
   final String path;
-  final bool adminOnly;
   final bool statsPermission;
 
   const _MoreItem({
     required this.icon,
     required this.label,
     required this.path,
-    this.adminOnly = false,
     this.statsPermission = false,
   });
 }
