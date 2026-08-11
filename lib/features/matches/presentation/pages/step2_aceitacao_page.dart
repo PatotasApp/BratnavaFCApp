@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
+import '../../../../shared/presentation/widgets/user_profile_link.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
+import '../../../members/presentation/providers/members_provider.dart';
 import '../../domain/entities/match_models.dart';
 import '../providers/match_provider.dart';
 
@@ -38,6 +41,11 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
     final s = ref.watch(matchNotifierProvider);
     final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
+    final myProfile = ref.watch(myProfileProvider).valueOrNull;
+    final activePlayerPhoto = activePlayer?.photoUrl?.trim();
+    final myPhotoUrl = activePlayerPhoto?.isNotEmpty == true
+        ? activePlayerPhoto
+        : myProfile?.photoUrl;
     final accepted = s.acceptedPlayers;
     final rejected = s.rejectedPlayers;
     final pending = s.pendingPlayers;
@@ -45,10 +53,10 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
     // O jogador manda no grupo: `activeGroupId` da conta pode apontar
     // para uma patota sem jogador nosso, e aí toda rota por grupo
     // responde 403. Ver dashboard_page para o diagnóstico completo.
-    final gid = activePlayer?.groupId ?? account?.activeGroupId ?? '';
+    final gid = account?.activeGroupId ?? activePlayer?.groupId ?? '';
     final isGroupAdmin =
         gid.isNotEmpty && (account?.isGroupAdmin(gid) ?? false);
-    final isAdmin = (account?.isAdmin ?? false) || isGroupAdmin;
+    final isAdmin = isGroupAdmin;
     final icons =
         GroupIcons.from(ref.watch(groupSettingsProvider(gid)).valueOrNull);
     final pct = s.maxPlayers > 0 ? accepted.length / s.maxPlayers : 0.0;
@@ -104,6 +112,7 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
                       _ => _InviteVariant.accepted,
                     },
                     myId: myId,
+                    myPhotoUrl: myPhotoUrl,
                     isAdmin: isAdmin,
                     icons: icons,
                     pendingPlayerIds: s.pendingPlayerIds,
@@ -209,10 +218,10 @@ class _AcceptanceSummaryCard extends StatelessWidget {
         boxShadow: isDark
             ? null
             : [
-                BoxShadow(
+                const BoxShadow(
                   color: AppColors.shadow08,
                   blurRadius: 20,
-                  offset: const Offset(0, 8),
+                  offset: Offset(0, 8),
                 ),
               ],
       ),
@@ -352,6 +361,7 @@ class _InviteCard extends StatelessWidget {
   final List<MatchPlayerInfo> items;
   final _InviteVariant variant;
   final String myId;
+  final String? myPhotoUrl;
   final bool isAdmin;
   final GroupIcons icons;
 
@@ -369,6 +379,7 @@ class _InviteCard extends StatelessWidget {
     required this.items,
     required this.variant,
     required this.myId,
+    this.myPhotoUrl,
     required this.isAdmin,
     this.icons = GroupIcons.defaults,
     required this.pendingPlayerIds,
@@ -465,6 +476,7 @@ class _InviteCard extends StatelessWidget {
   Widget _row(MatchPlayerInfo p) => _PlayerRow(
         player: p,
         isMe: p.playerId == myId,
+        photoUrlOverride: p.playerId == myId ? myPhotoUrl : null,
         isGuest: p.isGuest,
         isAdmin: isAdmin,
         icons: icons,
@@ -500,8 +512,11 @@ class _InviteCard extends StatelessWidget {
 // ── Linha de jogador ──────────────────────────────────────────────────────────
 
 class _PlayerRow extends StatelessWidget {
+  static const double _avatarSize = 44;
+
   final MatchPlayerInfo player;
   final bool isMe;
+  final String? photoUrlOverride;
   final bool isGuest;
   final bool isAdmin;
   final GroupIcons icons;
@@ -518,6 +533,7 @@ class _PlayerRow extends StatelessWidget {
   const _PlayerRow({
     required this.player,
     required this.isMe,
+    this.photoUrlOverride,
     required this.isGuest,
     required this.isAdmin,
     this.icons = GroupIcons.defaults,
@@ -557,6 +573,10 @@ class _PlayerRow extends StatelessWidget {
 
     final showAccept = _canAct && variant.showAcceptBtn;
     final showReject = _canAct && variant.showRejectBtn;
+    final photoUrl = player.photoUrl?.trim().isNotEmpty == true
+        ? player.photoUrl
+        : photoUrlOverride;
+    final hasPhoto = photoUrl?.trim().isNotEmpty == true;
 
     // `.proto-card>.proto-list-row`: fundo e borda transparentes. A linha só
     // vira um cartão próprio quando está solta fora de um card.
@@ -566,20 +586,34 @@ class _PlayerRow extends StatelessWidget {
       padding: PrototypeLayout.listRowPadding,
       child: Row(
         children: [
-          Container(
-            width: PrototypeLayout.avatarSize,
-            height: PrototypeLayout.avatarSize,
-            decoration: BoxDecoration(
-              color: avatarBg,
-              borderRadius: BorderRadius.circular(PrototypeLayout.avatarRadius),
-            ),
-            child: Center(
-              child: Text(
-                _initials(player.playerName),
-                style: TextStyle(
-                    fontSize: 11, fontWeight: FontWeight.w800, color: avatarFg),
-              ),
-            ),
+          UserProfileLink(
+            userId: player.userId,
+            child: (!isGuest || hasPhoto)
+                ? AvatarWidget(
+                    name: player.playerName,
+                    photoUrl: photoUrl,
+                    size: _avatarSize,
+                    fit: BoxFit.cover,
+                    borderRadius: 0,
+                  )
+                : Container(
+                    width: _avatarSize,
+                    height: _avatarSize,
+                    decoration: BoxDecoration(
+                      color: avatarBg,
+                      borderRadius:
+                          BorderRadius.circular(PrototypeLayout.avatarRadius),
+                    ),
+                    child: Center(
+                      child: Text(
+                        _initials(player.playerName),
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: avatarFg),
+                      ),
+                    ),
+                  ),
           ),
           const SizedBox(width: PrototypeLayout.rowGap),
 
@@ -589,13 +623,16 @@ class _PlayerRow extends StatelessWidget {
               crossAxisAlignment: WrapCrossAlignment.center,
               spacing: 5,
               children: [
-                Text(
-                  player.playerName,
-                  style: TextStyle(
-                    // `.proto-list-row` usa 12/700 no nome, não 13/500.
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? AppColors.onDark : AppColors.lightText,
+                UserProfileLink(
+                  userId: player.userId,
+                  child: Text(
+                    player.playerName,
+                    style: TextStyle(
+                      // `.proto-list-row` usa 12/700 no nome, não 13/500.
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? AppColors.onDark : AppColors.lightText,
+                    ),
                   ),
                 ),
                 // Goleiro toggle (admin) ou ícone (não-admin)

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
@@ -8,6 +7,7 @@ import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../data/datasources/payments_remote_datasource.dart';
 import '../../data/datasources/transactions_remote_datasource.dart';
 import '../../domain/entities/payment_entities.dart';
@@ -49,6 +49,7 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
   int _paymentMode = 0; // 0=Monthly, 1=PerGame
   bool _loadingMode = true;
   bool _loadingModeRequest = false;
+  String? _loadedGroupId;
 
   // ── Caixa ────────────────────────────────────────────────────────────────
   String _caixaSubTab = 'mes'; // 'mes' | 'geral'
@@ -58,7 +59,7 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
   String? get _groupId {
     final acc = ref.read(accountStoreProvider).activeAccount;
     final player = ref.read(activePlayerProvider);
-    return player?.groupId ?? acc?.activeGroupId;
+    return acc?.activeGroupId ?? player?.groupId;
   }
 
   // Somente financeiro enxerga as pendências da patota inteira.
@@ -106,20 +107,24 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
     try {
       final ds = ref.read(groupSettingsDsProvider);
       final settings = await ds.fetchGroupSettings(gid);
-      if (mounted) {
+      if (mounted && _groupId == gid) {
         final tabLength =
             (settings.paymentMode == 0 ? 2 : 1) + (_isPaymentAdmin ? 1 : 0);
         _ensureTabControllerLength(tabLength);
         setState(() {
+          _loadedGroupId = gid;
           _paymentMode = settings.paymentMode;
           _loadingMode = false;
         });
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted && _groupId == gid) {
         _ensureTabControllerLength(
             (_paymentMode == 0 ? 2 : 1) + (_isPaymentAdmin ? 1 : 0));
-        setState(() => _loadingMode = false);
+        setState(() {
+          _loadedGroupId = gid;
+          _loadingMode = false;
+        });
       }
     } finally {
       _loadingModeRequest = false;
@@ -304,7 +309,7 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
     // O jogador manda no grupo: `activeGroupId` da conta pode apontar
     // para uma patota sem jogador nosso, e aí toda rota por grupo
     // responde 403. Ver dashboard_page para o diagnóstico completo.
-    final groupId = activePlayer?.groupId ?? account?.activeGroupId ?? '';
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId ?? '';
     final isAdmin = account != null && groupId.isNotEmpty
         ? account.isGroupFinanceiro(groupId)
         : false;
@@ -325,6 +330,19 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
           ),
         ),
       );
+    }
+
+    // Permissões e configuração são por patota. Ao trocar de grupo, reduz o
+    // número de abas imediatamente (principalmente removendo Caixa) e só então
+    // recarrega o modo de cobrança da nova patota. Isso evita exibir por um
+    // frame o conteúdo financeiro do grupo anterior.
+    _ensureTabControllerLength((_paymentMode == 0 ? 2 : 1) + (isAdmin ? 1 : 0));
+    if (_loadedGroupId != groupId && !_loadingModeRequest) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _groupId != groupId) return;
+        setState(() => _loadingMode = true);
+        _loadPaymentMode();
+      });
     }
 
     if (_loadingMode) {
@@ -417,62 +435,10 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
   }
 
   Widget _buildHeader() {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outlineVariant,
-          ),
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: SizedBox(
-          height: 72,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                IconButton(
-                  onPressed: () {
-                    if (context.canPop()) {
-                      context.pop();
-                    } else {
-                      context.go('/app');
-                    }
-                  },
-                  tooltip: 'Voltar',
-                  icon: const Icon(Icons.arrow_back_rounded),
-                ),
-                const SizedBox(width: 8),
-                const Icon(Icons.payments_outlined, size: 24),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Pagamentos',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Mensalidades, cobranças e caixa',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return const AppPageHeader(
+      title: 'Pagamentos',
+      subtitle: 'Mensalidades, cobranças e caixa',
+      icon: Icons.payments_outlined,
     );
   }
 }

@@ -24,8 +24,9 @@ class EventCard extends StatelessWidget {
   String? _formatCost() {
     if (poll.costType == null || poll.costType!.isEmpty) return null;
     final label = poll.costType == 'individual' ? 'por pessoa' : 'rateio grupo';
-    if (poll.costAmount != null)
+    if (poll.costAmount != null) {
       return 'R\$ ${poll.costAmount!.toStringAsFixed(2)} $label';
+    }
     return label;
   }
 
@@ -41,7 +42,7 @@ class EventCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Icon + date ──
             SizedBox(
@@ -60,14 +61,23 @@ class EventCard extends StatelessWidget {
                   ),
                   if (poll.eventDate != null) ...[
                     const SizedBox(height: 4),
-                    Text(
-                      _formatDate(poll.eventDate),
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? AppColors.slate400 : AppColors.slate500,
+                    SizedBox(
+                      width: 56,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          _formatDate(poll.eventDate),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: isDark
+                                ? AppColors.slate400
+                                : AppColors.slate500,
+                          ),
+                          maxLines: 1,
+                          textAlign: TextAlign.center,
+                        ),
                       ),
-                      textAlign: TextAlign.center,
                     ),
                   ],
                 ],
@@ -80,37 +90,34 @@ class EventCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  Text(
+                    poll.title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? AppColors.onDark : AppColors.slate900,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 5),
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
                     children: [
-                      Flexible(
-                        child: Text(
-                          poll.title,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color:
-                                isDark ? AppColors.onDark : AppColors.slate900,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
                       if (poll.hasVoted)
-                        _Pill(
-                            label: 'Respondeu',
-                            color: AppColors.infoLight,
-                            bg: AppColors.blue50),
-                      const SizedBox(width: 4),
+                        const _Pill(
+                          label: 'Respondeu',
+                          color: AppColors.infoLight,
+                          bg: AppColors.blue50,
+                        ),
                       _StatusBadge(isOpen: poll.isOpen),
-                      if (poll.allowGuests) ...[
-                        const SizedBox(width: 4),
+                      if (poll.allowGuests)
                         const _Pill(
                           label: 'Convidados',
                           color: AppColors.info,
                           bg: AppColors.violet50,
                         ),
-                      ],
                     ],
                   ),
                   if (poll.description != null) ...[
@@ -126,8 +133,8 @@ class EventCard extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 8,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (poll.eventLocation != null)
                         _MetaChip(
@@ -251,11 +258,17 @@ class _MetaChip extends StatelessWidget {
             ? AppColors.slate500
             : AppColors.slate400);
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 11, color: c),
         const SizedBox(width: 2),
-        Text(label, style: TextStyle(fontSize: 11, color: c)),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(fontSize: 11, color: c),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ],
     );
   }

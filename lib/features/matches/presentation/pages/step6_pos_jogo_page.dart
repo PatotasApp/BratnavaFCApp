@@ -39,8 +39,7 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
   bool get _isAdmin {
     final acc = ref.read(accountStoreProvider).activeAccount;
     final gid = acc?.activeGroupId ?? '';
-    return (acc?.isAdmin ?? false) ||
-        (gid.isNotEmpty && (acc?.isGroupAdmin(gid) ?? false));
+    return gid.isNotEmpty && (acc?.isGroupAdmin(gid) ?? false);
   }
 
   String get _myPlayerId =>

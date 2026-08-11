@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
+import '../../../../shared/presentation/widgets/user_profile_link.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../domain/entities/spotlight_report.dart';
@@ -37,11 +38,16 @@ class _PlayerSpotlightPageState extends ConsumerState<PlayerSpotlightPage> {
 
     if (groupId == null || groupId.isEmpty) {
       return Scaffold(
-        appBar: AppBar(
-          leading: const BackButton(),
-          title: const Text('Destaques'),
+        body: const Column(
+          children: [
+            AppPageHeader(
+              title: 'Destaques',
+              subtitle: 'Jogadores em evidência na patota',
+              icon: Icons.star_rounded,
+            ),
+            Expanded(child: _NoGroupState()),
+          ],
         ),
-        body: const _NoGroupState(),
       );
     }
 
@@ -107,77 +113,10 @@ class _PlayerSpotlightPageState extends ConsumerState<PlayerSpotlightPage> {
           : 'Sem dados ainda';
     }
 
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.lightText,
-            AppColors.darkCard,
-            AppColors.lightText
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-          child: Row(
-            children: [
-              IconButton(
-                tooltip: 'Voltar',
-                onPressed: () {
-                  if (context.canPop()) {
-                    context.pop();
-                  } else {
-                    context.go('/app');
-                  }
-                },
-                constraints:
-                    const BoxConstraints.tightFor(width: 48, height: 48),
-                icon: const Icon(Icons.arrow_back_rounded,
-                    color: AppColors.onDark),
-              ),
-              const SizedBox(width: 4),
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: AppColors.onDark.withAlpha(25),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.onDark.withAlpha(50)),
-                ),
-                child: const Icon(Icons.star_rounded,
-                    size: 26, color: AppColors.warning),
-              ),
-              const SizedBox(width: 14),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Destaques',
-                    style: TextStyle(
-                      color: AppColors.onDark,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: AppColors.onDark.withAlpha(128),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+    return AppPageHeader(
+      title: 'Destaques',
+      subtitle: subtitle,
+      icon: Icons.star_rounded,
     );
   }
 }
@@ -187,7 +126,10 @@ class _PlayerSpotlightPageState extends ConsumerState<PlayerSpotlightPage> {
 class _SpotlightContent extends StatelessWidget {
   final PlayerSpotlightReport report;
   final String groupId;
-  const _SpotlightContent({required this.report, required this.groupId});
+  const _SpotlightContent({
+    required this.report,
+    required this.groupId,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -403,18 +345,22 @@ class _SpotlightCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 3),
-                      ConfiguredPlayerName(
-                        groupId: groupId,
-                        name: player.playerName,
-                        isGoalkeeper: player.isGoalkeeper,
-                        iconSize: 15,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.3,
-                          color: isDark ? AppColors.onDark : AppColors.slate900,
+                      UserProfileLink(
+                        userId: player.userId,
+                        child: ConfiguredPlayerName(
+                          groupId: groupId,
+                          name: player.playerName,
+                          isGoalkeeper: player.isGoalkeeper,
+                          iconSize: 15,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.3,
+                            color:
+                                isDark ? AppColors.onDark : AppColors.slate900,
+                          ),
+                          maxLines: 1,
                         ),
-                        maxLines: 1,
                       ),
                       if (secondaryStats.isNotEmpty)
                         Padding(
@@ -614,11 +560,11 @@ class _PlayersTable extends StatelessWidget {
                           child: p.goals > 0
                               ? Text(
                                   '${p.goals}',
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
                                     color: AppColors.accent,
-                                    fontFeatures: const [
+                                    fontFeatures: [
                                       FontFeature.tabularFigures()
                                     ],
                                   ),
@@ -634,11 +580,11 @@ class _PlayersTable extends StatelessWidget {
                           child: p.assists > 0
                               ? Text(
                                   '${p.assists}',
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
                                     color: AppColors.info,
-                                    fontFeatures: const [
+                                    fontFeatures: [
                                       FontFeature.tabularFigures()
                                     ],
                                   ),

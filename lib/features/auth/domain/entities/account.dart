@@ -53,23 +53,20 @@ class Account extends Equatable {
 
   /// Retorna true se o usuário é admin desta patota.
   ///
-  /// Duas fontes: o flag confirmado pelo backend para a patota ativa e o array
-  /// preenchido no login. Basta uma delas conceder.
-  ///
-  /// Já tentei tratar o flag como fonte única da verdade, para permitir
-  /// rebaixar alguém. Deu errado: `refreshMyGroupRoles` grava `false` sempre que
-  /// a consulta falha ou ainda não rodou, e aí o usuário perdia a permissão que
-  /// tinha — sem nenhum sinal de que era só uma resposta ausente. Conceder por
-  /// OR erra para o lado seguro; a revogação chega no próximo login.
+  /// Para a patota ativa, o flag consultado especificamente no backend é
+  /// autoritativo. O array do login é apenas fallback enquanto essa consulta
+  /// ainda não terminou. Isso impede que o papel de uma patota vaze para outra.
   bool isGroupAdmin(String groupId) {
-    if (_isActiveGroup(groupId) && (activeGroupIsAdmin ?? false)) return true;
+    if (_isActiveGroup(groupId) && activeGroupIsAdmin != null) {
+      return activeGroupIsAdmin!;
+    }
     return _containsId(groupAdminIds, groupId);
   }
 
   /// Mesma regra do [isGroupAdmin], para o papel de financeiro.
   bool isGroupFinanceiro(String groupId) {
-    if (_isActiveGroup(groupId) && (activeGroupIsFinanceiro ?? false)) {
-      return true;
+    if (_isActiveGroup(groupId) && activeGroupIsFinanceiro != null) {
+      return activeGroupIsFinanceiro!;
     }
     return _containsId(groupFinanceiroIds, groupId);
   }
@@ -109,7 +106,11 @@ class Account extends Equatable {
         userId: json['userId'] as String,
         name: json['name'] as String,
         email: json['email'] as String,
-        roles: List<String>.from(json['roles'] as List? ?? []),
+        // Limpa contas persistidas por versões antigas: GodMode pertence ao
+        // painel web e não deve conceder nem aparecer no aplicativo.
+        roles: List<String>.from(json['roles'] as List? ?? [])
+            .where((role) => role.trim().toLowerCase() != 'godmode')
+            .toList(growable: false),
         accessToken: json['accessToken'] as String,
         refreshToken: json['refreshToken'] as String,
         activeGroupId: json['activeGroupId'] as String?,

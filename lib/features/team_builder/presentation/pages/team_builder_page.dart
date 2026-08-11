@@ -4,12 +4,12 @@ import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/api/api_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/football_pitch.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
@@ -795,64 +795,10 @@ class _TeamBuilderPageState extends ConsumerState<TeamBuilderPage> {
   // ── Header ─────────────────────────────────────────────────────────────────
 
   Widget _buildHeader(GroupIcons icons) {
-    final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: SizedBox(
-          height: 72,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                IconButton(
-                  onPressed: () {
-                    if (context.canPop()) {
-                      context.pop();
-                    } else {
-                      context.go('/app');
-                    }
-                  },
-                  tooltip: 'Voltar',
-                  icon: const Icon(Icons.arrow_back_rounded),
-                ),
-                const SizedBox(width: 8),
-                renderGroupIcon(
-                  icons.goal,
-                  size: 24,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Monte seu time',
-                        style: theme.textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Visualize o desempenho da formação',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return const AppPageHeader(
+      title: 'Monte seu time',
+      subtitle: 'Visualize o desempenho da formação',
+      icon: Icons.groups_2_outlined,
     );
   }
 

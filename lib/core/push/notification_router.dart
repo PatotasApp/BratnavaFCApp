@@ -21,8 +21,10 @@ String notificationRoute(String type, Map<String, dynamic> data) {
     case 'match_ended':
     case 'match_no_quorum':
     case 'mvp_voting_reminder':
+    case 'attendance_confirmed':
     case 'attendance_accepted':
     case 'attendance_rejected':
+    case 'quorum_reached':
       if (_ok(matchId)) return '/app/matches?matchId=$matchId';
       return '/app/matches';
 
@@ -39,7 +41,9 @@ String notificationRoute(String type, Map<String, dynamic> data) {
     case 'poll_closed':
     case 'poll_reminder':
     case 'poll_deadline_changed':
-      return '/app/polls';
+      return data['pollType'] == 'event'
+          ? '/app/polls/events'
+          : '/app/polls/votes';
 
     // ── Calendário ────────────────────────────────────────────────────────
 
@@ -54,6 +58,7 @@ String notificationRoute(String type, Map<String, dynamic> data) {
     case 'payment_confirmed':
     case 'monthly_payment_reminder':
     case 'extra_charge_discount':
+    case 'charge_fully_paid':
       return '/app/payments';
 
     // ── Grupo / membros ───────────────────────────────────────────────────
@@ -66,6 +71,7 @@ String notificationRoute(String type, Map<String, dynamic> data) {
     case 'player_removed_self':
     case 'promoted_admin':
     case 'promoted_financeiro':
+    case 'invite_accepted':
       return '/app/groups';
 
     // ── Apostas ───────────────────────────────────────────────────────────
@@ -78,6 +84,13 @@ String notificationRoute(String type, Map<String, dynamic> data) {
 
     case 'birthday':
       return '/app/birthdays';
+
+    case 'password_changed':
+      return '/app/account';
+
+    case 'admin_notification':
+    case 'admin_broadcast':
+      return '/app';
 
     default:
       return '/app';

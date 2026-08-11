@@ -14,6 +14,7 @@ import '../../domain/entities/group_settings.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/group_settings_provider.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 
 // ── Icon types ────────────────────────────────────────────────────────────────
 
@@ -242,15 +243,11 @@ class _GroupSettingsPageWrapperState extends ConsumerState<GroupSettingsPage> {
     // O jogador manda no grupo: `activeGroupId` da conta pode apontar
     // para uma patota sem jogador nosso, e aí toda rota por grupo
     // responde 403. Ver dashboard_page para o diagnóstico completo.
-    final groupId = activePlayer?.groupId ?? account?.activeGroupId;
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId;
 
     if (groupId == null || groupId.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(
-          leading: const BackButton(),
-          title: const Text('Configurações'),
-        ),
-        body: const _NoGroupState(
+      return const _SettingsPageFrame(
+        child: _NoGroupState(
           title: 'Nenhuma patota ativa',
           message: 'Crie ou entre em um grupo para acessar as configurações.',
         ),
@@ -260,17 +257,15 @@ class _GroupSettingsPageWrapperState extends ConsumerState<GroupSettingsPage> {
     // Enquanto atualiza as roles, exibe loading para não bloquear admins
     // recém-promovidos com "Sem acesso" antes das permissões serem carregadas.
     if (_refreshingRoles) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const _SettingsPageFrame(
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
 
     final isGroupAdm = account!.isGroupAdmin(groupId);
     if (!isGroupAdm) {
-      return Scaffold(
-        appBar: AppBar(
-          leading: const BackButton(),
-          title: const Text('Configurações'),
-        ),
-        body: _NoGroupState(
+      return _SettingsPageFrame(
+        child: _NoGroupState(
           message:
               'Só administradores da patota abrem as configurações. Se você foi '
               'promovido agora, recarregue para atualizar suas permissões.',
@@ -287,14 +282,11 @@ class _GroupSettingsPageWrapperState extends ConsumerState<GroupSettingsPage> {
     final detailAsync = ref.watch(groupDetailProvider(groupId));
 
     return settingsAsync.when(
-      loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (e, _) => Scaffold(
-        appBar: AppBar(
-          leading: const BackButton(),
-          title: const Text('Configurações'),
-        ),
-        body: _ErrorState(
+      loading: () => const _SettingsPageFrame(
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => _SettingsPageFrame(
+        child: _ErrorState(
           message:
               extractDioError(e, 'Não foi possível carregar as configurações.'),
           onRetry: () => ref.invalidate(groupSettingsProvider(groupId)),
@@ -308,6 +300,26 @@ class _GroupSettingsPageWrapperState extends ConsumerState<GroupSettingsPage> {
       ),
     );
   }
+}
+
+class _SettingsPageFrame extends StatelessWidget {
+  final Widget child;
+
+  const _SettingsPageFrame({required this.child});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: Column(
+          children: [
+            const AppPageHeader(
+              title: 'Configurações',
+              subtitle: 'Regras, pagamentos e preferências da patota',
+              icon: Icons.settings_outlined,
+            ),
+            Expanded(child: child),
+          ],
+        ),
+      );
 }
 
 // ── Body ──────────────────────────────────────────────────────────────────────
@@ -1005,8 +1017,6 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildSettingsHero(detail?.name, isDark),
-                  const SizedBox(height: 16),
                   _buildTabbedSettings(
                     isDark,
                     detail: detail,
@@ -1041,60 +1051,14 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
   // ── Section 1: Header ─────────────────────────────────────────────────────
 
   Widget _buildHeader(String? groupName) {
-    final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: SizedBox(
-          height: 72,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                IconButton(
-                  onPressed: () {
-                    if (context.canPop()) {
-                      context.pop();
-                    } else {
-                      context.go('/app/groups');
-                    }
-                  },
-                  tooltip: 'Voltar',
-                  icon: const Icon(Icons.arrow_back_rounded),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Configurações',
-                        maxLines: 2,
-                        style: theme.textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        groupName?.isNotEmpty == true
-                            ? '$groupName · regras da patota'
-                            : 'Regras da patota',
-                        maxLines: 2,
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return AppPageHeader(
+      title: 'Configurações',
+      subtitle: groupName?.isNotEmpty == true
+          ? '$groupName · regras da patota'
+          : 'Regras, pagamentos e preferências da patota',
+      icon: Icons.settings_outlined,
+      onBack: () =>
+          context.canPop() ? context.pop() : context.go('/app/groups'),
     );
   }
 
@@ -2370,12 +2334,15 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: _mvpTieRule == rule.val
-                      ? AppColors.amber50
+                      ? Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: isDark ? .12 : .07)
                       : (isDark ? AppColors.slate800 : AppColors.slate100),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: _mvpTieRule == rule.val
-                        ? AppColors.accent
+                        ? Theme.of(context).colorScheme.primary
                         : (isDark ? AppColors.slate600 : AppColors.slate200),
                     width: 2,
                   ),
@@ -2387,9 +2354,12 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                       height: 16,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
+                        color: _mvpTieRule == rule.val
+                            ? Theme.of(context).colorScheme.primary
+                            : AppColors.transparent,
                         border: Border.all(
                           color: _mvpTieRule == rule.val
-                              ? AppColors.accent
+                              ? Theme.of(context).colorScheme.primary
                               : (isDark
                                   ? AppColors.slate500
                                   : AppColors.slate300),
@@ -2397,8 +2367,11 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                         ),
                       ),
                       child: _mvpTieRule == rule.val
-                          ? const Icon(Icons.check_rounded,
-                              size: 11, color: AppColors.accent)
+                          ? Icon(
+                              Icons.check_rounded,
+                              size: 11,
+                              color: Theme.of(context).colorScheme.onPrimary,
+                            )
                           : null,
                     ),
                     const SizedBox(width: 10),

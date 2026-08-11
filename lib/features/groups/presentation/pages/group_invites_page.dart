@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../domain/entities/group_invite.dart';
 import '../providers/group_invites_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 
 class GroupInvitesPage extends ConsumerStatefulWidget {
   const GroupInvitesPage({super.key});
@@ -27,6 +29,10 @@ class _GroupInvitesPageState extends ConsumerState<GroupInvitesPage> {
       await ref.read(groupInvitesDsProvider).acceptInvite(invite.id);
       ref.invalidate(myGroupInvitesProvider);
       ref.invalidate(myGroupInviteCountProvider);
+      // A nova patota precisa aparecer em "Suas patotas" e habilitar as roles
+      // do grupo — sem isso a lista de players e as permissões ficam defasadas.
+      ref.invalidate(myPlayersProvider);
+      await ref.read(authNotifierProvider.notifier).refreshGroupMembership();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Você entrou em ${invite.groupName}!')),
@@ -74,7 +80,7 @@ class _GroupInvitesPageState extends ConsumerState<GroupInvitesPage> {
         bottom: false,
         child: Column(
           children: [
-            _InvitesHeader(onRefresh: _refresh),
+            const _InvitesHeader(),
             Expanded(
                 child: invitesAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -123,87 +129,14 @@ class _GroupInvitesPageState extends ConsumerState<GroupInvitesPage> {
 }
 
 class _InvitesHeader extends StatelessWidget {
-  final Future<void> Function() onRefresh;
-
-  const _InvitesHeader({required this.onRefresh});
+  const _InvitesHeader();
 
   @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.slate900 : AppColors.onDark,
-        border: Border(
-          bottom: BorderSide(
-            color: isDark ? AppColors.slate700 : AppColors.slate200,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            tooltip: 'Voltar',
-            onPressed: () =>
-                context.canPop() ? context.pop() : context.go('/app'),
-            style: IconButton.styleFrom(
-              backgroundColor: isDark ? AppColors.slate800 : AppColors.slate50,
-              foregroundColor: isDark ? AppColors.onDark : AppColors.slate800,
-              side: BorderSide(
-                color: isDark ? AppColors.slate700 : AppColors.slate200,
-              ),
-            ),
-            icon: const Icon(Icons.arrow_back_rounded),
-          ),
-          const SizedBox(width: 10),
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: AppColors.accentOf(
-                isDark ? Brightness.dark : Brightness.light,
-              ).withAlpha(24),
-              borderRadius: BorderRadius.circular(13),
-            ),
-            child: Icon(
-              Icons.mail_outline_rounded,
-              color: AppColors.accentOf(
-                isDark ? Brightness.dark : Brightness.light,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Convites',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                    color: isDark ? AppColors.onDark : AppColors.slate900,
-                  ),
-                ),
-                Text(
-                  'Entre em uma nova patota',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isDark ? AppColors.slate400 : AppColors.slate500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Atualizar',
-            onPressed: onRefresh,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const AppPageHeader(
+        title: 'Convites',
+        subtitle: 'Entre em uma nova patota',
+        icon: Icons.mail_outline_rounded,
+      );
 }
 
 class _InvitesEmpty extends StatelessWidget {

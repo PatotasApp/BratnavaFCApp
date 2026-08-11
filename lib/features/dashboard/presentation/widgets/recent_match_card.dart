@@ -61,8 +61,7 @@ class RecentMatchCard extends ConsumerWidget {
     final icons = GroupIcons.from(settings);
 
     final account = ref.watch(accountStoreProvider).activeAccount;
-    final isGroupAdm =
-        account != null && (account.isAdmin || account.isGroupAdmin(groupId));
+    final isGroupAdm = account != null && account.isGroupAdmin(groupId);
     final canSeeStats = isGroupAdm || (settings?.showPlayerStats ?? false);
 
     return GestureDetector(

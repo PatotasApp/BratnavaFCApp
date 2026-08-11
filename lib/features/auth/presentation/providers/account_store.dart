@@ -74,9 +74,10 @@ class AccountStore extends StateNotifier<AccountState> {
         if (!a.keepLoggedIn) return false;
         final accessExpired =
             a.accessToken.isEmpty || JwtHelper.isExpired(a.accessToken);
-        final refreshExpired =
-            a.refreshToken.isEmpty || JwtHelper.isExpired(a.refreshToken);
-        if (accessExpired && refreshExpired) return false;
+        // O refresh token do backend e opaco, nao e um JWT. Sua validade so
+        // pode ser confirmada pelo endpoint de refresh.
+        final refreshUnavailable = a.refreshToken.isEmpty;
+        if (accessExpired && refreshUnavailable) return false;
         return true;
       }).toList();
 
@@ -84,8 +85,15 @@ class AccountStore extends StateNotifier<AccountState> {
           ? activeId
           : (activeList.isNotEmpty ? activeList.first.userId : null);
 
-      state =
-          AccountState(accounts: activeList, activeAccountId: validActiveId);
+      final matchingAccounts =
+          activeList.where((account) => account.userId == validActiveId);
+      final activeAccount = matchingAccounts.isNotEmpty
+          ? matchingAccounts.first
+          : (activeList.isNotEmpty ? activeList.first : null);
+      state = AccountState(
+        accounts: activeAccount == null ? const [] : [activeAccount],
+        activeAccountId: activeAccount?.userId,
+      );
     } catch (_) {}
   }
 
@@ -102,53 +110,17 @@ class AccountStore extends StateNotifier<AccountState> {
 
   // ── API pública ───────────────────────────────────────────────────────────
 
-  /// Adiciona ou atualiza uma conta e a torna ativa.
+  /// Salva a única sessão autenticada do aplicativo.
   Future<void> upsertAccount(Account account) async {
-    final existing =
-        state.accounts.indexWhere((a) => a.userId == account.userId);
-    final list = List<Account>.from(state.accounts);
-
-    if (existing >= 0) {
-      list[existing] = account;
-    } else {
-      list.add(account);
-    }
-
-    state = AccountState(accounts: list, activeAccountId: account.userId);
+    state = AccountState(accounts: [account], activeAccountId: account.userId);
     await _persist();
   }
 
-  Future<void> setActive(String userId) async {
-    state = state.copyWith(activeAccountId: userId);
-    await _persist();
-  }
-
-  /// Troca para outra conta limpando activeGroupId/activePlayerId dela.
-  /// Evita que dados contaminados de trocas anteriores apareçam no novo ativo.
-  Future<void> switchTo(String userId) async {
-    final idx = state.accounts.indexWhere((a) => a.userId == userId);
-    if (idx < 0) {
-      state = state.copyWith(activeAccountId: userId);
-      await _persist();
-      return;
-    }
-    final a = state.accounts[idx];
-    final list = List<Account>.from(state.accounts);
-    list[idx] = Account(
-      userId: a.userId,
-      name: a.name,
-      email: a.email,
-      roles: a.roles,
-      accessToken: a.accessToken,
-      refreshToken: a.refreshToken,
-      activeGroupId: null,
-      activePlayerId: null,
-      groupAdminIds: const [],
-      groupFinanceiroIds: const [],
-      keepLoggedIn: a.keepLoggedIn,
-    );
-    state = AccountState(accounts: list, activeAccountId: userId);
-    await _persist();
+  /// Sincroniza o estado em memoria com alteracoes feitas por isolates de
+  /// background, como a renovacao de token ao responder uma notificacao.
+  Future<void> reloadFromStorage() async {
+    await _prefs.reload();
+    _load();
   }
 
   /// Atualiza tokens do active account após um refresh.
@@ -179,14 +151,9 @@ class AccountStore extends StateNotifier<AccountState> {
     await upsertAccount(active.copyWith(accessToken: '', refreshToken: ''));
   }
 
-  /// Faz logout da conta ativa. Se houver outra, troca para ela.
+  /// Encerra a sessão e remove eventuais contas legadas persistidas.
   Future<void> logout() async {
-    final activeId = state.activeAccountId;
-    final list = state.accounts.where((a) => a.userId != activeId).toList();
-    final nextId = list.isNotEmpty ? list.first.userId : null;
-
-    state = AccountState(accounts: list, activeAccountId: nextId);
-    await _persist();
+    await logoutAll();
   }
 
   Future<void> logoutAll() async {

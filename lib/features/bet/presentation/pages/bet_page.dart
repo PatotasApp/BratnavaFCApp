@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../widgets/current_bet_tab.dart';
@@ -39,7 +39,7 @@ class _BetPageState extends ConsumerState<BetPage>
     // O jogador manda no grupo: `activeGroupId` da conta pode apontar
     // para uma patota sem jogador nosso, e aí toda rota por grupo
     // responde 403. Ver dashboard_page para o diagnóstico completo.
-    final groupId = activePlayer?.groupId ?? account?.activeGroupId ?? '';
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId ?? '';
 
     if (groupId.isEmpty) {
       return Scaffold(
@@ -109,63 +109,9 @@ class _BetHeader extends StatelessWidget {
   const _BetHeader();
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.lightText,
-            AppColors.darkCard,
-            AppColors.lightText
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        child: Row(children: [
-          IconButton(
-            tooltip: 'Voltar',
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/app');
-              }
-            },
-            constraints: const BoxConstraints.tightFor(width: 48, height: 48),
-            style: IconButton.styleFrom(
-              backgroundColor: AppColors.onDark.withAlpha(20),
-              foregroundColor: AppColors.onDark,
-              side: BorderSide(color: AppColors.onDark.withAlpha(40)),
-            ),
-            icon: const Icon(Icons.arrow_back_rounded, color: AppColors.onDark),
-          ),
-          const SizedBox(width: 4),
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.onDark.withValues(alpha: .1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.onDark.withValues(alpha: .2)),
-            ),
-            child: const Icon(Icons.monetization_on_outlined,
-                size: 22, color: AppColors.onDark),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text('Bet',
-                style: TextStyle(
-                  color: AppColors.onDark,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.3,
-                )),
-          ),
-        ]),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const AppPageHeader(
+        title: 'Bet',
+        subtitle: 'Apostas e palpites das partidas',
+        icon: Icons.monetization_on_outlined,
+      );
 }

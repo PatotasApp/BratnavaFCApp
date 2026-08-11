@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
+import '../../../../shared/presentation/widgets/user_profile_link.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../domain/entities/match_models.dart';
 
@@ -139,20 +140,26 @@ class _PlayerRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Row(
         children: [
-          AvatarWidget(
-              name: player.playerName, photoUrl: player.photoUrl, size: 28),
+          UserProfileLink(
+            userId: player.userId,
+            child: AvatarWidget(
+                name: player.playerName, photoUrl: player.photoUrl, size: 28),
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                PlayerNameWithIcon(
-                  name: player.playerName,
-                  isGoalkeeper: player.isGoalkeeper,
-                  icons: icons,
-                  iconSize: 13,
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w500),
+                UserProfileLink(
+                  userId: player.userId,
+                  child: PlayerNameWithIcon(
+                    name: player.playerName,
+                    isGoalkeeper: player.isGoalkeeper,
+                    icons: icons,
+                    iconSize: 13,
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
                 ),
               ],
             ),

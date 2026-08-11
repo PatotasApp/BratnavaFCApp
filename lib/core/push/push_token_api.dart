@@ -35,4 +35,22 @@ class PushTokenApi {
       return false;
     }
   }
+
+  /// Desativa no backend o token FCM deste dispositivo antes do logout.
+  Future<bool> unregisterToken(String token) async {
+    try {
+      final response = await _dio.delete(
+        ApiConstants.pushUnregisterToken,
+        data: {'token': token},
+        options: Options(extra: {AuthInterceptor.skipUnauthorizedKey: true}),
+      );
+      return response.statusCode != null && response.statusCode! < 300;
+    } on DioException catch (e) {
+      _log.w('[PushTokenApi] Falha ao desregistrar token: ${e.message}');
+      return false;
+    } catch (e) {
+      _log.e('[PushTokenApi] Erro ao desregistrar token: $e');
+      return false;
+    }
+  }
 }

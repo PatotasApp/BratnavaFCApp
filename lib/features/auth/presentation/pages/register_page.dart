@@ -8,9 +8,7 @@ import '../providers/auth_provider.dart';
 import '../../../../core/errors/app_exception.dart';
 
 class RegisterPage extends ConsumerStatefulWidget {
-  final bool addMode;
-
-  const RegisterPage({super.key, this.addMode = false});
+  const RegisterPage({super.key});
 
   @override
   ConsumerState<RegisterPage> createState() => _RegisterPageState();
@@ -56,7 +54,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       data: (_) async {
         setState(() => _success = true);
         await Future.delayed(const Duration(milliseconds: 600));
-        if (mounted) context.go(widget.addMode ? '/login?add=1' : '/login');
+        if (mounted) context.go('/login');
       },
     );
   }
@@ -112,9 +110,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                         ),
                       ),
                       TextButton(
-                        onPressed: () => context.go(
-                          widget.addMode ? '/login?add=1' : '/login',
-                        ),
+                        onPressed: () => context.go('/login'),
                         child: const Text(
                           'Entrar',
                           style: TextStyle(
@@ -248,8 +244,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
               controller: _emailCtrl,
               keyboardType: TextInputType.emailAddress,
               validator: (v) {
-                if (v == null || v.trim().isEmpty)
+                if (v == null || v.trim().isEmpty) {
                   return 'E-mail é obrigatório.';
+                }
                 if (!RegExp(r'^[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}$')
                     .hasMatch(v.trim())) {
                   return 'E-mail inválido.';

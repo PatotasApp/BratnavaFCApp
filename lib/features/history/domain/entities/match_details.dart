@@ -43,7 +43,9 @@ class MatchGoal {
 class MatchPlayer {
   final String matchPlayerId;
   final String? playerId;
+  final String? userId;
   final String playerName;
+  final String? photoUrl;
   final bool isGoalkeeper;
   final bool isMvp;
   final bool didNotPlay;
@@ -54,7 +56,9 @@ class MatchPlayer {
   const MatchPlayer({
     required this.matchPlayerId,
     this.playerId,
+    this.userId,
     required this.playerName,
+    this.photoUrl,
     this.isGoalkeeper = false,
     this.isMvp = false,
     this.didNotPlay = false,
@@ -67,7 +71,9 @@ class MatchPlayer {
       MatchPlayer(
         matchPlayerId: (j['matchPlayerId'] ?? '') as String,
         playerId: j['playerId'] as String?,
+        userId: (j['userId'] ?? j['UserId'])?.toString(),
         playerName: (j['playerName'] ?? '') as String,
+        photoUrl: (j['photoUrl'] ?? j['PhotoUrl']) as String?,
         isGoalkeeper: (j['isGoalkeeper'] as bool?) ?? false,
         isMvp: (j['isMvp'] as bool?) ?? false,
         didNotPlay: (j['didNotPlay'] as bool?) ?? false,

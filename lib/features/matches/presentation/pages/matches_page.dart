@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/realtime/realtime_provider.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../auth/domain/entities/account.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
@@ -366,7 +367,7 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
     // O jogador manda no grupo: `activeGroupId` da conta pode apontar
     // para uma patota sem jogador nosso, e aí toda rota por grupo
     // responde 403. Ver dashboard_page para o diagnóstico completo.
-    final groupId = activePlayer?.groupId ?? account?.activeGroupId ?? '';
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId ?? '';
     final isAdmin = _isAdmin(account, groupId);
 
     if (groupId.isNotEmpty) {
@@ -600,111 +601,96 @@ class _MatchBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final fmt = DateFormat('dd/MM HH:mm', 'pt_BR');
-    // Esta tela usa banner próprio em vez de AppBar, então o inset da status bar
-    // não é aplicado automaticamente. Sem somar esse espaço o conteúdo sobe por
-    // baixo do relógio e dos ícones do sistema. O fundo continua indo até o topo
-    // da tela — só o conteúdo desce.
-    final topInset = MediaQuery.of(context).padding.top;
-    return Container(
-      height: 72 + topInset,
-      padding: EdgeInsets.fromLTRB(16, 12 + topInset, 16, 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'PARTIDAS',
-                  style: TextStyle(
-                    color: AppColors.darkTextMuted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: .8,
-                  ),
+    return AppPageHeader.main(
+      title: 'Partidas',
+      icon: Icons.sports_soccer_rounded,
+      footer: AppPageHeaderActionBar(actions: [
+        PopupMenuButton<_MatchHeaderAction>(
+          tooltip: 'Mais ações',
+          onSelected: (action) {
+            switch (action) {
+              case _MatchHeaderAction.edit:
+                onEdit?.call();
+              case _MatchHeaderAction.rewind:
+                onRewind();
+              case _MatchHeaderAction.delete:
+                onDelete?.call();
+              case _MatchHeaderAction.create:
+                onCreateNew?.call();
+              case _MatchHeaderAction.refresh:
+                onRefresh();
+            }
+          },
+          itemBuilder: (context) => [
+            if (onEdit != null)
+              const PopupMenuItem(
+                value: _MatchHeaderAction.edit,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.edit_outlined),
+                  title: Text('Alterar partida'),
                 ),
-                if (s.hasMatch)
-                  Text(
-                    '${s.placeName ?? "—"} · ${s.playedAt != null ? fmt.format(s.playedAt!) : "—"}',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurface,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+              ),
+            if (isAdmin && s.hasMatch)
+              PopupMenuItem(
+                value: canRewind ? _MatchHeaderAction.rewind : null,
+                child: const ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.undo_rounded),
+                  title: Text('Voltar uma etapa'),
+                ),
+              ),
+            if (onDelete != null)
+              const PopupMenuItem(
+                value: _MatchHeaderAction.delete,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.delete_outline_rounded),
+                  title: Text('Excluir partida'),
+                ),
+              ),
+            if (isAdmin && onCreateNew != null)
+              const PopupMenuItem(
+                value: _MatchHeaderAction.create,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.add_circle_outline_rounded),
+                  title: Text('Nova partida'),
+                ),
+              ),
+            const PopupMenuItem(
+              value: _MatchHeaderAction.refresh,
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.refresh_rounded),
+                title: Text('Atualizar'),
+              ),
+            ),
+          ],
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outline,
+              ),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.more_horiz_rounded, size: 18),
+                SizedBox(width: 8),
+                Text('Ações'),
               ],
             ),
           ),
-          if (onEdit != null)
-            IconButton(
-              onPressed: onEdit,
-              tooltip: 'Alterar partida',
-              icon: const Icon(Icons.edit_outlined),
-            ),
-          if (isAdmin && s.hasMatch)
-            IconButton(
-              onPressed: canRewind ? onRewind : null,
-              tooltip: 'Voltar para a etapa anterior',
-              icon: const Icon(Icons.undo_rounded),
-            ),
-          if (onDelete != null)
-            IconButton(
-              onPressed: onDelete,
-              tooltip: 'Excluir partida',
-              style: IconButton.styleFrom(
-                foregroundColor: theme.colorScheme.error,
-                backgroundColor: theme.colorScheme.errorContainer,
-                side: BorderSide(color: theme.colorScheme.error),
-              ),
-              icon: const Icon(Icons.delete_outline_rounded),
-            ),
-          PopupMenuButton<_MatchHeaderAction>(
-            tooltip: 'Mais ações',
-            icon: const Icon(Icons.more_horiz_rounded),
-            onSelected: (action) {
-              switch (action) {
-                case _MatchHeaderAction.create:
-                  onCreateNew?.call();
-                case _MatchHeaderAction.refresh:
-                  onRefresh();
-              }
-            },
-            itemBuilder: (context) => [
-              if (isAdmin && onCreateNew != null)
-                const PopupMenuItem(
-                  value: _MatchHeaderAction.create,
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.add_circle_outline_rounded),
-                    title: Text('Nova partida'),
-                  ),
-                ),
-              const PopupMenuItem(
-                value: _MatchHeaderAction.refresh,
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.refresh_rounded),
-                  title: Text('Atualizar'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+        ),
+      ]),
     );
   }
 }
 
-enum _MatchHeaderAction { create, refresh }
+enum _MatchHeaderAction { edit, rewind, delete, create, refresh }
 
 // ── Strip de votação/evento vinculado ────────────────────────────────────────
 
@@ -754,9 +740,7 @@ class _LinkedPollStrip extends ConsumerWidget {
                   .watch(_linkedPollDetailProvider(
                       (groupId: groupId, pollId: linked.id)))
                   .valueOrNull,
-              groupId: groupId,
               isAdmin: isAdmin,
-              isDark: isDark,
               onUnlink: onUnlink,
               onOpen: (ctx) => _openPollModal(ctx, ref, linked!),
             )
@@ -812,24 +796,21 @@ class _LinkedPollStrip extends ConsumerWidget {
 class _LinkedRow extends StatelessWidget {
   final PollSummary poll;
   final PollDetail? detail;
-  final String groupId;
   final bool isAdmin;
-  final bool isDark;
   final VoidCallback onUnlink;
   final void Function(BuildContext) onOpen;
   const _LinkedRow({
     required this.poll,
     required this.detail,
-    required this.groupId,
     required this.isAdmin,
-    required this.isDark,
     required this.onUnlink,
     required this.onOpen,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = poll.isEvent ? AppColors.violet600 : AppColors.infoLight;
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.primary;
     final responses = poll.totalVoters;
     final presence = detail != null ? _EventPresenceStats.from(detail!) : null;
     final summaryText = poll.isEvent && presence != null
@@ -837,82 +818,125 @@ class _LinkedRow extends StatelessWidget {
         : '$responses ${responses == 1 ? 'resposta' : 'respostas'}';
     final label = poll.isEvent ? 'Evento' : 'Votação';
     final statusText = poll.isOpen ? 'Aberta' : 'Encerrada';
-    final statusColor = poll.isOpen ? AppColors.emerald500 : AppColors.slate400;
+    final statusColor = poll.isOpen
+        ? AppColors.successOf(theme.brightness)
+        : theme.colorScheme.onSurfaceVariant;
 
     return GestureDetector(
       onTap: () => onOpen(context),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Column(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: theme.colorScheme.outlineVariant),
+        ),
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Linha principal ──────────────────────────────────────
-            Row(children: [
-              // Ícone do evento ou ícone padrão
-              if (poll.eventIcon != null && poll.eventIcon!.isNotEmpty)
-                Text(poll.eventIcon!, style: const TextStyle(fontSize: 15))
-              else
-                Icon(poll.isEvent ? Icons.event_rounded : Icons.poll_rounded,
-                    size: 15, color: color),
-              const SizedBox(width: 8),
-
-              // Título
-              Expanded(
-                child: Text(
-                  poll.title,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? AppColors.slate100 : AppColors.slate800,
+            Container(
+              width: 42,
+              height: 42,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: .10),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: color.withValues(alpha: .22)),
+              ),
+              child: poll.eventIcon != null && poll.eventIcon!.isNotEmpty
+                  ? Text(poll.eventIcon!, style: const TextStyle(fontSize: 20))
+                  : Icon(
+                      poll.isEvent ? Icons.event_rounded : Icons.poll_rounded,
+                      size: 20,
+                      color: color,
+                    ),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          poll.title,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (isAdmin)
+                        IconButton(
+                          onPressed: onUnlink,
+                          tooltip: 'Desvincular evento',
+                          visualDensity: VisualDensity.compact,
+                          iconSize: 17,
+                          padding: EdgeInsets.zero,
+                          constraints:
+                              const BoxConstraints(minWidth: 28, minHeight: 28),
+                          icon: Icon(
+                            Icons.close_rounded,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 5,
+                    children: [
+                      _Badge(
+                        label: statusText,
+                        fg: statusColor,
+                        bg: statusColor.withValues(alpha: .1),
+                        border: statusColor.withValues(alpha: .3),
+                      ),
+                      if (poll.hasVoted)
+                        _Badge(
+                          label: '✓ Votou',
+                          fg: color,
+                          bg: color.withValues(alpha: .08),
+                          border: color.withValues(alpha: .25),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '$summaryText · $label',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontSize: 11,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Abrir',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: color,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(Icons.arrow_forward_rounded, size: 14, color: color),
+                    ],
+                  ),
+                ],
               ),
-
-              // Badge status (Aberta / Encerrada)
-              _Badge(
-                label: statusText,
-                fg: statusColor,
-                bg: statusColor.withValues(alpha: .1),
-                border: statusColor.withValues(alpha: .3),
-              ),
-
-              // Badge "✓ Votou"
-              if (poll.hasVoted) ...[
-                const SizedBox(width: 6),
-                _Badge(
-                  label: '✓ Votou',
-                  fg: AppColors.infoLight,
-                  bg: AppColors.infoLight.withValues(alpha: .08),
-                  border: AppColors.infoLight.withValues(alpha: .25),
-                ),
-              ],
-
-              // Botão desvincular (admin)
-              if (isAdmin) ...[
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: onUnlink,
-                  child: Icon(Icons.close_rounded,
-                      size: 16,
-                      color: isDark ? AppColors.slate500 : AppColors.slate400),
-                ),
-              ],
-            ]),
-
-            // ── Linha secundária: N respostas · abrir ───────────────
-            const SizedBox(height: 3),
-            Row(children: [
-              const SizedBox(width: 23), // alinha com o título
-              Text(
-                '$summaryText · $label · abrir →',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isDark ? AppColors.slate500 : AppColors.slate400,
-                ),
-              ),
-            ]),
+            ),
           ],
         ),
       ),

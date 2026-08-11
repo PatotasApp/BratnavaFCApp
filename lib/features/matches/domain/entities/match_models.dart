@@ -185,6 +185,7 @@ class MatchHeaderDto {
 class MatchPlayerInfo {
   final String matchPlayerId;
   final String playerId;
+  final String? userId;
   final String playerName;
   final String? photoUrl;
   final bool isGoalkeeper;
@@ -205,6 +206,7 @@ class MatchPlayerInfo {
   const MatchPlayerInfo({
     required this.matchPlayerId,
     required this.playerId,
+    this.userId,
     required this.playerName,
     this.photoUrl,
     required this.isGoalkeeper,
@@ -228,6 +230,7 @@ class MatchPlayerInfo {
         matchPlayerId:
             (j['matchPlayerId'] ?? j['MatchPlayerId'] ?? '').toString(),
         playerId: (j['playerId'] ?? j['PlayerId'] ?? '').toString(),
+        userId: (j['userId'] ?? j['UserId'])?.toString(),
         playerName: j['playerName'] as String? ??
             j['PlayerName'] as String? ??
             j['name'] as String? ??
@@ -647,6 +650,25 @@ class MatchState {
   /// Fallback local: usa flag do backend quando disponível.
   bool get teamsAssigned =>
       canStartMatch || (teamAPlayers.isNotEmpty && teamBPlayers.isNotEmpty);
+
+  /// Jogadores confirmados disponiveis para formar ou refazer os times.
+  /// Depois da primeira formacao o backend pode devolve-los apenas dentro de
+  /// teamA/teamB, por isso a contagem nao pode depender de acceptedPlayers.
+  List<MatchPlayerInfo> get formationPlayers {
+    final seen = <String>{};
+    return [
+      ...acceptedPlayers,
+      ...participants,
+      ...unassignedPlayers,
+      ...teamAPlayers,
+      ...teamBPlayers,
+    ].where((player) {
+      final key = player.matchPlayerId.isNotEmpty
+          ? 'match:${player.matchPlayerId}'
+          : 'player:${player.playerId}';
+      return seen.add(key);
+    }).toList(growable: false);
+  }
 
   // Sentinel usado para distinguir "não passou" de "passou null explicitamente"
   static const Object _unset = Object();

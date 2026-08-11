@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
+import '../../../../shared/presentation/widgets/user_profile_link.dart';
 import '../../domain/entities/match_models.dart';
 
 // ── Helpers de ausência (espelha absenceIcons.ts) ─────────────────────────────
@@ -69,67 +70,76 @@ class PlayerListTile extends StatelessWidget {
       child: ListTile(
         dense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-        leading: AvatarWidget(
-            name: player.playerName, photoUrl: player.photoUrl, size: 36),
-        title: Row(
-          children: [
-            Flexible(
-              child: Text(
-                player.playerName,
-                style:
-                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (player.isGoalkeeper) ...[
-              const SizedBox(width: 6),
-              const Icon(Icons.sports_soccer,
-                  size: 14, color: AppColors.slate400),
-            ],
-            if (player.inviteResponse == InviteResponse.declined &&
-                player.absenceType != null) ...[
-              const SizedBox(width: 6),
-              Tooltip(
-                message: player.absenceDescription ??
-                    _absenceLabel(player.absenceType!),
-                child: Icon(
-                  _absenceIcon(player.absenceType!),
-                  size: 14,
-                  color: player.absenceType == 2
-                      ? AppColors.rose500
-                      : AppColors.slate400,
+        leading: UserProfileLink(
+          userId: player.userId,
+          child: AvatarWidget(
+              name: player.playerName, photoUrl: player.photoUrl, size: 36),
+        ),
+        title: UserProfileLink(
+          userId: player.userId,
+          child: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  player.playerName,
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w500),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (player.isGoalkeeper) ...[
+                const SizedBox(width: 6),
+                const Icon(Icons.sports_soccer,
+                    size: 14, color: AppColors.slate400),
+              ],
+              if (player.inviteResponse == InviteResponse.declined &&
+                  player.absenceType != null) ...[
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: player.absenceDescription ??
+                      _absenceLabel(player.absenceType!),
+                  child: Icon(
+                    _absenceIcon(player.absenceType!),
+                    size: 14,
+                    color: player.absenceType == 2
+                        ? AppColors.rose500
+                        : AppColors.slate400,
+                  ),
+                ),
+              ],
+              if (player.isGuest) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: AppColors.amber200,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'Convidado',
+                    style:
+                        TextStyle(fontSize: 10, color: AppColors.warningLight),
+                  ),
+                ),
+              ],
+              if (isCurrentUser) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: AppColors.blue200,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'Você',
+                    style: TextStyle(fontSize: 10, color: AppColors.infoLight),
+                  ),
+                ),
+              ],
             ],
-            if (player.isGuest) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: AppColors.amber200,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text(
-                  'Convidado',
-                  style: TextStyle(fontSize: 10, color: AppColors.warningLight),
-                ),
-              ),
-            ],
-            if (isCurrentUser) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: AppColors.blue200,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text(
-                  'Você',
-                  style: TextStyle(fontSize: 10, color: AppColors.infoLight),
-                ),
-              ),
-            ],
-          ],
+          ),
         ),
         trailing: loading
             ? const SizedBox(

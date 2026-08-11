@@ -1,10 +1,10 @@
 import 'dart:math' show min;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
@@ -176,7 +176,7 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
     // O jogador manda no grupo: `activeGroupId` da conta pode apontar
     // para uma patota sem jogador nosso, e aí toda rota por grupo
     // responde 403. Ver dashboard_page para o diagnóstico completo.
-    final groupId = activePlayer?.groupId ?? account?.activeGroupId;
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId;
 
     // Enquanto myPlayersProvider carrega, mostra spinner em vez de "sem grupo"
     if (groupId == null || groupId.isEmpty) {
@@ -185,11 +185,16 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       }
       return Scaffold(
-        appBar: AppBar(
-          leading: const BackButton(),
-          title: const Text('Estatísticas'),
+        body: const Column(
+          children: [
+            AppPageHeader(
+              title: 'Estatísticas',
+              subtitle: 'Desempenho dos jogadores da patota',
+              icon: Icons.bar_chart_rounded,
+            ),
+            Expanded(child: _NoGroupState()),
+          ],
         ),
-        body: const _NoGroupState(),
       );
     }
 
@@ -318,160 +323,50 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
       if (consideredCount > 0) subtitle += ' · $consideredCount consideradas';
     }
 
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.lightText,
-            AppColors.darkCard,
-            AppColors.lightText
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  // O iconButtonTheme do app pinta fundo `surface` + borda, que
-                  // no tema claro é branco. Sobre esta faixa escura o botão
-                  // virava um quadrado branco com o ícone branco por cima —
-                  // invisível. Aqui a faixa é sempre escura, então o botão
-                  // precisa ser transparente com ícone claro.
-                  IconButton(
-                    onPressed: () {
-                      if (context.canPop()) {
-                        context.pop();
-                      } else {
-                        context.go('/app');
-                      }
-                    },
-                    tooltip: 'Voltar',
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppColors.onDark.withAlpha(20),
-                      foregroundColor: AppColors.onDark,
-                      side: BorderSide(color: AppColors.onDark.withAlpha(40)),
-                    ),
-                    icon: const Icon(Icons.arrow_back_rounded),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppColors.onDark.withAlpha(25),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.onDark.withAlpha(50)),
-                    ),
-                    child: const Icon(Icons.bar_chart_rounded,
-                        size: 24, color: AppColors.onDark),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Estatísticas',
-                            style: TextStyle(
-                              color: AppColors.onDark,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: -0.5,
-                            )),
-                        const SizedBox(height: 2),
-                        Text(subtitle,
-                            style: TextStyle(
-                                color: AppColors.onDark.withAlpha(128),
-                                fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              // Tab buttons
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    if (showGeneral) ...[
-                      _tabBtn('Geral', Icons.bar_chart_rounded,
-                          selected: _viewMode == _StatsViewMode.general,
-                          onTap: () => setState(() {
-                                _viewMode = _StatsViewMode.general;
-                                if (_sortKey == _SortKey.points) {
-                                  _sortKey = _SortKey.winRate;
-                                }
-                              })),
-                      const SizedBox(width: 6),
-                    ],
-                    if (showPerMatch) ...[
-                      _tabBtn('Por partida', Icons.person_outline_rounded,
-                          selected: _viewMode == _StatsViewMode.perMatch,
-                          onTap: () => setState(() {
-                                _viewMode = _StatsViewMode.perMatch;
-                                if (_sortKey == _SortKey.points) {
-                                  _sortKey = _SortKey.winRate;
-                                }
-                              })),
-                      const SizedBox(width: 6),
-                    ],
-                    if (showClassification)
-                      _tabBtn('Classificação', Icons.leaderboard_outlined,
-                          selected: _viewMode == _StatsViewMode.classification,
-                          onTap: () => setState(() {
-                                _viewMode = _StatsViewMode.classification;
-                                _sortKey = _SortKey.points;
-                              })),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+    return AppPageHeader(
+      title: 'Estatísticas',
+      subtitle: subtitle,
+      icon: Icons.bar_chart_rounded,
+      footer: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          if (showGeneral)
+            ChoiceChip(
+              label: const Text('Geral'),
+              selected: _viewMode == _StatsViewMode.general,
+              onSelected: (_) => setState(() {
+                _viewMode = _StatsViewMode.general;
+                if (_sortKey == _SortKey.points) {
+                  _sortKey = _SortKey.winRate;
+                }
+              }),
+            ),
+          if (showPerMatch)
+            ChoiceChip(
+              label: const Text('Por partida'),
+              selected: _viewMode == _StatsViewMode.perMatch,
+              onSelected: (_) => setState(() {
+                _viewMode = _StatsViewMode.perMatch;
+                if (_sortKey == _SortKey.points) {
+                  _sortKey = _SortKey.winRate;
+                }
+              }),
+            ),
+          if (showClassification)
+            ChoiceChip(
+              label: const Text('Classificação'),
+              selected: _viewMode == _StatsViewMode.classification,
+              onSelected: (_) => setState(() {
+                _viewMode = _StatsViewMode.classification;
+                _sortKey = _SortKey.points;
+              }),
+            ),
+        ],
       ),
     );
   }
 
-  Widget _tabBtn(String label, IconData icon,
-          {required bool selected, required VoidCallback onTap}) =>
-      GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          constraints: const BoxConstraints(minHeight: 44),
-          decoration: BoxDecoration(
-            color: selected ? AppColors.onDark : AppColors.onDark.withAlpha(25),
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon,
-                  size: 13,
-                  color: selected
-                      ? AppColors.slate900
-                      : AppColors.onDark.withAlpha(200)),
-              const SizedBox(width: 5),
-              Text(label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: selected
-                        ? AppColors.slate900
-                        : AppColors.onDark.withAlpha(200),
-                  )),
-            ],
-          ),
-        ),
-      );
 }
 
 // ── Rankings content ──────────────────────────────────────────────────────────

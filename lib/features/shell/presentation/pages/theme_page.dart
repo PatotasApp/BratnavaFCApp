@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/theme_mode_provider.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 
 class ThemePage extends ConsumerWidget {
   const ThemePage({super.key});
@@ -10,84 +10,16 @@ class ThemePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(themeModeProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       body: SafeArea(
         bottom: false,
         child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: isDark ? AppColors.slate700 : AppColors.slate200,
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Voltar',
-                    onPressed: () =>
-                        context.canPop() ? context.pop() : context.go('/app'),
-                    style: IconButton.styleFrom(
-                      backgroundColor:
-                          isDark ? AppColors.slate800 : AppColors.slate50,
-                      foregroundColor:
-                          isDark ? AppColors.onDark : AppColors.slate800,
-                      side: BorderSide(
-                        color: isDark ? AppColors.slate700 : AppColors.slate200,
-                      ),
-                    ),
-                    icon: const Icon(Icons.arrow_back_rounded),
-                  ),
-                  const SizedBox(width: 12),
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppColors.accentOf(
-                        isDark ? Brightness.dark : Brightness.light,
-                      ).withAlpha(24),
-                      borderRadius: BorderRadius.circular(13),
-                    ),
-                    child: Icon(
-                      Icons.palette_outlined,
-                      color: AppColors.accentOf(
-                        isDark ? Brightness.dark : Brightness.light,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Tema',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w900,
-                            color:
-                                isDark ? AppColors.onDark : AppColors.slate900,
-                          ),
-                        ),
-                        Text(
-                          'Escolha a aparência do aplicativo',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isDark
-                                ? AppColors.slate400
-                                : AppColors.slate500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+            const AppPageHeader(
+              title: 'Tema',
+              subtitle: 'Escolha a aparência do aplicativo',
+              icon: Icons.palette_outlined,
             ),
             Expanded(
               child: ListView(

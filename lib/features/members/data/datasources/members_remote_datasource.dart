@@ -42,8 +42,8 @@ class MembersRemoteDataSource {
       'lastName': lastName,
       'userName': userName,
       'email': email,
-      if (phone != null) 'phone': phone,
-      if (birthDate != null) 'birthDate': birthDate,
+      'phone': phone,
+      'birthDate': birthDate,
       if (isActive != null) 'isActive': isActive,
     };
     final res = await _dio.put(ApiConstants.userById(id), data: body);

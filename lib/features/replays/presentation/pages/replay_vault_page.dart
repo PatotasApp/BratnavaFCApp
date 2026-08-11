@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../domain/entities/replay_clip.dart';
@@ -8,6 +7,7 @@ import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../providers/replays_provider.dart';
 import 'replay_video_player_page.dart';
 
@@ -311,7 +311,7 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
     // O jogador manda no grupo: `activeGroupId` da conta pode apontar
     // para uma patota sem jogador nosso, e aí toda rota por grupo
     // responde 403. Ver dashboard_page para o diagnóstico completo.
-    final gid = activePlayer?.groupId ?? account?.activeGroupId ?? '';
+    final gid = account?.activeGroupId ?? activePlayer?.groupId ?? '';
     final isAdmin = _resolvedIsAdmin(gid);
     final accessToken = _accessToken;
 
@@ -830,118 +830,18 @@ class _ReplayHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.lightText,
-            AppColors.darkCard,
-            AppColors.lightText
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Voltar',
-                    onPressed: () {
-                      if (context.canPop()) {
-                        context.pop();
-                      } else {
-                        context.go('/app');
-                      }
-                    },
-                    constraints:
-                        const BoxConstraints.tightFor(width: 48, height: 48),
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppColors.onDark.withAlpha(22),
-                      foregroundColor: AppColors.onDark,
-                      side: BorderSide(color: AppColors.onDark.withAlpha(46)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    icon: const Icon(
-                      Icons.arrow_back_rounded,
-                      color: AppColors.onDark,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.onDark.withValues(alpha: .1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: AppColors.onDark.withValues(alpha: .2)),
-                    ),
-                    child: const Icon(Icons.videocam_rounded,
-                        size: 20, color: AppColors.onDark),
-                  ),
-                  const SizedBox(width: 12),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Replays',
-                        style: TextStyle(
-                          color: AppColors.onDark,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      Text(
-                        'Momentos da sua patota',
-                        style:
-                            TextStyle(color: AppColors.onDark54, fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Container(
-                height: 46,
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: AppColors.onDark.withAlpha(12),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.onDark.withAlpha(20)),
-                ),
-                child: TabBar(
-                  controller: tabController,
-                  indicator: BoxDecoration(
-                    color: AppColors.onDark.withAlpha(32),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  indicatorSize: TabBarIndicatorSize.tab,
-                  dividerColor: AppColors.transparent,
-                  labelColor: AppColors.onDark,
-                  unselectedLabelColor: AppColors.onDark54,
-                  labelStyle: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600),
-                  unselectedLabelStyle: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w400),
-                  tabs: const [
-                    Tab(text: 'Todos'),
-                    Tab(text: 'Curtidos'),
-                    Tab(text: 'Favoritos'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+    return AppPageHeader(
+      title: 'Replays',
+      subtitle: 'Momentos da sua patota',
+      icon: Icons.videocam_rounded,
+      footer: TabBar(
+        controller: tabController,
+        indicatorSize: TabBarIndicatorSize.tab,
+        tabs: const [
+          Tab(text: 'Todos'),
+          Tab(text: 'Curtidos'),
+          Tab(text: 'Favoritos'),
+        ],
       ),
     );
   }

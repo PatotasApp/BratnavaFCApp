@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
+import '../widgets/editable_profile_avatar.dart';
+import '../widgets/edit_account_profile_sheet.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
+import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../auth/domain/entities/account.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../dashboard/domain/entities/my_player.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
-import '../../../groups/presentation/providers/group_invites_provider.dart';
-import '../../../notifications/presentation/providers/notifications_provider.dart';
 import '../../../members/presentation/providers/members_provider.dart';
 
 class MyAccountPage extends ConsumerWidget {
@@ -21,8 +20,7 @@ class MyAccountPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final accountState = ref.watch(accountStoreProvider);
-    final active = accountState.activeAccount;
+    final active = ref.watch(accountStoreProvider).activeAccount;
     final playersAsync = ref.watch(myPlayersProvider);
     final players = playersAsync.valueOrNull ?? const <MyPlayer>[];
     final activePlayer = ref.watch(activePlayerProvider);
@@ -30,53 +28,40 @@ class MyAccountPage extends ConsumerWidget {
     if (active == null) return const SizedBox.shrink();
 
     return DefaultTabController(
-      length: 4,
+      length: 3,
       child: Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            tooltip: 'Voltar',
-            onPressed: () => context.go('/app'),
-            icon: const Icon(Icons.arrow_back_rounded),
-          ),
-          title: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Minha conta'),
-              Text(
-                'Seus dados, contas e privacidade',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
-              ),
-            ],
-          ),
-          bottom: const TabBar(
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            tabs: [
-              Tab(text: 'Perfil'),
-              Tab(text: 'Contas'),
-              Tab(text: 'Patotas'),
-              Tab(text: 'Segurança'),
-            ],
-          ),
-        ),
-        body: TabBarView(
+        body: Column(
           children: [
-            _ProfileTab(account: active, activePlayer: activePlayer),
-            _AccountsTab(
-              accounts: accountState.accounts,
-              activeId: accountState.activeAccountId,
-              onSwitch: (userId) => _switchAccount(context, ref, userId),
-              onAdd: () => context.go('/login?add=1'),
+            const AppPageHeader(
+              title: 'Minha conta',
+              subtitle: 'Seus dados, patotas e privacidade',
+              icon: Icons.manage_accounts_outlined,
+              footer: TabBar(
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                tabs: [
+                  Tab(text: 'Perfil'),
+                  Tab(text: 'Patotas'),
+                  Tab(text: 'Segurança'),
+                ],
+              ),
             ),
-            _GroupsTab(
-              players: players,
-              activePlayer: activePlayer,
-              loading: playersAsync.isLoading,
-              onSwitch: (player) => _switchPlayer(context, ref, player),
-            ),
-            _SecurityTab(
-              keepLoggedIn: active.keepLoggedIn,
-              onLogout: () => _logout(context, ref),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  _ProfileTab(account: active, activePlayer: activePlayer),
+                  _GroupsTab(
+                    players: players,
+                    activePlayer: activePlayer,
+                    loading: playersAsync.isLoading,
+                    onSwitch: (player) => _switchPlayer(context, ref, player),
+                  ),
+                  _SecurityTab(
+                    keepLoggedIn: active.keepLoggedIn,
+                    onLogout: () => _logout(context, ref),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -84,38 +69,16 @@ class MyAccountPage extends ConsumerWidget {
     );
   }
 
-  Future<void> _switchAccount(
-    BuildContext context,
-    WidgetRef ref,
-    String userId,
-  ) async {
-    ref.read(activePlayerIdProvider.notifier).state = null;
-    await ref.read(accountStoreProvider.notifier).switchTo(userId);
-    ref.read(authInterceptorProvider).resetUnauthorizedGuard();
-    ref.invalidate(myPlayersProvider);
-    ref.invalidate(notifUnreadCountProvider);
-    ref.invalidate(myGroupInviteCountProvider);
-    await ref.read(authNotifierProvider.notifier).refreshGroupMembership();
-    if (context.mounted) context.go('/app');
-  }
-
   Future<void> _switchPlayer(
     BuildContext context,
     WidgetRef ref,
     MyPlayer player,
   ) async {
-    await ref.read(accountStoreProvider.notifier).patchActive(
-          (account) => account.copyWith(
-            activePlayerId: player.playerId,
-            activeGroupId: player.groupId,
-            activeGroupIsAdmin: false,
-            activeGroupIsFinanceiro: false,
-          ),
+    await ref.read(authNotifierProvider.notifier).selectActiveGroup(
+          groupId: player.groupId,
+          playerId: player.playerId,
         );
     ref.read(activePlayerIdProvider.notifier).state = player.playerId;
-    await ref
-        .read(authNotifierProvider.notifier)
-        .refreshMyGroupRoles(player.groupId);
     if (context.mounted) context.go('/app');
   }
 
@@ -146,8 +109,8 @@ class _ProfileTab extends ConsumerWidget {
           children: [
             Row(
               children: [
-                _EditableProfileAvatar(
-                  account: account,
+                EditableProfileAvatar(
+                  userId: account.userId,
                   name: displayName,
                   photoUrl: profile?.photoUrl ?? activePlayer?.photoUrl,
                 ),
@@ -187,209 +150,37 @@ class _ProfileTab extends ConsumerWidget {
                     '${activePlayer!.playerName} · ${activePlayer!.groupName}',
               ),
             ],
-            const SizedBox(height: 12),
-            Text(
-              'Os dados são os mesmos utilizados no login e nos vínculos das patotas.',
-              style: theme.textTheme.bodySmall,
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: profile == null
+                  ? null
+                  : () async {
+                      final changed = await showModalBottomSheet<bool>(
+                        context: context,
+                        isScrollControlled: true,
+                        showDragHandle: true,
+                        builder: (_) => EditAccountProfileSheet(user: profile),
+                      );
+                      if (changed == true && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Dados atualizados com sucesso.'),
+                          ),
+                        );
+                      }
+                    },
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('Editar meus dados'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => context.push('/app/profile/${account.userId}'),
+              icon: const Icon(Icons.visibility_outlined),
+              label: const Text('Ver meu perfil público'),
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _EditableProfileAvatar extends ConsumerStatefulWidget {
-  final Account account;
-  final String name;
-  final String? photoUrl;
-
-  const _EditableProfileAvatar({
-    required this.account,
-    required this.name,
-    required this.photoUrl,
-  });
-
-  @override
-  ConsumerState<_EditableProfileAvatar> createState() =>
-      _EditableProfileAvatarState();
-}
-
-class _EditableProfileAvatarState
-    extends ConsumerState<_EditableProfileAvatar> {
-  bool _busy = false;
-
-  Future<void> _chooseSource() async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Foto do perfil',
-                  style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 12),
-              ListTile(
-                leading: const Icon(Icons.camera_alt_rounded),
-                title: const Text('Tirar foto'),
-                subtitle: const Text('Usar a câmera do aparelho'),
-                onTap: () => Navigator.pop(context, ImageSource.camera),
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library_rounded),
-                title: const Text('Escolher da galeria'),
-                subtitle: const Text('Carregar uma foto existente'),
-                onTap: () => Navigator.pop(context, ImageSource.gallery),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (source != null) await _pick(source);
-  }
-
-  Future<void> _pick(ImageSource source) async {
-    final picked = await ImagePicker().pickImage(
-      source: source,
-      maxWidth: 1600,
-      maxHeight: 1600,
-      imageQuality: 92,
-    );
-    if (picked == null || !mounted) return;
-
-    setState(() => _busy = true);
-    try {
-      final compressed = await FlutterImageCompress.compressWithFile(
-        picked.path,
-        minWidth: 720,
-        minHeight: 720,
-        quality: 82,
-        format: CompressFormat.jpeg,
-      );
-      if (compressed == null)
-        throw Exception('Não foi possível processar a foto.');
-      if (compressed.length > 5 * 1024 * 1024) {
-        throw Exception('A foto deve ter no máximo 5 MB.');
-      }
-
-      await ref
-          .read(membersDsProvider)
-          .uploadProfilePhoto(widget.account.userId, compressed);
-      _refreshPhoto();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Foto atualizada com sucesso.')),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(error.toString().replaceFirst('Exception: ', ''))),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _remove() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Excluir foto?'),
-        content:
-            const Text('As iniciais voltarão a ser exibidas no seu perfil.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Excluir')),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _busy = true);
-    try {
-      await ref
-          .read(membersDsProvider)
-          .deleteProfilePhoto(widget.account.userId);
-      _refreshPhoto();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Foto removida.')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  void _refreshPhoto() {
-    ref.invalidate(myProfileProvider);
-    ref.invalidate(myPlayersProvider);
-    ref.invalidate(usersProvider);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            AvatarWidget(
-                name: widget.name, photoUrl: widget.photoUrl, size: 64),
-            Positioned(
-              right: -5,
-              bottom: -5,
-              child: Material(
-                color: colors.primary,
-                borderRadius: BorderRadius.circular(10),
-                child: InkWell(
-                  onTap: _busy ? null : _chooseSource,
-                  borderRadius: BorderRadius.circular(10),
-                  child: SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: _busy
-                        ? Padding(
-                            padding: const EdgeInsets.all(7),
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: colors.onPrimary,
-                            ),
-                          )
-                        : Icon(Icons.camera_alt_rounded,
-                            size: 15, color: colors.onPrimary),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        if (widget.photoUrl != null) ...[
-          const SizedBox(height: 8),
-          InkWell(
-            onTap: _busy ? null : _remove,
-            child: Text('Excluir',
-                style: TextStyle(
-                    color: colors.error,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ],
     );
   }
 }
@@ -418,86 +209,6 @@ class _ReadOnlyField extends StatelessWidget {
           Text(value, style: theme.textTheme.bodyLarge),
         ],
       ),
-    );
-  }
-}
-
-class _AccountsTab extends StatelessWidget {
-  final List<Account> accounts;
-  final String? activeId;
-  final ValueChanged<String> onSwitch;
-  final VoidCallback onAdd;
-
-  const _AccountsTab({
-    required this.accounts,
-    required this.activeId,
-    required this.onSwitch,
-    required this.onAdd,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return PrototypeScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          PrototypeSectionTitle(
-            title: 'Contas conectadas',
-            count: '${accounts.length}',
-          ),
-          const SizedBox(height: 10),
-          PrototypeCard(
-            padding: const EdgeInsets.all(8),
-            child: Column(
-              children: [
-                for (var index = 0; index < accounts.length; index++) ...[
-                  _AccountRow(
-                    account: accounts[index],
-                    active: accounts[index].userId == activeId,
-                    onTap: () => onSwitch(accounts[index].userId),
-                  ),
-                  if (index < accounts.length - 1)
-                    const Divider(indent: 52, endIndent: 4),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: onAdd,
-            icon: const Icon(Icons.person_add_outlined),
-            label: const Text('Adicionar outra conta'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AccountRow extends StatelessWidget {
-  final Account account;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _AccountRow({
-    required this.account,
-    required this.active,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      onTap: onTap,
-      leading: AvatarWidget(name: account.name, size: 36),
-      title: Text(account.name.isEmpty ? account.email : account.name),
-      subtitle: Text(active ? 'Conta ativa' : account.email),
-      trailing: active
-          ? const PrototypeBadge(
-              label: 'Ativa',
-              tone: PrototypeBadgeTone.success,
-            )
-          : const Icon(Icons.chevron_right_rounded),
     );
   }
 }

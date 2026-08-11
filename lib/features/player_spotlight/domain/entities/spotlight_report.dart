@@ -2,6 +2,7 @@
 
 class SpotlightPlayer {
   final String playerId;
+  final String? userId;
   final String playerName;
   final int goals;
   final int assists;
@@ -12,6 +13,7 @@ class SpotlightPlayer {
 
   const SpotlightPlayer({
     required this.playerId,
+    this.userId,
     required this.playerName,
     this.goals = 0,
     this.assists = 0,
@@ -23,11 +25,13 @@ class SpotlightPlayer {
 
   factory SpotlightPlayer.fromJson(Map<String, dynamic> j) => SpotlightPlayer(
         playerId: (j['playerId'] ?? '') as String,
-        playerName: (j['playerName'] ?? '') as String,
+        userId: (j['userId'] ?? j['UserId'])?.toString(),
+        playerName: (j['playerName'] ?? j['name'] ?? '') as String,
         goals: (j['goals'] as num?)?.toInt() ?? 0,
         assists: (j['assists'] as num?)?.toInt() ?? 0,
-        mvpCount: (j['mvpCount'] as num?)?.toInt() ?? 0,
-        matchCount: (j['matchCount'] as num?)?.toInt() ?? 0,
+        mvpCount: ((j['mvpCount'] ?? j['mvps']) as num?)?.toInt() ?? 0,
+        matchCount:
+            ((j['matchCount'] ?? j['gamesPlayed']) as num?)?.toInt() ?? 0,
         winRate: (j['winRate'] as num?)?.toDouble() ?? 0,
         isGoalkeeper:
             (j['isGoalkeeper'] ?? j['goalkeeper'] ?? false) as bool? ?? false,
