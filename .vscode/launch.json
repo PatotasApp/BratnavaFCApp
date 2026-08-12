@@ -1,0 +1,42 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "PatotasApp — dev",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "dev",
+        "--dart-define-from-file",
+        "config/dev.json"
+      ]
+    },
+    {
+      "name": "PatotasApp — prod",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "prod",
+        "--dart-define-from-file",
+        "config/prod.json"
+      ]
+    },
+    {
+      "name": "PatotasApp — prod (release)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "release",
+      "toolArgs": [
+        "--flavor",
+        "prod",
+        "--dart-define-from-file",
+        "config/prod.json"
+      ]
+    }
+  ]
+}

@@ -50,8 +50,13 @@ ios/Runner/GeneratedPluginRegistrant.*
 # IDE
 # ---------------------------
 .idea/
-.vscode/
 .vs/
+
+# O launch.json é versionado de propósito: ele amarra --flavor e
+# --dart-define-from-file numa entrada só. Rodar com metade do par aponta o app
+# para o Firebase de um ambiente e a API de outro, e tudo responde 401.
+.vscode/*
+!.vscode/launch.json
 *.iml
 
 # ---------------------------

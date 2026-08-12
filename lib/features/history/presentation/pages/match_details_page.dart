@@ -12,6 +12,7 @@ import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../../shared/presentation/widgets/user_profile_link.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../matches/presentation/providers/match_provider.dart';
@@ -203,7 +204,7 @@ class _MatchDetailsPageState extends ConsumerState<MatchDetailsPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final account = ref.watch(accountStoreProvider).activeAccount;
     final isAdmin = account != null && account.isGroupAdmin(widget.groupId);
-    final accessToken = account?.accessToken;
+    final accessToken = ref.watch(idTokenProvider).valueOrNull;
     final async = ref.watch(matchDetailsProvider(
       (groupId: widget.groupId, matchId: widget.matchId),
     ));

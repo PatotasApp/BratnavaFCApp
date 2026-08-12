@@ -23,19 +23,14 @@ class _FakeMatchNotifier extends MatchNotifier {
 class _FakeAccountStore extends AccountStore {
   _FakeAccountStore(super.prefs) {
     state = const AccountState(
-      activeAccountId: 'user-1',
-      accounts: [
-        Account(
-          userId: 'user-1',
-          name: 'Usuário teste',
-          email: 'teste@example.com',
-          roles: ['Admin'],
-          accessToken: 'token',
-          refreshToken: 'refresh',
-          activeGroupId: 'group-1',
-          groupAdminIds: ['group-1'],
-        ),
-      ],
+      account: Account(
+        userId: 'user-1',
+        name: 'Usuário teste',
+        email: 'teste@example.com',
+        roles: ['Admin'],
+        activeGroupId: 'group-1',
+        groupAdminIds: ['group-1'],
+      ),
     );
   }
 }

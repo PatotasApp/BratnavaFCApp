@@ -1,104 +1,112 @@
 import 'package:dio/dio.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../../../core/api/api_response.dart';
-import '../../../../core/auth/jwt_helper.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../domain/entities/account.dart';
 
+/// Acesso ao perfil e às permissões do usuário logado.
+///
+/// Não há mais `login` nem `register`: a API deletou esses endpoints, e quem
+/// autentica é o SDK do Firebase. O que restou é ler quem o backend diz que
+/// somos.
 class AuthRemoteDataSource {
   final Dio _dio;
 
   const AuthRemoteDataSource(this._dio);
 
-  Future<Account> login({
-    required String email,
-    required String password,
-  }) async {
+  /// Espelha `UserRole` no backend. GodMode não é traduzido de propósito — é
+  /// função administrativa da plataforma, do site, e não existe no aplicativo.
+  static const Map<int, String> _roleNames = {1: 'User', 2: 'Admin'};
+
+  /// `GET /api/users/me` — provisiona o usuário no primeiro acesso e devolve a
+  /// identidade INTERNA.
+  ///
+  /// Este é o único lugar de onde o `userId` pode vir. Derivá-lo do token daria
+  /// o UID do Firebase, que não é FK de nada no banco.
+  Future<Account> fetchMe() async {
     try {
-      final res = await _dio.post(
-        ApiConstants.login,
-        data: {'username': email, 'password': password},
-      );
+      final res = await _dio.get(ApiConstants.usersMe);
 
       final envelope = res.data as Map<String, dynamic>;
-
-      // A API retorna { success, data: { token, refreshToken }, ... }
-      // Suporta resposta com envelope e sem envelope.
       final data = (envelope['data'] as Map<String, dynamic>?) ?? envelope;
 
-      // Extrai tokens com fallbacks.
-      final access =
-          (data['token'] ?? data['accessToken'] ?? data['jwt']) as String?;
-      final refresh = (data['refreshToken'] ?? data['refresh']) as String?;
-
-      if (access == null || refresh == null) {
-        throw const AppException('Token não encontrado na resposta.');
-      }
-
-      // Extrai userId do JWT sub ou do campo user.
-      final userId = JwtHelper.getUserId(access) ??
-          (data['user'] as Map?)?['id'] as String? ??
-          (data['user'] as Map?)?['userId'] as String? ??
-          '';
+      final userId = (data['id'] ?? data['userId'])?.toString() ?? '';
 
       if (userId.isEmpty) {
-        throw const AppException('ID do usuário não encontrado no token.');
+        throw const AppException('O perfil não veio com identificador.');
       }
 
-      // GodMode é uma função administrativa da plataforma/site e não existe
-      // no aplicativo. As permissões móveis são sempre as da patota ativa.
-      final roles = JwtHelper.getRoles(access)
-          .where((role) => role.trim().toLowerCase() != 'godmode')
-          .toList(growable: false);
-      final payload = JwtHelper.decode(access) ?? {};
+      final firstName = (data['firstName'] as String?)?.trim() ?? '';
+      final lastName = (data['lastName'] as String?)?.trim() ?? '';
+      final userName = (data['userName'] as String?)?.trim() ?? '';
+      final email = (data['email'] as String?)?.trim() ?? '';
 
-      // Tenta pegar nome/email do campo user (se vier), senão usa claims do JWT.
-      final user = data['user'] as Map<String, dynamic>? ?? {};
-      final name = (user['firstName'] != null
-              ? '${user['firstName']} ${user['lastName'] ?? ''}'.trim()
-              : null) ??
-          payload['name'] as String? ??
-          payload['unique_name'] as String? ??
-          '';
-      final emailR =
-          (user['email'] as String?) ?? payload['email'] as String? ?? email;
+      final fullName = '$firstName $lastName'.trim();
 
       return Account(
         userId: userId,
-        name: name.isEmpty ? emailR : name,
-        email: emailR,
-        roles: roles,
-        accessToken: access,
-        refreshToken: refresh,
+        name: fullName.isNotEmpty
+            ? fullName
+            : (userName.isNotEmpty ? userName : email),
+        email: email,
+        roles: _parseRoles(data['role']),
       );
     } on DioException catch (e) {
-      throw ServerException(extractDioError(e),
-          statusCode: e.response?.statusCode);
+      throw ServerException(
+        extractDioError(e),
+        statusCode: e.response?.statusCode,
+      );
     }
   }
 
-  Future<void> register({
-    required String userName,
-    required String firstName,
-    required String lastName,
-    required String email,
-    required String password,
+  /// `PUT /api/users/me` — edição do próprio perfil.
+  ///
+  /// E-mail não entra: é read-only na API, gerenciado no Firebase, e tem fluxo
+  /// próprio com confirmação no endereço novo. Campo ausente MANTÉM o valor
+  /// atual, então enviar só o que mudou é seguro.
+  ///
+  /// O backend sincroniza DisplayName e telefone no Firebase e faz rollback do
+  /// SQL se a chamada falhar — uma falha aqui é falha de salvamento inteira,
+  /// não parcial.
+  Future<void> updateMe({
+    String? firstName,
+    String? lastName,
+    String? userName,
+    String? phone,
+    DateTime? birthDate,
   }) async {
     try {
-      await _dio.post(
-        ApiConstants.users,
-        data: {
-          'userName': userName,
-          'firstName': firstName,
-          'lastName': lastName,
-          'email': email,
-          'password': password,
-        },
-      );
+      await _dio.put(ApiConstants.usersMe, data: {
+        if (firstName != null && firstName.isNotEmpty) 'firstName': firstName,
+        if (lastName != null && lastName.isNotEmpty) 'lastName': lastName,
+        if (userName != null && userName.isNotEmpty) 'userName': userName,
+        'phone': (phone == null || phone.isEmpty) ? null : phone,
+        if (birthDate != null) 'birthDate': birthDate.toIso8601String(),
+      });
     } on DioException catch (e) {
-      throw ServerException(extractDioError(e),
-          statusCode: e.response?.statusCode);
+      throw ServerException(
+        extractDioError(e),
+        statusCode: e.response?.statusCode,
+      );
     }
+  }
+
+  /// A role chega como inteiro do enum. Aceita string por robustez, caso o
+  /// backend passe a usar `JsonStringEnumConverter`.
+  static List<String> _parseRoles(Object? raw) {
+    if (raw is int) {
+      final name = _roleNames[raw];
+      return name == null ? const [] : [name];
+    }
+
+    if (raw is String) {
+      final normalized = raw.trim();
+      if (normalized.isEmpty) return const [];
+      if (normalized.toLowerCase() == 'godmode') return const [];
+      return [normalized];
+    }
+
+    return const [];
   }
 
   /// Busca os grupos onde o usuário é admin ou financeiro para pré-popular o store.

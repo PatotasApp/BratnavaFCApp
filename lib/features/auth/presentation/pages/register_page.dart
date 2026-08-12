@@ -5,7 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/app_button.dart';
 import '../../../../shared/presentation/widgets/app_text_field.dart';
 import '../providers/auth_provider.dart';
-import '../../../../core/errors/app_exception.dart';
+import '../../../../core/auth/auth_errors.dart';
 
 class RegisterPage extends ConsumerStatefulWidget {
   const RegisterPage({super.key});
@@ -18,7 +18,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
   final _firstNameCtrl = TextEditingController();
   final _lastNameCtrl = TextEditingController();
-  final _userNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
 
@@ -28,7 +27,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   void dispose() {
     _firstNameCtrl.dispose();
     _lastNameCtrl.dispose();
-    _userNameCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
@@ -37,8 +35,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // userName não vai: o backend gera um a partir do e-mail no
+    // provisionamento, e o usuário troca depois no perfil.
     await ref.read(authNotifierProvider.notifier).register(
-          userName: _userNameCtrl.text.trim(),
           firstName: _firstNameCtrl.text.trim(),
           lastName: _lastNameCtrl.text.trim(),
           email: _emailCtrl.text.trim(),
@@ -50,12 +49,11 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     final state = ref.read(authNotifierProvider);
     state.whenOrNull(
       error: (e, _) =>
-          _showError(extractDioError(e, 'Não foi possível criar a conta.')),
-      data: (_) async {
-        setState(() => _success = true);
-        await Future.delayed(const Duration(milliseconds: 600));
-        if (mounted) context.go('/login');
-      },
+          _showError(authErrorMessage(e, 'Não foi possível criar a conta.')),
+      // Sem navegação: a conta já está autenticada no Firebase e o router leva
+      // para /app quando o perfil termina de carregar. Mandar para /login aqui
+      // era o comportamento do fluxo antigo, em que cadastrar não logava.
+      data: (_) => setState(() => _success = true),
     );
   }
 
@@ -147,7 +145,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
           SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Usuário criado! Faça login.',
+              'Conta criada! Enviamos um e-mail para você confirmar seu '
+              'endereço.',
               style: TextStyle(
                 color: AppColors.emerald700,
                 fontWeight: FontWeight.w600,
@@ -229,16 +228,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
             const SizedBox(height: 16),
 
             AppTextField(
-              label: 'Nome de usuário',
-              hint: 'joaosilva',
-              controller: _userNameCtrl,
-              validator: (v) => v == null || v.trim().length < 2
-                  ? 'Mínimo 2 caracteres.'
-                  : null,
-            ),
-            const SizedBox(height: 16),
-
-            AppTextField(
               label: 'E-mail',
               hint: 'seu@email.com',
               controller: _emailCtrl,
@@ -263,8 +252,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
               obscureText: true,
               textInputAction: TextInputAction.done,
               onEditingComplete: _submit,
+              // 6 é o mínimo do Firebase: abaixo disso ele recusa com
+              // `weak-password`, e validar aqui evita a ida ao servidor.
               validator: (v) =>
-                  v == null || v.length < 3 ? 'Mínimo 3 caracteres.' : null,
+                  v == null || v.length < 6 ? 'Mínimo 6 caracteres.' : null,
             ),
             const SizedBox(height: 24),
 

@@ -15,10 +15,7 @@ const List<double> _kSpeeds = [0.25, 0.5, 1.0, 1.5, 2.0];
 const Duration _kFrameStep = Duration(milliseconds: 33);
 const String _kSpeedPrefKey = 'replay_speed';
 const String _kLoopPrefKey = 'replay_loop';
-const String _kSiteUrl = String.fromEnvironment(
-  'WEB_URL',
-  defaultValue: 'https://patotasapp.com.br',
-);
+String get _kSiteUrl => AppConstants.webUrl;
 
 // ── URL resolver (shared) ─────────────────────────────────────────────────────
 
@@ -27,10 +24,21 @@ const String _kSiteUrl = String.fromEnvironment(
 /// 2. Authenticated backend stream endpoint.
 String? resolveClipUrl(ReplayClip clip, String groupId, String? accessToken) {
   if (clip.videoUrl != null && clip.videoUrl!.isNotEmpty) return clip.videoUrl;
+
   if (clip.clipId.isNotEmpty) {
+    // Sem token não há URL válida. Antes isto montava `?t=` vazio, que a API
+    // recusa com 401 — e como o chamador usa `!= null` para decidir se o clipe
+    // é reproduzível, o tile ficava habilitado e o player abria só para falhar.
+    //
+    // O token vem de um FutureProvider, então o PRIMEIRO frame sempre chega aqui
+    // sem ele. Devolver null deixa o tile desabilitado por esse instante e o
+    // rebuild o habilita quando o token resolve.
+    if (accessToken == null || accessToken.isEmpty) return null;
+
     final path = ApiConstants.replayStream(groupId, clip.clipId);
-    return '${AppConstants.apiUrl}$path?t=${accessToken ?? ''}';
+    return '${AppConstants.apiUrl}$path?t=$accessToken';
   }
+
   return null;
 }
 

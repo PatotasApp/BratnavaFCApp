@@ -1,165 +1,102 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../../../core/auth/jwt_helper.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/providers/core_providers.dart';
 import '../../domain/entities/account.dart';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
+/// Perfil da única sessão possível.
+///
+/// Era uma lista com conta ativa por id. Duas coisas tornaram isso inútil: o
+/// app já havia sido reduzido a uma sessão só, e o Firebase Auth suporta um
+/// usuário por vez por instância — não há como manter duas sessões.
+///
+/// `activeAccount` sobreviveu como nome do acessor porque é o que 40 arquivos já
+/// leem; trocá-lo seria churn sem ganho.
 class AccountState {
-  final List<Account> accounts;
-  final String? activeAccountId;
+  const AccountState({this.account});
 
-  const AccountState({
-    this.accounts = const [],
-    this.activeAccountId,
-  });
+  final Account? account;
 
-  Account? get activeAccount {
-    if (activeAccountId == null && accounts.isEmpty) return null;
-    try {
-      return accounts.firstWhere(
-        (a) => a.userId == activeAccountId,
-        orElse: () => accounts.first,
-      );
-    } catch (_) {
-      return null;
-    }
-  }
+  Account? get activeAccount => account;
 
-  bool get isLoggedIn {
-    final a = activeAccount;
-    return a != null && a.accessToken.isNotEmpty;
-  }
+  /// Presença de perfil, NÃO de sessão. Quem decide se há sessão é o
+  /// `authStateChanges` do Firebase — ver `sessionProvider`.
+  bool get hasProfile => account != null;
 
-  AccountState copyWith({
-    List<Account>? accounts,
-    String? activeAccountId,
-  }) =>
-      AccountState(
-        accounts: accounts ?? this.accounts,
-        activeAccountId: activeAccountId ?? this.activeAccountId,
-      );
+  AccountState copyWith({Account? account}) =>
+      AccountState(account: account ?? this.account);
 }
 
 // ── Notifier ──────────────────────────────────────────────────────────────────
 
 class AccountStore extends StateNotifier<AccountState> {
-  final SharedPreferences _prefs;
-
   AccountStore(this._prefs) : super(const AccountState()) {
     _load();
   }
 
+  final SharedPreferences _prefs;
+
   // ── Persistência ──────────────────────────────────────────────────────────
 
   void _load() {
-    final raw = _prefs.getString(AppConstants.accountsStorageKey);
-    final activeId = _prefs.getString(AppConstants.activeAccountKey);
-
+    final raw = _prefs.getString(AppConstants.accountStorageKey);
     if (raw == null) return;
 
     try {
-      final list = (json.decode(raw) as List)
-          .map((e) => Account.fromJson(e as Map<String, dynamic>))
-          .toList();
+      final decoded = json.decode(raw);
+      if (decoded is! Map<String, dynamic>) return;
 
-      // Remove sessões com "manter logado" desmarcado — sempre desloga ao reiniciar.
-      // Remove sessões cujos tokens estão ambos expirados — entrar no app com tokens
-      // mortos causa um cascade de 401s que tenta navegar para /login de dentro de
-      // handlers Dio ativos, podendo crashar o engine Flutter.
-      final activeList = list.where((a) {
-        if (!a.keepLoggedIn) return false;
-        final accessExpired =
-            a.accessToken.isEmpty || JwtHelper.isExpired(a.accessToken);
-        // O refresh token do backend e opaco, nao e um JWT. Sua validade so
-        // pode ser confirmada pelo endpoint de refresh.
-        final refreshUnavailable = a.refreshToken.isEmpty;
-        if (accessExpired && refreshUnavailable) return false;
-        return true;
-      }).toList();
-
-      final validActiveId = activeList.any((a) => a.userId == activeId)
-          ? activeId
-          : (activeList.isNotEmpty ? activeList.first.userId : null);
-
-      final matchingAccounts =
-          activeList.where((account) => account.userId == validActiveId);
-      final activeAccount = matchingAccounts.isNotEmpty
-          ? matchingAccounts.first
-          : (activeList.isNotEmpty ? activeList.first : null);
-      state = AccountState(
-        accounts: activeAccount == null ? const [] : [activeAccount],
-        activeAccountId: activeAccount?.userId,
-      );
-    } catch (_) {}
+      state = AccountState(account: Account.fromJson(decoded));
+    } catch (_) {
+      // Perfil corrompido não impede o app de subir: ele é recarregado do
+      // `GET /me` na próxima vez que a sessão do Firebase for resolvida.
+    }
   }
 
   Future<void> _persist() async {
-    final encoded = json.encode(state.accounts.map((a) => a.toJson()).toList());
-    await _prefs.setString(AppConstants.accountsStorageKey, encoded);
-    if (state.activeAccountId != null) {
-      await _prefs.setString(
-          AppConstants.activeAccountKey, state.activeAccountId!);
-    } else {
-      await _prefs.remove(AppConstants.activeAccountKey);
+    final account = state.account;
+
+    if (account == null) {
+      await _prefs.remove(AppConstants.accountStorageKey);
+      return;
     }
+
+    await _prefs.setString(
+      AppConstants.accountStorageKey,
+      json.encode(account.toJson()),
+    );
   }
 
   // ── API pública ───────────────────────────────────────────────────────────
 
-  /// Salva a única sessão autenticada do aplicativo.
-  Future<void> upsertAccount(Account account) async {
-    state = AccountState(accounts: [account], activeAccountId: account.userId);
+  /// Grava o perfil da sessão, substituindo o anterior.
+  Future<void> setAccount(Account account) async {
+    state = AccountState(account: account);
     await _persist();
   }
 
-  /// Sincroniza o estado em memoria com alteracoes feitas por isolates de
-  /// background, como a renovacao de token ao responder uma notificacao.
+  /// Sincroniza o estado em memória com alterações feitas por isolates de
+  /// background, como as ações rápidas de notificação.
   Future<void> reloadFromStorage() async {
     await _prefs.reload();
     _load();
   }
 
-  /// Atualiza tokens do active account após um refresh.
-  Future<void> updateTokens(String accessToken, String refreshToken) async {
-    final active = state.activeAccount;
-    if (active == null) return;
-    await upsertAccount(
-      active.copyWith(
-        accessToken: accessToken,
-        refreshToken: refreshToken,
-      ),
-    );
-  }
-
-  /// Patch genérico do active account (ex.: activeGroupId, groupAdminIds…).
+  /// Patch do perfil (ex.: activeGroupId, groupAdminIds…).
   Future<void> patchActive(Account Function(Account) updater) async {
-    final active = state.activeAccount;
-    if (active == null) return;
-    await upsertAccount(updater(active));
+    final account = state.account;
+    if (account == null) return;
+    await setAccount(updater(account));
   }
 
-  /// Limpa os tokens da conta ativa sem removê-la da lista.
-  /// Usado quando o refresh falha — a conta permanece para re-autenticação.
-  /// isLoggedIn retorna false, o que faz o router redirecionar para /login.
-  Future<void> clearActiveTokens() async {
-    final active = state.activeAccount;
-    if (active == null) return;
-    await upsertAccount(active.copyWith(accessToken: '', refreshToken: ''));
-  }
-
-  /// Encerra a sessão e remove eventuais contas legadas persistidas.
+  /// Descarta o perfil local. Não encerra a sessão do Firebase — quem faz isso
+  /// é o `FirebaseAuthService.signOut`, e é ele que dispara o redirecionamento.
   Future<void> logout() async {
-    await logoutAll();
-  }
-
-  Future<void> logoutAll() async {
     state = const AccountState();
-    await _prefs.remove(AppConstants.accountsStorageKey);
-    await _prefs.remove(AppConstants.activeAccountKey);
+    await _prefs.remove(AppConstants.accountStorageKey);
   }
 }
 

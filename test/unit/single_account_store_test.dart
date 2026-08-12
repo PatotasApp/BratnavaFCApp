@@ -12,47 +12,65 @@ void main() {
         name: 'Usuário $id',
         email: '$id@example.com',
         roles: const ['User'],
-        accessToken: 'access-$id',
-        refreshToken: 'refresh-$id',
       );
 
-  test('salvar uma sessão substitui qualquer conta anterior', () async {
+  test('guardar um perfil substitui o anterior', () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     final store = AccountStore(prefs);
 
-    await store.upsertAccount(account('1'));
-    await store.upsertAccount(account('2'));
+    await store.setAccount(account('1'));
+    await store.setAccount(account('2'));
 
-    expect(store.state.accounts, hasLength(1));
     expect(store.state.activeAccount?.userId, '2');
   });
 
-  test('logout remove toda a sessão persistida', () async {
+  test('logout apaga o perfil persistido', () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     final store = AccountStore(prefs);
 
-    await store.upsertAccount(account('1'));
+    await store.setAccount(account('1'));
     await store.logout();
 
-    expect(store.state.accounts, isEmpty);
     expect(store.state.activeAccount, isNull);
-    expect(prefs.containsKey(AppConstants.accountsStorageKey), isFalse);
-    expect(prefs.containsKey(AppConstants.activeAccountKey), isFalse);
+    expect(store.state.hasProfile, isFalse);
+    expect(prefs.containsKey(AppConstants.accountStorageKey), isFalse);
   });
 
-  test('mantem login com access expirado e refresh token opaco', () async {
+  test('perfil salvo é lido na inicialização', () async {
     final saved = account('persisted');
     SharedPreferences.setMockInitialValues({
-      AppConstants.accountsStorageKey: jsonEncode([saved.toJson()]),
-      AppConstants.activeAccountKey: saved.userId,
+      AppConstants.accountStorageKey: jsonEncode(saved.toJson()),
     });
 
     final prefs = await SharedPreferences.getInstance();
     final store = AccountStore(prefs);
 
-    expect(store.state.isLoggedIn, isTrue);
-    expect(store.state.activeAccount?.refreshToken, 'refresh-persisted');
+    expect(store.state.hasProfile, isTrue);
+    expect(store.state.activeAccount?.userId, 'persisted');
+    expect(store.state.activeAccount?.email, 'persisted@example.com');
+  });
+
+  test('o perfil não guarda token: a sessão é do Firebase', () async {
+    final json = account('1').toJson();
+
+    expect(json.containsKey('accessToken'), isFalse);
+    expect(json.containsKey('refreshToken'), isFalse);
+    expect(json.containsKey('keepLoggedIn'), isFalse);
+  });
+
+  test('formato antigo (lista da v2) não derruba a inicialização', () async {
+    // A chave subiu para v3, então o valor da v2 nunca é lido. Este teste cobre
+    // o caso de alguém gravar uma lista na chave nova por engano: precisa cair no
+    // catch e deixar o app subir, não estourar no construtor.
+    SharedPreferences.setMockInitialValues({
+      AppConstants.accountStorageKey: jsonEncode([account('1').toJson()]),
+    });
+
+    final prefs = await SharedPreferences.getInstance();
+
+    expect(() => AccountStore(prefs), returnsNormally);
+    expect(AccountStore(prefs).state.hasProfile, isFalse);
   });
 }

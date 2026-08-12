@@ -4,6 +4,7 @@ import 'core/push/push_providers.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_mode_provider.dart';
+import 'features/auth/presentation/providers/session_provider.dart';
 import 'features/auth/presentation/providers/account_store.dart';
 
 class App extends ConsumerStatefulWidget {
@@ -27,8 +28,10 @@ class _AppState extends ConsumerState<App> {
   }
 
   void _tryInitPush() {
-    final isLoggedIn = ref.read(accountStoreProvider).isLoggedIn;
-    if (!isLoggedIn) return;
+    // Só registra push quando o perfil terminou de carregar: o registro é uma
+    // chamada autenticada, e dispará-la antes do GET /me a faria sair sem a
+    // identidade interna resolvida.
+    if (!ref.read(sessionProvider).isReady) return;
     _schedulePushInit();
   }
 
@@ -54,10 +57,10 @@ class _AppState extends ConsumerState<App> {
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);
 
-    // Escuta mudanças de login para inicializar push assim que o usuário fizer login
-    ref.listen<AccountState>(accountStoreProvider, (previous, next) {
-      final wasLoggedIn = previous?.isLoggedIn ?? false;
-      if (!wasLoggedIn && next.isLoggedIn) {
+    // Inicializa push na transição para sessão pronta — no login e também no
+    // cold start, que não passa pela tela de login.
+    ref.listen<SessionState>(sessionProvider, (previous, next) {
+      if (!(previous?.isReady ?? false) && next.isReady) {
         _schedulePushInit();
       }
     });

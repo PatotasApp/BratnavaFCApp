@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/errors/app_exception.dart';
-import '../../../auth/presentation/providers/account_store.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../auth/presentation/providers/session_provider.dart';
 import '../../../members/domain/entities/app_user.dart';
 import '../../../members/presentation/providers/members_provider.dart';
 
@@ -85,26 +86,23 @@ class _EditAccountProfileSheetState
     if (!_formKey.currentState!.validate() || _saving) return;
     setState(() => _saving = true);
     try {
-      final updated = await ref.read(membersDsProvider).updateUser(
-            widget.user.id,
+      // PUT /api/users/me, não /api/users/{id}: o endpoint por id passou a
+      // exigir Admin/GodMode, e usuário comum tomava 403 ao salvar o próprio
+      // perfil.
+      //
+      // O e-mail não vai no payload — é read-only na API, gerenciado no
+      // Firebase, e tem fluxo próprio com confirmação no endereço novo.
+      await ref.read(authDataSourceProvider).updateMe(
             firstName: _firstName.text.trim(),
             lastName: _lastName.text.trim(),
             userName: _userName.text.trim(),
-            email: _email.text.trim(),
             phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
-            birthDate: _birthDate == null
-                ? null
-                : '${_birthDate!.year.toString().padLeft(4, '0')}-'
-                    '${_birthDate!.month.toString().padLeft(2, '0')}-'
-                    '${_birthDate!.day.toString().padLeft(2, '0')}',
+            birthDate: _birthDate,
           );
 
-      await ref.read(accountStoreProvider.notifier).patchActive(
-            (account) => account.copyWith(
-              name: updated.fullName,
-              email: updated.email,
-            ),
-          );
+      // Relê o perfil da fonte autoritativa em vez de remendar o store com o
+      // que digitamos: o backend normaliza userName e pode recusar o telefone.
+      await ref.read(sessionProvider.notifier).loadProfile();
       ref.invalidate(myProfileProvider);
 
       if (mounted) Navigator.pop(context, true);
@@ -126,18 +124,12 @@ class _EditAccountProfileSheetState
   String? _required(String? value) =>
       value?.trim().isEmpty == true ? 'Este campo é obrigatório.' : null;
 
-  String? _emailValidator(String? value) {
-    final requiredError = _required(value);
-    if (requiredError != null) return requiredError;
-    if (!value!.contains('@')) return 'Informe um e-mail válido.';
-    return null;
-  }
-
   String? _userNameValidator(String? value) {
     final requiredError = _required(value);
     if (requiredError != null) return requiredError;
-    if (value!.contains(RegExp(r'\s')))
+    if (value!.contains(RegExp(r'\s'))) {
       return 'O usuário não pode ter espaços.';
+    }
     return null;
   }
 
@@ -229,10 +221,15 @@ class _EditAccountProfileSheetState
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _email,
-                  keyboardType: TextInputType.emailAddress,
-                  autocorrect: false,
-                  decoration: const InputDecoration(labelText: 'E-mail'),
-                  validator: _emailValidator,
+                  readOnly: true,
+                  enabled: false,
+                  decoration: const InputDecoration(
+                    labelText: 'E-mail',
+                    helperText:
+                        'Use "Alterar e-mail" em Segurança — a confirmação vai '
+                        'para o endereço novo.',
+                    helperMaxLines: 3,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -255,16 +252,10 @@ class _EditAccountProfileSheetState
                     child: Text(_formattedBirthDate),
                   ),
                 ),
-                if (_birthDate != null)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () => setState(() => _birthDate = null),
-                      child: const Text('Remover data'),
-                    ),
-                  )
-                else
-                  const SizedBox(height: 12),
+                // Sem "Remover data": no PUT /me a ausência do campo significa
+                // MANTER o valor atual, não limpar. O botão prometeria algo que
+                // o endpoint não faz — apagar exige o fluxo administrativo.
+                const SizedBox(height: 12),
                 FilledButton.icon(
                   onPressed: _saving ? null : _save,
                   icon: _saving

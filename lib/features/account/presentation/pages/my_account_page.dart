@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../widgets/editable_profile_avatar.dart';
+import '../widgets/change_email_sheet.dart';
 import '../widgets/edit_account_profile_sheet.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
@@ -57,7 +58,7 @@ class MyAccountPage extends ConsumerWidget {
                     onSwitch: (player) => _switchPlayer(context, ref, player),
                   ),
                   _SecurityTab(
-                    keepLoggedIn: active.keepLoggedIn,
+                    email: active.email,
                     onLogout: () => _logout(context, ref),
                   ),
                 ],
@@ -296,11 +297,11 @@ class _GroupsTab extends StatelessWidget {
 }
 
 class _SecurityTab extends StatelessWidget {
-  final bool keepLoggedIn;
+  final String email;
   final VoidCallback onLogout;
 
   const _SecurityTab({
-    required this.keepLoggedIn,
+    required this.email,
     required this.onLogout,
   });
 
@@ -310,22 +311,47 @@ class _SecurityTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          PrototypeCard(
+          const PrototypeCard(
             child: Row(
               children: [
-                const PrototypeIconBox(
+                PrototypeIconBox(
                   icon: Icon(Icons.verified_user_outlined),
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    keepLoggedIn
-                        ? 'Esta conta permanece conectada neste dispositivo.'
-                        : 'A sessão termina ao fechar o aplicativo.',
+                    // O Firebase persiste a sessão no aparelho e renova o token
+                    // sozinho; não há opção de "não manter logado" no mobile.
+                    'Esta conta permanece conectada neste dispositivo até você '
+                    'sair.',
                   ),
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              useSafeArea: true,
+              builder: (_) => ChangeEmailSheet(currentEmail: email),
+            ),
+            icon: const Icon(Icons.alternate_email_rounded),
+            label: const Text('Alterar e-mail'),
+          ),
+          const SizedBox(height: 8),
+
+          // Trocar senha é o mesmo fluxo de "esqueci minha senha": a senha vive
+          // no Firebase e a API não tem endpoint para ela. Redefinir por e-mail
+          // também marca o endereço como verificado, o que é justamente o que o
+          // provisionamento do backend exige para vincular contas antigas.
+          OutlinedButton.icon(
+            onPressed: () => context.push(
+              '/forgot-password?email=${Uri.encodeQueryComponent(email)}',
+            ),
+            icon: const Icon(Icons.key_outlined),
+            label: const Text('Alterar senha'),
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(

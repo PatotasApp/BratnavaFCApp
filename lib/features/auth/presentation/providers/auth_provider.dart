@@ -1,47 +1,45 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../../../core/api/dio_client.dart';
 import '../../../../core/api/interceptors/auth_interceptor.dart';
-import '../../../../core/auth/jwt_helper.dart';
+import '../../../../core/auth/firebase_auth_service.dart';
 import '../../../../core/push/push_token_api.dart';
 import '../../../../core/push/local_notifications.dart';
 import '../../../../core/home_widget/match_home_widget_service.dart';
 import '../../data/datasources/auth_remote_datasource.dart';
-import '../../data/repositories/auth_repository_impl.dart';
-import '../../domain/repositories/auth_repository.dart';
-import '../../domain/usecases/login_usecase.dart';
-import '../../domain/usecases/register_usecase.dart';
 import 'account_store.dart';
+import 'session_provider.dart';
 
-// ── AuthInterceptor (singleton por conta ativa) ───────────────────────────────
+// ── Firebase Auth, interceptor e Dio ─────────────────────────────────────────
+
+final firebaseAuthServiceProvider =
+    Provider<FirebaseAuthService>((ref) => FirebaseAuthService());
+
+/// Sessão do Firebase. O primeiro evento é o que distingue "ainda carregando"
+/// de "deslogado" — antes dele chegar, o SDK ainda está lendo a sessão do disco.
+final authUserProvider = StreamProvider<User?>(
+  (ref) => ref.watch(firebaseAuthServiceProvider).authStateChanges(),
+);
 
 final authInterceptorProvider = Provider<AuthInterceptor>((ref) {
-  final notifier = ref.read(accountStoreProvider.notifier);
+  final authService = ref.watch(firebaseAuthServiceProvider);
+
   return AuthInterceptor(
-    getAccessToken: () {
-      final t = ref.read(accountStoreProvider).activeAccount?.accessToken;
-      return (t == null || t.isEmpty) ? null : t;
-    },
-    getRefreshToken: () {
-      final t = ref.read(accountStoreProvider).activeAccount?.refreshToken;
-      return (t == null || t.isEmpty) ? null : t;
-    },
-    onTokensRefreshed: (access, refresh) async {
-      await notifier.updateTokens(access, refresh);
-    },
+    authService: authService,
     onUnauthorized: () async {
-      await notifier.clearActiveTokens();
+      // 401 que sobreviveu ao token novo: a sessão não vale mais. Encerrar no
+      // Firebase é o que faz o router redirecionar, já que quem manda no
+      // roteamento agora é o authStateChanges.
       try {
-        // Sem sessao valida nao e possivel chamar o endpoint autenticado de
-        // logout. Invalidar o token local impede novos pushes no aparelho.
         await FirebaseMessaging.instance.deleteToken();
       } catch (_) {}
       await LocalNotifications.plugin.cancelAll();
-      // Limpa os tokens sem remover a conta — o router redireciona para /login
-      // e a conta permanece na lista para re-autenticação.
+      await authService.signOut();
+      await ref.read(accountStoreProvider.notifier).logout();
     },
   );
 });
@@ -52,23 +50,31 @@ final dioProvider = Provider<Dio>((ref) {
   return buildDio(authInterceptor: ref.watch(authInterceptorProvider));
 });
 
-// ── Repositório & Use Cases ───────────────────────────────────────────────────
+// ── Acesso ao perfil ─────────────────────────────────────────────────────────
+//
+// O repositório e os use cases de login/cadastro foram removidos: eles
+// envelopavam endpoints que a API deletou. O FirebaseAuthService ocupa esse
+// lugar, e envolver o SDK numa segunda abstração não acrescentaria nada.
 
-final _authDataSourceProvider = Provider<AuthRemoteDataSource>(
+final authDataSourceProvider = Provider<AuthRemoteDataSource>(
   (ref) => AuthRemoteDataSource(ref.watch(dioProvider)),
 );
 
-final authRepositoryProvider = Provider<AuthRepository>(
-  (ref) => AuthRepositoryImpl(ref.watch(_authDataSourceProvider)),
-);
+/// ID token corrente, para quem precisa do token como VALOR e não via header.
+///
+/// São os casos em que a autenticação viaja na query string, porque nem o
+/// `<video src>` nem o cliente SignalR mandam header `Authorization`: `?t=` em
+/// `/stream` e `?access_token=` em `/hubs/realtime`. A API trata os dois no
+/// `OnMessageReceived`.
+///
+/// É um FutureProvider porque `getIdToken()` é assíncrono. Reexecuta quando a
+/// sessão troca, então o token nunca sobrevive a um logout.
+final idTokenProvider = FutureProvider<String?>((ref) async {
+  final uid = ref.watch(sessionProvider.select((s) => s.user?.uid));
+  if (uid == null) return null;
 
-final loginUseCaseProvider = Provider<LoginUseCase>(
-  (ref) => LoginUseCase(ref.watch(authRepositoryProvider)),
-);
-
-final registerUseCaseProvider = Provider<RegisterUseCase>(
-  (ref) => RegisterUseCase(ref.watch(authRepositoryProvider)),
-);
+  return ref.watch(firebaseAuthServiceProvider).idToken();
+});
 
 String _normalizeGroupId(String? id) =>
     (id ?? '').trim().toLowerCase().replaceAll(RegExp(r'[{}]'), '');
@@ -99,81 +105,40 @@ class AuthNotifier extends AsyncNotifier<void> {
   @override
   Future<void> build() async {}
 
-  Future<void> login(
-    String email,
-    String password, {
-    bool keepLoggedIn = true,
-  }) async {
+  /// Autentica no Firebase. Nada mais acontece aqui de propósito.
+  ///
+  /// Quem carrega o perfil é o `sessionProvider`, que observa
+  /// `authStateChanges` e dispara o `GET /me` seguido do enriquecimento de
+  /// patotas. Duplicar isso no login deixaria os dois caminhos divergentes —
+  /// e o cold start, que nunca passa pela tela de login, ficaria de fora.
+  Future<void> login(String email, String password) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
-      final useCase = ref.read(loginUseCaseProvider);
-      final account = await useCase(email: email, password: password);
-      final accountStore = ref.read(accountStoreProvider.notifier);
-      final previous = ref
-          .read(accountStoreProvider)
-          .accounts
-          .where((item) => item.userId == account.userId)
-          .firstOrNull;
+      await ref.read(firebaseAuthServiceProvider).signInWithEmail(
+            email: email,
+            password: password,
+          );
 
-      // O AuthInterceptor obtém o token diretamente do AccountStore. Portanto,
-      // a sessão precisa ser gravada antes das consultas autenticadas de
-      // patotas e jogadores. Na ordem anterior essas chamadas saíam sem o novo
-      // token (ou com o token vencido da mesma conta) e o login terminava com
-      // uma patota aparentemente vazia.
-      final authenticated = account.copyWith(
-        activeGroupId: previous?.activeGroupId,
-        activePlayerId: previous?.activePlayerId,
-        groupAdminIds: previous?.groupAdminIds,
-        groupFinanceiroIds: previous?.groupFinanceiroIds,
-        activeGroupIsAdmin: previous?.activeGroupIsAdmin,
-        activeGroupIsFinanceiro: previous?.activeGroupIsFinanceiro,
-        keepLoggedIn: keepLoggedIn,
-      );
-      await accountStore.upsertAccount(authenticated);
-
-      // Um 401 anterior pode ter armado o guard do interceptor. A nova sessão
-      // já é válida e deve poder fazer as consultas de inicialização.
+      // Um 401 anterior pode ter armado o guard do interceptor. A sessão nova é
+      // válida e precisa poder fazer as consultas de inicialização.
       ref.read(authInterceptorProvider).resetUnauthorizedGuard();
-
-      final dataSource = ref.read(_authDataSourceProvider);
-
-      // Busca em paralelo: roles de grupo + grupos do jogador.
-      final (roles, groupIds) = await (
-        dataSource.fetchGroupRoles(account.userId),
-        dataSource.fetchMyGroupIds(),
-      ).wait;
-
-      // Considera também patotas em que a conta é admin/financeiro. Um usuário
-      // pode administrar uma patota mesmo antes de possuir jogador vinculado.
-      final candidateGroupIds = <String>[
-        ...groupIds,
-        ...?roles?['adminIds'],
-        ...?roles?['financeiroIds'],
-      ];
-      final activeGroupId = _resolveActiveGroupId(
-        previousGroupId: authenticated.activeGroupId,
-        candidateGroupIds: candidateGroupIds,
-      );
-
-      final enriched = authenticated.copyWith(
-        groupAdminIds: roles?['adminIds'] ?? authenticated.groupAdminIds,
-        groupFinanceiroIds:
-            roles?['financeiroIds'] ?? authenticated.groupFinanceiroIds,
-        activeGroupId: activeGroupId,
-      );
-
-      await accountStore.upsertAccount(enriched);
-
-      // Confirma o papel na patota já no login. Sem isto, quem tem uma patota só
-      // entrava com activeGroupIsAdmin nulo e dependia do array de fallback.
-      if (activeGroupId != null && activeGroupId.isNotEmpty) {
-        await refreshMyGroupRoles(activeGroupId, knownRoles: roles);
-      }
     });
   }
 
+  Future<void> loginWithGoogle() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      await ref.read(firebaseAuthServiceProvider).signInWithGoogle();
+      ref.read(authInterceptorProvider).resetUnauthorizedGuard();
+    });
+  }
+
+  /// Cria a conta no Firebase. A linha em `Users` nasce depois, no primeiro
+  /// `GET /me` — não existe endpoint de cadastro.
+  ///
+  /// Não recebe `userName`: o backend gera um a partir do e-mail no
+  /// provisionamento, e o usuário troca depois no perfil.
   Future<void> register({
-    required String userName,
     required String firstName,
     required String lastName,
     required String email,
@@ -181,14 +146,45 @@ class AuthNotifier extends AsyncNotifier<void> {
   }) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
-      final useCase = ref.read(registerUseCaseProvider);
-      await useCase(
-        userName: userName,
-        firstName: firstName,
-        lastName: lastName,
+      final auth = ref.read(firebaseAuthServiceProvider);
+
+      final credential = await auth.createAccount(
         email: email,
         password: password,
       );
+
+      final displayName = '$firstName $lastName'.trim();
+
+      // Mantém o registro do Firebase correto mesmo que o resto falhe. Não
+      // adianta para o provisionamento: o token já foi emitido sem a claim
+      // `name`, e token não muda depois de emitido.
+      await credential.user?.updateDisplayName(displayName);
+
+      // Verificar o e-mail é o que impede o Firebase de apagar a credencial de
+      // senha caso a pessoa entre com o Google mais tarde. Também é o que
+      // libera o vínculo com uma linha existente no provisionamento. Não
+      // bloqueia o uso do app, e falhar aqui não invalida o cadastro.
+      try {
+        await auth.sendEmailVerification();
+      } catch (_) {}
+
+      ref.read(authInterceptorProvider).resetUnauthorizedGuard();
+
+      // O sessionProvider já disparou o GET /me quando a conta foi criada; aqui
+      // esperamos essa mesma chamada terminar, porque a linha precisa existir
+      // antes do PUT. Sem o await, os dois provisionariam em paralelo e um
+      // estouraria o índice único de FirebaseUid.
+      await ref.read(sessionProvider.notifier).loadProfile();
+
+      // Segunda etapa: a linha nasceu com o nome derivado do e-mail (o token não
+      // tinha `name`), então corrigimos aqui. É este passo que faz os campos do
+      // formulário valerem de fato.
+      await ref.read(authDataSourceProvider).updateMe(
+            firstName: firstName,
+            lastName: lastName,
+          );
+
+      await ref.read(sessionProvider.notifier).loadProfile();
     });
   }
 
@@ -206,6 +202,12 @@ class AuthNotifier extends AsyncNotifier<void> {
     // Limpa a sessao antes de invalidar o FCM. Se o Firebase gerar um novo
     // token, o listener nao conseguira associa-lo a uma conta deslogada.
     await ref.read(accountStoreProvider.notifier).logout();
+
+    // Encerra a sessão no Firebase (e no Google). É isto que faz o
+    // authStateChanges emitir null e o router redirecionar para /login — sem
+    // isso o app limparia o perfil e continuaria autenticado.
+    await ref.read(firebaseAuthServiceProvider).signOut();
+
     try {
       await messaging.deleteToken();
     } catch (error) {
@@ -226,7 +228,7 @@ class AuthNotifier extends AsyncNotifier<void> {
     final requestedAccount = ref.read(accountStoreProvider).activeAccount;
     if (requestedAccount == null) return;
     try {
-      final dataSource = ref.read(_authDataSourceProvider);
+      final dataSource = ref.read(authDataSourceProvider);
       // O mobile não usa o atalho `my-roles`: papéis de plataforma podem ter
       // bypass nesse endpoint. As listas por usuário contêm apenas vínculos
       // explícitos e são a fonte de verdade do aplicativo.
@@ -305,12 +307,12 @@ class AuthNotifier extends AsyncNotifier<void> {
     final account = ref.read(accountStoreProvider).activeAccount;
     if (account == null) return;
     try {
-      final dataSource = ref.read(_authDataSourceProvider);
+      final dataSource = ref.read(authDataSourceProvider);
       final roles = await dataSource.fetchGroupRoles(account.userId);
       if (roles == null) {
         return; // falha de rede não pode apagar permissão salva
       }
-      await ref.read(accountStoreProvider.notifier).upsertAccount(
+      await ref.read(accountStoreProvider.notifier).setAccount(
             account.copyWith(
               groupAdminIds: roles['adminIds'],
               groupFinanceiroIds: roles['financeiroIds'],
@@ -333,7 +335,7 @@ class AuthNotifier extends AsyncNotifier<void> {
     final account = ref.read(accountStoreProvider).activeAccount;
     if (account == null) return;
     try {
-      final dataSource = ref.read(_authDataSourceProvider);
+      final dataSource = ref.read(authDataSourceProvider);
       final (roles, groupIds) = await (
         dataSource.fetchGroupRoles(account.userId),
         dataSource.fetchMyGroupIds(),
@@ -352,7 +354,7 @@ class AuthNotifier extends AsyncNotifier<void> {
 
       // `roles == null` significa que a consulta falhou. Mantém o que já estava
       // salvo em vez de zerar as permissões por causa de uma queda de rede.
-      await ref.read(accountStoreProvider.notifier).upsertAccount(
+      await ref.read(accountStoreProvider.notifier).setAccount(
             account.copyWith(
               groupAdminIds: roles?['adminIds'],
               groupFinanceiroIds: roles?['financeiroIds'],
@@ -369,55 +371,7 @@ class AuthNotifier extends AsyncNotifier<void> {
     } catch (_) {}
   }
 
-  /// Tenta renovar o token proativamente antes de expirar.
-  /// Delega ao AuthInterceptor para reutilizar a lógica de envelope e mutex.
-  Future<void> proactiveRefresh() async {
-    final account = ref.read(accountStoreProvider).activeAccount;
-    if (account == null) return;
-    if (!JwtHelper.isExpiring(account.accessToken, bufferSeconds: 300)) return;
-
-    debugPrint('🔄 proactiveRefresh: token expirando, renovando...');
-    final newToken = await ref.read(authInterceptorProvider).tryRefresh();
-    if (newToken != null) {
-      debugPrint('✅ proactiveRefresh: token renovado');
-    } else {
-      debugPrint(
-          '⚠ proactiveRefresh: renovação falhou (interceptor tratará 401)');
-    }
-  }
 }
 
 final authNotifierProvider =
     AsyncNotifierProvider<AuthNotifier, void>(AuthNotifier.new);
-
-// ── Serviço de refresh proativo ───────────────────────────────────────────────
-
-/// Agenda renovação do token 5 minutos antes de expirar.
-/// Deve ser assistido por um widget de longa duração (ShellPage).
-final tokenRefreshServiceProvider = Provider<void>((ref) {
-  final token = ref.watch(
-    accountStoreProvider.select((s) => s.activeAccount?.accessToken),
-  );
-  if (token == null) return;
-
-  final expiresAt = JwtHelper.expiresAt(token);
-  if (expiresAt == null) return;
-
-  final refreshAt = expiresAt.subtract(const Duration(minutes: 5));
-  final delay = refreshAt.difference(DateTime.now());
-
-  Timer? timer;
-
-  if (delay.isNegative || delay.inSeconds < 30) {
-    // Token já próximo do limite — agenda refresh imediato
-    Future.microtask(
-      () => ref.read(authNotifierProvider.notifier).proactiveRefresh(),
-    );
-  } else {
-    timer = Timer(delay, () {
-      ref.read(authNotifierProvider.notifier).proactiveRefresh();
-    });
-  }
-
-  ref.onDispose(() => timer?.cancel());
-});

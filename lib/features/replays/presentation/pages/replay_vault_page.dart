@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../domain/entities/replay_clip.dart';
@@ -35,8 +36,9 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
     return acc.isGroupAdmin(groupId);
   }
 
-  String? get _accessToken =>
-      ref.read(accountStoreProvider).activeAccount?.accessToken;
+  /// Token para a query `?t=` do endpoint de stream. Vem do Firebase, não do
+  /// perfil. O `build` observa o provider, então aqui o valor já está resolvido.
+  String? get _accessToken => ref.read(idTokenProvider).valueOrNull;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -313,6 +315,7 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
     // responde 403. Ver dashboard_page para o diagnóstico completo.
     final gid = account?.activeGroupId ?? activePlayer?.groupId ?? '';
     final isAdmin = _resolvedIsAdmin(gid);
+    ref.watch(idTokenProvider);
     final accessToken = _accessToken;
 
     final playersAsync = ref.watch(myPlayersProvider);

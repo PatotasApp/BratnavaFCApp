@@ -183,6 +183,16 @@ class AppColors {
   static const amber200 = Color(0xFFFDE68A);
   static const amber400 = Color(0xFFF5B700);
   static const amber500 = Color(0xFFF5B700);
+  // Tons escuros para texto e fundo do aviso de e-mail não verificado.
+  static const amber600 = Color(0xFFD97706);
+  static const amber800 = Color(0xFF92400E);
+  static const amber900 = Color(0xFF78350F);
+  static const amber950 = Color(0xFF451A03);
+
+  /// Azul oficial do "G" do Google. Cor de marca de terceiro, não do tema —
+  /// mora aqui porque a camada de apresentação não pode declarar cor direta
+  /// (ver theme_contract_test).
+  static const googleBlue = Color(0xFF4285F4);
 
   // Blue – informação
   static const blue50 = Color(0xFFEFF6FF);
