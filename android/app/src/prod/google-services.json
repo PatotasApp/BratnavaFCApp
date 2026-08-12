@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "100539922332-sb036dbqb0hv2t5pb8eurbco8uco407v.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "br.com.patotasapp",
+            "certificate_hash": "1392cc629754b37fc6258857c4fdfbaf70780eb8"
+          }
+        },
+        {
           "client_id": "100539922332-6del1j40ht9f3mo5thbgcv2t37n1g847.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -29,6 +37,13 @@
             {
               "client_id": "100539922332-6del1j40ht9f3mo5thbgcv2t37n1g847.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "100539922332-s5lnr0ji1m2rkqirvh5b2qo6lief89r5.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "br.com.patotasapp"
+              }
             }
           ]
         }

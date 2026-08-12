@@ -1,3 +1,21 @@
+import java.io.FileInputStream
+import java.util.Properties
+
+// Chave de assinatura de release. O arquivo fica FORA do repositório (bloqueado
+// no .gitignore junto com *.jks e *.p12) porque contém as senhas e um caminho
+// local de cada máquina. Distribuição por cofre de senhas, nunca por chat.
+//
+// Ausente = build de release cai no signing de debug (ver signingConfigs). É
+// deliberado: quem não tem a chave continua conseguindo buildar release para
+// medir performance e tamanho, só não gera nada publicável.
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        FileInputStream(keystorePropertiesFile).use { load(it) }
+    }
+}
+val hasReleaseKeystore = keystoreProperties.getProperty("storeFile") != null
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -38,6 +56,22 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+
+        // A upload key: assina o AAB enviado à Play e os APKs de release
+        // buildados localmente. A Play remove esta assinatura e re-assina com a
+        // app signing key, que é do Google — por isso os DOIS SHAs precisam
+        // estar registrados no projeto Firebase de produção.
+        //
+        // Em keystore PKCS12 existe uma senha só: keyPassword é a mesma que
+        // storePassword. O key.properties repete o valor nas duas chaves.
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
     }
 
     defaultConfig {
@@ -66,7 +100,14 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            // Sem key.properties o release sai assinado com a chave de debug.
+            // Serve para testar, NUNCA para publicar: a Play recusa APK assinado
+            // com chave de debug, e o SHA dessa chave está no repositório.
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

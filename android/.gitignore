@@ -12,6 +12,10 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+# PKCS12 é o formato padrão do keytool desde o Java 9 e o recomendado para a
+# upload key. Sem esta linha um upload-keystore.p12 largado na pasta do projeto
+# seria versionado — as outras duas regras não o pegam.
+**/*.p12
 
 # Exceção deliberada ao padrão acima: este debug keystore é compartilhado de
 # propósito (ver signingConfigs em app/build.gradle.kts). A senha dele é o padrão
