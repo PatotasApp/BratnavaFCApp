@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "100539922332",
+    "project_id": "production-2153f",
+    "storage_bucket": "production-2153f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:100539922332:android:567ae901e19edbd3adba59",
+        "android_client_info": {
+          "package_name": "br.com.patotasapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "100539922332-6del1j40ht9f3mo5thbgcv2t37n1g847.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAE26lnveBSTkWVQn1VhB755bhhyqzDEHA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "100539922332-6del1j40ht9f3mo5thbgcv2t37n1g847.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

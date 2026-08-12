@@ -22,15 +22,15 @@ const _kCategoryEventPoll = 'EVENT_POLL';
 
 // ─── Canais Android ───────────────────────────────────────────────────────────
 
-const _channelId = 'bratnavafc_high';
+const _channelId = 'patotasapp_high';
 const _channelName = 'PatotasApp';
 const _channelDesc = 'Notificações do PatotasApp';
 
-const _inviteChannelId = 'bratnavafc_match_invite';
+const _inviteChannelId = 'patotasapp_match_invite';
 const _inviteChannelName = 'Partidas';
 const _inviteChannelDesc = 'Convites e confirmações de presença em partidas';
 
-const _pollChannelId = 'bratnavafc_event_poll';
+const _pollChannelId = 'patotasapp_event_poll';
 const _pollChannelName = 'Votações de Evento';
 const _pollChannelDesc = 'Lembretes de votação com botões de resposta rápida';
 

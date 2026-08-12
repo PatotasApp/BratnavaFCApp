@@ -1,4 +1,4 @@
-package com.bratnavafc.bratnava_fc_app
+package br.com.patotasapp
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager

@@ -1,13 +1,13 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
     id("com.google.gms.google-services")
 }
 
 android {
-    namespace = "com.bratnavafc.bratnava_fc_app"
+    // 1. AQUI: O novo namespace do app
+    namespace = "br.com.patotasapp"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -21,20 +21,51 @@ android {
         jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
+    signingConfigs {
+        // Keystore de debug versionado, compartilhado por todos os devs e pelo CI.
+        //
+        // Sem ele, cada máquina gera o próprio ~/.android/debug.keystore e produz um SHA-1
+        // diferente — e o login com Google exige que o SHA do APK esteja registrado no app
+        // Firebase. Com o arquivo no repo, é um SHA só para o time inteiro.
+        //
+        // Não é segredo: a senha "android" e o alias "androiddebugkey" são os padrões do
+        // Android SDK. O que limita o risco é este SHA estar registrado APENAS no projeto
+        // Firebase de desenvolvimento. Nunca registrá-lo em produção, e nunca usar esta
+        // chave para assinar release.
+        getByName("debug") {
+            storeFile = file("../keystores/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     defaultConfig {
-        applicationId = "com.bratnava.bratnavaapp"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // 2. AQUI: O ID base oficial do aplicativo
+        applicationId = "br.com.patotasapp"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    flavorDimensions += "env"
+
+    productFlavors {
+        create("dev") {
+            dimension = "env"
+            applicationIdSuffix = ".dev" // ID final: br.com.patotasapp.dev
+            resValue("string", "app_name", "PatotasApp Dev") 
+        }
+        create("prod") {
+            dimension = "env"
+            // ID final: br.com.patotasapp
+            resValue("string", "app_name", "PatotasApp") 
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
     }

@@ -148,6 +148,6 @@ class MatchHomeWidgetService {
   static Future<void> _update() => HomeWidget.updateWidget(
         androidName: _androidProvider,
         qualifiedAndroidName:
-            'com.bratnavafc.bratnava_fc_app.$_androidProvider',
+            'br.com.patotasapp.$_androidProvider',
       );
 }

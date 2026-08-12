@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "328593862894",
+    "project_id": "development-d04ef",
+    "storage_bucket": "development-d04ef.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:328593862894:android:89defae25e9e6aa5ca83ff",
+        "android_client_info": {
+          "package_name": "br.com.patotasapp.dev"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "328593862894-qcsl0ik99c22qgdt66o8h8csj4dp6pma.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "br.com.patotasapp.dev",
+            "certificate_hash": "2fbb9dd94b823c515b6aaa3b597422a855991cde"
+          }
+        },
+        {
+          "client_id": "328593862894-eavjk907d75p3isesk4519bnufd7p1qv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC73swWT1SdWzbl4JT8XoiIlkw5DHYVtpw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "328593862894-eavjk907d75p3isesk4519bnufd7p1qv.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "328593862894-imuqeth25kugma6je17cnugjtcr929gl.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "br.com.patotasapp.dev"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

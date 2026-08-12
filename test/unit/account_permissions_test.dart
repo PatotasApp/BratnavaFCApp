@@ -1,4 +1,4 @@
-import 'package:bratnava_fc_app/features/auth/domain/entities/account.dart';
+import 'package:patotas_app/features/auth/domain/entities/account.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

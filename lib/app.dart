@@ -63,7 +63,7 @@ class _AppState extends ConsumerState<App> {
     });
 
     return MaterialApp.router(
-      title: 'BratnavaFC',
+      title: 'PatotasApp',
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeMode,

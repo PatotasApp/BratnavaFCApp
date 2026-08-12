@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:bratnava_fc_app/features/payments/domain/entities/payment_entities.dart';
+import 'package:patotas_app/features/payments/domain/entities/payment_entities.dart';
 
 void main() {
   // ── MonthlyGrid.fromJson ───────────────────────────────────────────────────

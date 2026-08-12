@@ -17,7 +17,7 @@ const String _kSpeedPrefKey = 'replay_speed';
 const String _kLoopPrefKey = 'replay_loop';
 const String _kSiteUrl = String.fromEnvironment(
   'WEB_URL',
-  defaultValue: 'https://bratnavafc.com',
+  defaultValue: 'https://patotasapp.com.br',
 );
 
 // ── URL resolver (shared) ─────────────────────────────────────────────────────

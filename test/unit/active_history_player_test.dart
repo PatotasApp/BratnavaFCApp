@@ -1,5 +1,5 @@
-import 'package:bratnava_fc_app/features/dashboard/domain/entities/my_player.dart';
-import 'package:bratnava_fc_app/features/player_history/presentation/pages/player_history_page.dart';
+import 'package:patotas_app/features/dashboard/domain/entities/my_player.dart';
+import 'package:patotas_app/features/player_history/presentation/pages/player_history_page.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

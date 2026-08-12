@@ -303,7 +303,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         ),
         const SizedBox(height: 12),
         Text(
-          'BratnavaFC',
+          'PatotasApp',
           style: Theme.of(context)
               .textTheme
               .titleMedium

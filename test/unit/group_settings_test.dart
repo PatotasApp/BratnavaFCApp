@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:bratnava_fc_app/features/group_settings/domain/entities/group_settings.dart';
+import 'package:patotas_app/features/group_settings/domain/entities/group_settings.dart';
 
 void main() {
   // ── GroupSettings.fromJson ─────────────────────────────────────────────────

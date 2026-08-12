@@ -1,5 +1,5 @@
-name: bratnava_fc_app
-description: BratnavaFC - Gerenciador de futebol para grupos e partidas.
+name: patotas_app
+description: PatotasApp - Gerenciador de futebol para grupos e partidas.
 publish_to: "none"
 version: 1.0.0+1
 

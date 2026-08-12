@@ -1,4 +1,4 @@
-import 'package:bratnava_fc_app/shared/presentation/widgets/app_page_header.dart';
+import 'package:patotas_app/shared/presentation/widgets/app_page_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

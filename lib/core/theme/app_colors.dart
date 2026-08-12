@@ -19,7 +19,7 @@ class AppColors {
   static const lightPlaceholder = Color(0xFF98A2AD);
   static const lightSeparator = Color(0xFFECEFF2);
 
-  // Tema escuro: paleta oficial do Bratnava FC.
+  // Tema escuro: paleta oficial do PatotasApp.
   static const darkApp = Color(0xFF0D0D0F);
   static const darkCard = Color(0xFF202225);
   static const darkSubtle = Color(0xFF1A1A1D);

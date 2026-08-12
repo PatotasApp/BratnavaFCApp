@@ -1,4 +1,4 @@
-import 'package:bratnava_fc_app/core/push/notification_router.dart';
+import 'package:patotas_app/core/push/notification_router.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

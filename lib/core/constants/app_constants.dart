@@ -22,9 +22,9 @@ class AppConstants {
   static String get environmentName =>
       kReleaseMode ? 'production' : 'development';
 
-  static const String accountsStorageKey = 'bratnava.accounts.v2';
-  static const String activeAccountKey = 'bratnava.activeAccountId';
-  static const String themeStorageKey = 'bratnava-theme';
+  static const String accountsStorageKey = 'patotas.accounts.v2';
+  static const String activeAccountKey = 'patotas.activeAccountId';
+  static const String themeStorageKey = 'patotas-theme';
 
   /// A API roda no Fly.io com autostop: quando a máquina está parada, a primeira
   /// requisição paga o cold start (subir a VM + iniciar o runtime). O TCP costuma

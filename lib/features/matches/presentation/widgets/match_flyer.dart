@@ -196,9 +196,9 @@ class _MatchCardDialogState extends State<_MatchCardDialog> {
     if (_imageBase64 == null) return;
     final bytes = base64Decode(_imageBase64!);
     final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/bratnava_card.png');
+    final file = File('${dir.path}/patotas_card.png');
     await file.writeAsBytes(bytes);
-    await Share.shareXFiles([XFile(file.path)], text: 'Escalação BratnavaFC');
+    await Share.shareXFiles([XFile(file.path)], text: 'Escalação PatotasApp');
   }
 
   @override

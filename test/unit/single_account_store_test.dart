@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:bratnava_fc_app/core/constants/app_constants.dart';
-import 'package:bratnava_fc_app/features/auth/domain/entities/account.dart';
-import 'package:bratnava_fc_app/features/auth/presentation/providers/account_store.dart';
+import 'package:patotas_app/core/constants/app_constants.dart';
+import 'package:patotas_app/features/auth/domain/entities/account.dart';
+import 'package:patotas_app/features/auth/presentation/providers/account_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

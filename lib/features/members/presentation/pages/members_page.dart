@@ -1353,7 +1353,7 @@ class _UserDetailSheetState extends ConsumerState<_UserDetailSheet> {
                             ),
                           ),
                           Text(
-                            'Bratnava FC',
+                            'PatotasApp',
                             style: TextStyle(
                               color: AppColors.onDark.withValues(alpha: 0.55),
                               fontSize: 12,

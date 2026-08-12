@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#FFFFFF</color>
-    <!-- Cor dourada do logo Bratnava para destaque do ícone na status bar -->
+    <!-- Cor dourada do logo PatotasApp para destaque do ícone na status bar -->
     <color name="notification_color">#D4A017</color>
 </resources>

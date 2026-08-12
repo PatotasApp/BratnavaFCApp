@@ -1,4 +1,4 @@
-import 'package:bratnava_fc_app/features/shell/domain/shell_navigation_policy.dart';
+import 'package:patotas_app/features/shell/domain/shell_navigation_policy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
