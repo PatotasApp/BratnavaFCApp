@@ -145,7 +145,8 @@ class ApiConstants {
       '/api/Calendar/group/$groupId/categories/$id';
 
   // Users – mutations
-  static String changePassword(String id) => '/api/users/$id/password';
+  // Havia aqui changePassword(id) => '/api/users/{id}/password'. O endpoint foi removido
+  // na migração para o Firebase; a troca de senha é sendPasswordResetEmail pelo SDK.
   static String deactivateUser(String id) => '/api/users/$id/inactivate';
   static String activateUser(String id) => '/api/users/$id/reactivate';
 

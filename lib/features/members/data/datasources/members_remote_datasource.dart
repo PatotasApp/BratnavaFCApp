@@ -50,20 +50,9 @@ class MembersRemoteDataSource {
     return AppUser.fromJson(_unwrapMap(res.data));
   }
 
-  Future<void> changePassword(
-    String id, {
-    required String currentPassword,
-    required String newPassword,
-  }) async {
-    final res = await _dio.put(
-      ApiConstants.changePassword(id),
-      data: {
-        'currentPassword': currentPassword,
-        'newPassword': newPassword,
-      },
-    );
-    _throwIfError(res.data);
-  }
+  // Não há changePassword: a senha vive no Firebase e a API não tem endpoint para ela.
+  // A troca acontece pelo fluxo de redefinição por e-mail (sendPasswordResetEmail), que
+  // não passa por aqui.
 
   /// Sem id: o backend resolve o alvo pela identidade do token. Só dá para trocar a
   /// própria foto — admin não altera a de outro usuário.
