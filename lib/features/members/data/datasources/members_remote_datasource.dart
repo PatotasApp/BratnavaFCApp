@@ -65,7 +65,9 @@ class MembersRemoteDataSource {
     _throwIfError(res.data);
   }
 
-  Future<void> uploadProfilePhoto(String id, List<int> bytes) async {
+  /// Sem id: o backend resolve o alvo pela identidade do token. Só dá para trocar a
+  /// própria foto — admin não altera a de outro usuário.
+  Future<void> uploadProfilePhoto(List<int> bytes) async {
     final form = FormData.fromMap({
       'file': MultipartFile.fromBytes(
         bytes,
@@ -73,12 +75,13 @@ class MembersRemoteDataSource {
         contentType: MediaType('image', 'jpeg'),
       ),
     });
-    final res = await _dio.post(ApiConstants.userPhoto(id), data: form);
+    final res = await _dio.post(ApiConstants.usersMePhoto, data: form);
     _throwIfError(res.data);
   }
 
-  Future<void> deleteProfilePhoto(String id) async {
-    final res = await _dio.delete(ApiConstants.userPhoto(id));
+  /// Sem id, pelo mesmo motivo do upload.
+  Future<void> deleteProfilePhoto() async {
+    final res = await _dio.delete(ApiConstants.usersMePhoto);
     _throwIfError(res.data);
   }
 

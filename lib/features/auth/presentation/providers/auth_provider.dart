@@ -38,8 +38,12 @@ final authInterceptorProvider = Provider<AuthInterceptor>((ref) {
         await FirebaseMessaging.instance.deleteToken();
       } catch (_) {}
       await LocalNotifications.plugin.cancelAll();
-      await authService.signOut();
+
+      // Store primeiro, como no logout() do AuthNotifier: com signOut() na frente,
+      // existe uma janela em que o currentUser já é null mas o perfil ainda está no
+      // store, e widget que guarda em cima do store dispara request sem token.
       await ref.read(accountStoreProvider.notifier).logout();
+      await authService.signOut();
     },
   );
 });

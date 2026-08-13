@@ -189,11 +189,6 @@ class AppColors {
   static const amber900 = Color(0xFF78350F);
   static const amber950 = Color(0xFF451A03);
 
-  /// Azul oficial do "G" do Google. Cor de marca de terceiro, não do tema —
-  /// mora aqui porque a camada de apresentação não pode declarar cor direta
-  /// (ver theme_contract_test).
-  static const googleBlue = Color(0xFF4285F4);
-
   // Blue – informação
   static const blue50 = Color(0xFFEFF6FF);
   static const blue200 = Color(0xFFBFDBFE);
