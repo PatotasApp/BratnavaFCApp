@@ -34,16 +34,37 @@ class AppTopBar extends ConsumerWidget implements PreferredSizeWidget {
         if (acc == null) return;
 
         String? groupId = acc.activeGroupId;
+        final normalizedGroupId = groupId?.trim().toLowerCase();
+        final activePlayerBelongsToGroup = groupId != null &&
+            list.any(
+              (player) =>
+                  player.playerId == acc.activePlayerId &&
+                  player.groupId.trim().toLowerCase() == normalizedGroupId,
+            );
 
-        if (acc.activePlayerId == null || acc.activeGroupId == null) {
-          final first = list.first;
-          groupId = acc.activeGroupId ?? first.groupId;
-          ref.read(accountStoreProvider.notifier).patchActive(
-                (a) => a.copyWith(
-                  activePlayerId: a.activePlayerId ?? first.playerId,
-                  activeGroupId: a.activeGroupId ?? first.groupId,
-                ),
-              );
+        // O Player ativo sempre precisa pertencer a patota ativa. Antes, se o
+        // grupo ja estivesse salvo mas o player nao, o primeiro player global
+        // era escolhido e as telas (como voto MVP) procuravam o vinculo errado.
+        if (!activePlayerBelongsToGroup) {
+          final matchingGroupPlayer = groupId == null
+              ? list.first
+              : list
+                  .where(
+                    (player) =>
+                        player.groupId.trim().toLowerCase() ==
+                        normalizedGroupId,
+                  )
+                  .firstOrNull;
+
+          if (matchingGroupPlayer != null) {
+            groupId = matchingGroupPlayer.groupId;
+            ref.read(accountStoreProvider.notifier).patchActive(
+                  (a) => a.copyWith(
+                    activePlayerId: matchingGroupPlayer.playerId,
+                    activeGroupId: matchingGroupPlayer.groupId,
+                  ),
+                );
+          }
         }
 
         // Refresh roles do grupo ativo (cobre login inicial + retorno ao app)

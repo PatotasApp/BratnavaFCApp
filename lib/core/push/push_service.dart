@@ -162,8 +162,16 @@ class PushService {
     final details =
         await LocalNotifications.plugin.getNotificationAppLaunchDetails();
     if (details == null || !details.didNotificationLaunchApp) return;
-    final payload = details.notificationResponse?.payload;
+    final response = details.notificationResponse;
+    final payload = response?.payload;
     if (payload == null || payload.isEmpty) return;
+
+    // Quando o Android inicia o processo a partir de um botão da notificação,
+    // a resposta fica em getNotificationAppLaunchDetails e não passa pelo
+    // callback normal. Processa a escolha antes de navegar.
+    if (response != null && LocalNotifications.isDirectAction(response)) {
+      await LocalNotifications.handleAction(response);
+    }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (payload.contains('::')) {

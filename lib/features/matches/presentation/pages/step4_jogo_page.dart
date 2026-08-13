@@ -79,9 +79,10 @@ class _Step4State extends ConsumerState<Step4JogoPage> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Encerrar partida?'),
+        title: const Text('Finalizar partida?'),
         content: const Text(
-            'A partida será encerrada. Você poderá registrar o placar e MVP no pós-jogo.'),
+          'Deseja realmente finalizar esta partida? Depois disso, não será possível voltar para a etapa de jogo. Você ainda poderá registrar o placar e o MVP no pós-jogo.',
+        ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -89,7 +90,7 @@ class _Step4State extends ConsumerState<Step4JogoPage> {
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.rose500),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Encerrar'),
+            child: const Text('Sim, finalizar'),
           ),
         ],
       ),
