@@ -13,7 +13,15 @@ class ApiConstants {
   /// no primeiro login. Também é o que provisiona o usuário no backend.
   static const String usersMe = '/api/Users/me';
   static String userById(String id) => '/api/Users/$id';
+
+  /// Somente LEITURA da foto de outro usuário. É `AllowAnonymous` no backend porque
+  /// alimenta avatares direto na tag de imagem, e o id na rota é o que torna o
+  /// recurso endereçável e cacheável.
   static String userPhoto(String id) => '/api/Users/$id/photo';
+
+  /// Trocar ou remover a PRÓPRIA foto. O backend resolve o alvo pela identidade do
+  /// token, então não há id na rota — mandar um não teria efeito.
+  static const String usersMePhoto = '/api/Users/me/photo';
 
   // Groups
   static const String groups = '/api/Groups';
@@ -54,9 +62,16 @@ class ApiConstants {
   static String groupInviteReject(String inviteId) =>
       '/api/Groups/invites/$inviteId/reject';
 
-  // Users – search (paginated)
-  static String usersListSearch(String q, int pageSize) =>
-      '/api/Users?search=${Uri.encodeComponent(q)}&pageSize=$pageSize';
+  // Users – busca por handle (paginada)
+  //
+  // Busca pelo `userName`, não pelo `search` amplo: o UserName tem índice único no
+  // backend, então um handle identifica exatamente uma pessoa. O `search` casa nome
+  // e e-mail e devolve gente parecida — e escolher a pessoa errada aqui vincula um
+  // convidado à conta errada, levando o histórico do jogador junto.
+  //
+  // O `search` continua existindo no backend para a tela de administração de usuários.
+  static String usersSearchByUserName(String q, int pageSize) =>
+      '/api/Users?userName=${Uri.encodeComponent(q)}&pageSize=$pageSize';
 
   // Matches
   static String currentMatch(String groupId) =>
@@ -130,7 +145,8 @@ class ApiConstants {
       '/api/Calendar/group/$groupId/categories/$id';
 
   // Users – mutations
-  static String changePassword(String id) => '/api/users/$id/password';
+  // Havia aqui changePassword(id) => '/api/users/{id}/password'. O endpoint foi removido
+  // na migração para o Firebase; a troca de senha é sendPasswordResetEmail pelo SDK.
   static String deactivateUser(String id) => '/api/users/$id/inactivate';
   static String activateUser(String id) => '/api/users/$id/reactivate';
 
@@ -145,8 +161,8 @@ class ApiConstants {
   static String groupFinanceiros(String id) => '/api/Groups/$id/financeiros';
   static String groupFinanceiroById(String id, String uid) =>
       '/api/Groups/$id/financeiros/$uid';
-  static String usersSearch(String q) =>
-      '/api/Users?search=${Uri.encodeComponent(q)}';
+  // Havia aqui um usersSearch(q) por `search` amplo, sem nenhum chamador. Removido para
+  // ninguém pegá-lo por engano no lugar do usersSearchByUserName acima.
 
   // Polls
   static String polls(String groupId) => '/api/Polls/group/$groupId';

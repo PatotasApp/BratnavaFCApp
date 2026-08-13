@@ -94,7 +94,7 @@ class _EditableProfileAvatarState extends ConsumerState<EditableProfileAvatar> {
 
       await ref
           .read(membersDsProvider)
-          .uploadProfilePhoto(widget.userId, compressed);
+          .uploadProfilePhoto(compressed);
       _refreshPhoto();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -134,7 +134,7 @@ class _EditableProfileAvatarState extends ConsumerState<EditableProfileAvatar> {
 
     setState(() => _busy = true);
     try {
-      await ref.read(membersDsProvider).deleteProfilePhoto(widget.userId);
+      await ref.read(membersDsProvider).deleteProfilePhoto();
       _refreshPhoto();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

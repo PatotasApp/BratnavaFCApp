@@ -637,15 +637,6 @@ class _ProfileCard extends StatelessWidget {
     );
   }
 
-  void _showChangePasswordSheet(BuildContext ctx, bool dark) {
-    showModalBottomSheet(
-      context: ctx,
-      isScrollControlled: true,
-      backgroundColor: AppColors.transparent,
-      builder: (_) => _ChangePasswordSheet(userId: user.id, isDark: dark),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final bg = isDark ? AppColors.slate800 : AppColors.onDark;
@@ -713,7 +704,13 @@ class _ProfileCard extends StatelessWidget {
                   icon: Icons.lock_outline_rounded,
                   label: 'Alterar senha',
                   isDark: isDark,
-                  onTap: () => _showChangePasswordSheet(context, isDark),
+                  // Mesmo destino do botão em my_account_page: a senha vive no Firebase e
+                  // a API não tem endpoint para ela. Redefinir por e-mail também marca o
+                  // endereço como verificado, que é o que o provisionamento exige para
+                  // vincular contas anteriores à migração.
+                  onTap: () => context.push(
+                    '/forgot-password?email=${Uri.encodeQueryComponent(user.email)}',
+                  ),
                 ),
               ],
             ),
@@ -1215,18 +1212,6 @@ class _UserDetailSheetState extends ConsumerState<_UserDetailSheet> {
     }
   }
 
-  void _showChangePassword() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.transparent,
-      builder: (_) => _ChangePasswordSheet(
-        userId: widget.user.id,
-        isDark: widget.isDark,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final dark = widget.isDark;
@@ -1495,7 +1480,10 @@ class _UserDetailSheetState extends ConsumerState<_UserDetailSheet> {
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton.icon(
-                          onPressed: _showChangePassword,
+                          onPressed: () => context.push(
+                            '/forgot-password?email='
+                            '${Uri.encodeQueryComponent(widget.user.email)}',
+                          ),
                           icon:
                               const Icon(Icons.lock_outline_rounded, size: 16),
                           label: const Text('Alterar senha'),
@@ -1847,248 +1835,6 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(context),
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: border),
-                          foregroundColor:
-                              dark ? AppColors.slate300 : AppColors.slate600,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: const Text('Cancelar'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: _loading ? null : _submit,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.slate900,
-                          foregroundColor: AppColors.onDark,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: _loading
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.onDark,
-                                ),
-                              )
-                            : const Text('Salvar'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Change Password Sheet ─────────────────────────────────────────────────────
-
-class _ChangePasswordSheet extends ConsumerStatefulWidget {
-  final String userId;
-  final bool isDark;
-  const _ChangePasswordSheet({
-    required this.userId,
-    required this.isDark,
-  });
-
-  @override
-  ConsumerState<_ChangePasswordSheet> createState() =>
-      _ChangePasswordSheetState();
-}
-
-class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
-  final _formKey = GlobalKey<FormState>();
-  final _currentCtrl = TextEditingController();
-  final _newCtrl = TextEditingController();
-  final _confirmCtrl = TextEditingController();
-  bool _loading = false;
-
-  @override
-  void dispose() {
-    _currentCtrl.dispose();
-    _newCtrl.dispose();
-    _confirmCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _loading = true);
-    try {
-      final ds = ref.read(membersDsProvider);
-      await ds.changePassword(
-        widget.userId,
-        currentPassword: _currentCtrl.text,
-        newPassword: _newCtrl.text,
-      );
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Senha alterada com sucesso!'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        final msg = extractDioError(e, 'Não foi possível alterar a senha.');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(msg),
-            backgroundColor: AppColors.rose600,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final dark = widget.isDark;
-    final bg = dark ? AppColors.slate900 : AppColors.onDark;
-    final label = dark ? AppColors.slate400 : AppColors.slate500;
-    final input = dark ? AppColors.slate100 : AppColors.slate800;
-    final fill = dark ? AppColors.slate800 : AppColors.slate50;
-    final border = dark ? AppColors.slate700 : AppColors.slate200;
-
-    InputDecoration dec(String hint) => InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(color: label, fontSize: 13),
-          filled: true,
-          fillColor: fill,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: border),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: border),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: AppColors.blue500),
-          ),
-        );
-
-    Widget passField(
-      String lbl,
-      TextEditingController ctrl, {
-      String? Function(String?)? validator,
-    }) =>
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              lbl,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: label,
-              ),
-            ),
-            const SizedBox(height: 4),
-            TextFormField(
-              controller: ctrl,
-              obscureText: true,
-              style: TextStyle(fontSize: 14, color: input),
-              decoration: dec('••••••'),
-              validator: validator,
-            ),
-          ],
-        );
-
-    return Container(
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding:
-          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: AppColors.slate400,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.lock_outline_rounded,
-                      size: 18,
-                      color: dark ? AppColors.slate300 : AppColors.slate600,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Alterar senha',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: dark ? AppColors.slate100 : AppColors.slate800,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                passField(
-                  'SENHA ATUAL',
-                  _currentCtrl,
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'Obrigatório' : null,
-                ),
-                const SizedBox(height: 12),
-                passField(
-                  'NOVA SENHA',
-                  _newCtrl,
-                  validator: (v) =>
-                      v == null || v.length < 6 ? 'Mínimo 6 caracteres' : null,
-                ),
-                const SizedBox(height: 12),
-                passField(
-                  'CONFIRMAR NOVA SENHA',
-                  _confirmCtrl,
-                  validator: (v) =>
-                      v != _newCtrl.text ? 'As senhas não conferem' : null,
                 ),
                 const SizedBox(height: 24),
                 Row(

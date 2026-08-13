@@ -4187,7 +4187,7 @@ class _InviteSheetState extends State<_InviteSheet> {
 
     try {
       final res = await widget.dio.get(
-        ApiConstants.usersListSearch(term, 20),
+        ApiConstants.usersSearchByUserName(term, 20),
       );
 
       // Response envelope: { success, data: { page, pageSize, total, items: [...] } }

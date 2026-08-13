@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../core/theme/app_colors.dart';
 
 /// Botão de entrar com o Google.
 ///
-/// O glifo é desenhado aqui porque o projeto não tem o "G" oficial em asset e
-/// não depende de `flutter_svg`. As diretrizes do Google pedem o logotipo nas
-/// cores originais — antes de publicar, troque o [_GoogleGlyph] pelo PNG/SVG
-/// oficial em `assets/images/`.
+/// O glifo é o "G" oficial de quatro cores, em SVG — as diretrizes do Google
+/// pedem o logotipo nas cores originais e proíbem recolori-lo. O arquivo é o
+/// mesmo que o front web usa, então a marca fica idêntica nas duas pontas.
+///
+/// As cores vivem dentro do SVG, não em Dart. Isso é o certo aqui e também
+/// atende ao theme_contract_test: são cores de marca de terceiro, que não
+/// respondem ao tema do app.
 class GoogleSignInButton extends StatelessWidget {
   const GoogleSignInButton({super.key, required this.onPressed});
 
@@ -52,20 +56,13 @@ class _GoogleGlyph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox(
-      width: 20,
-      height: 20,
-      child: Center(
-        child: Text(
-          'G',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            height: 1,
-            color: AppColors.googleBlue,
-          ),
-        ),
-      ),
+    return SvgPicture.asset(
+      'assets/images/google_g.svg',
+      width: 18,
+      height: 18,
+      // Sem semântica: o rótulo do botão ao lado já anuncia a ação, e um
+      // segundo texto faria o leitor de tela repetir "Google" duas vezes.
+      excludeFromSemantics: true,
     );
   }
 }
