@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/api_constants.dart';
@@ -41,19 +43,25 @@ const _pollChannelDesc = 'Lembretes de votação com botões de resposta rápida
 @pragma('vm:entry-point')
 Future<void> onNotificationActionBackground(
     NotificationResponse response) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  DartPluginRegistrant.ensureInitialized();
+  await LocalNotifications.handleAction(response);
+}
+
+Future<bool> _handleNotificationAction(NotificationResponse response) async {
   final actionId = response.actionId;
-  if (actionId == null) return;
+  if (actionId == null) return false;
 
   final parts = response.payload?.split('::') ?? [];
 
   // ── Ação de partida ─────────────────────────────────────────────────────
   if (actionId == _kActionAccept || actionId == _kActionReject) {
-    if (parts.length < 2) return;
+    if (parts.length < 2) return false;
     final groupId = parts[0];
     final matchId = parts[1];
 
     final session = await _readStoredSession();
-    if (session == null) return;
+    if (session == null) return false;
 
     final isAccept = actionId == _kActionAccept;
     final path = isAccept
@@ -66,7 +74,7 @@ Future<void> onNotificationActionBackground(
       session: session,
     );
     if (succeeded) await _cancelHandledNotification(response.id);
-    return;
+    return succeeded;
   }
 
   // ── Ação de poll de evento ───────────────────────────────────────────────
@@ -74,7 +82,7 @@ Future<void> onNotificationActionBackground(
   if (actionId == _kPollActionSim ||
       actionId == _kPollActionTalvez ||
       actionId == _kPollActionNao) {
-    if (parts.length < 5) return;
+    if (parts.length < 5) return false;
     final groupId = parts[0];
     final pollId = parts[1];
     final optionSimId = parts[2];
@@ -87,10 +95,10 @@ Future<void> onNotificationActionBackground(
       _kPollActionNao => optionNaoId,
       _ => null,
     };
-    if (optionId == null) return;
+    if (optionId == null) return false;
 
     final session = await _readStoredSession();
-    if (session == null) return;
+    if (session == null) return false;
 
     final path = ApiConstants.castVote(groupId, pollId);
     final body = jsonEncode({
@@ -103,7 +111,10 @@ Future<void> onNotificationActionBackground(
       session: session,
     );
     if (succeeded) await _cancelHandledNotification(response.id);
+    return succeeded;
   }
+
+  return false;
 }
 
 // ─── Helpers internos ─────────────────────────────────────────────────────────
@@ -300,9 +311,21 @@ class LocalNotifications {
 
   static FlutterLocalNotificationsPlugin get plugin => _plugin;
 
+  static bool isDirectAction(NotificationResponse response) {
+    final actionId = response.actionId;
+    return actionId == _kActionAccept ||
+        actionId == _kActionReject ||
+        actionId == _kPollActionSim ||
+        actionId == _kPollActionTalvez ||
+        actionId == _kPollActionNao;
+  }
+
+  static Future<bool> handleAction(NotificationResponse response) =>
+      _handleNotificationAction(response);
+
   /// Handler para foreground/background (isolate principal).
   /// Faz a chamada à API E navega se o usuário tocou no corpo da notificação.
-  static void _onForegroundResponse(NotificationResponse response) {
+  static void _onForegroundResponse(NotificationResponse response) async {
     final actionId = response.actionId;
     final parts = response.payload?.split('::') ?? [];
 
@@ -313,8 +336,14 @@ class LocalNotifications {
         actionId == _kPollActionNao;
 
     if (isMatchAction || isPollAction) {
-      // Ação direta → chama API sem abrir o app (mesmo fluxo do background)
-      onNotificationActionBackground(response);
+      // Processa a escolha antes de abrir a tela relacionada. Assim o refresh
+      // da página já encontra a presença/voto atualizado.
+      await handleAction(response);
+      if (isMatchAction && parts.length >= 2) {
+        onMatchInviteTapped?.call(parts[0], parts[1]);
+      } else if (isPollAction && parts.length >= 2) {
+        onEventPollTapped?.call(parts[0], parts[1]);
+      }
     } else if (parts.length >= 2) {
       // Toque no corpo → navega para a tela correta
       if (parts.length >= 5) {
@@ -539,13 +568,13 @@ class LocalNotifications {
         AndroidNotificationAction(
           _kActionAccept,
           'Confirmar',
-          showsUserInterface: false,
+          showsUserInterface: true,
           cancelNotification: false,
         ),
         AndroidNotificationAction(
           _kActionReject,
           'Não vou',
-          showsUserInterface: false,
+          showsUserInterface: true,
           cancelNotification: false,
         ),
       ],

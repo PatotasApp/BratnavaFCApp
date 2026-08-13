@@ -845,7 +845,11 @@ class MatchNotifier extends StateNotifier<MatchState> {
 
   Future<void> rewindStep() async {
     final matchId = state.matchId;
-    if (matchId == null) return;
+    // Defesa adicional: somente a formação de times pode voltar para a
+    // aceitação. Em especial, aceitação jamais retorna para criação.
+    if (matchId == null || state.step != MatchStep.teams || !state.canRewind) {
+      return;
+    }
     state = state.copyWith(mutating: true);
     try {
       await _ds.rewindStep(groupId, matchId);

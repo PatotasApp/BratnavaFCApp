@@ -601,6 +601,18 @@ class _MatchBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final rewindBlockedReason = switch (s.step) {
+      MatchStep.accept =>
+        'A etapa de aceitação não pode voltar para a criação.',
+      MatchStep.playing ||
+      MatchStep.ended ||
+      MatchStep.post ||
+      MatchStep.done =>
+        'Uma partida já iniciada não pode voltar de etapa.',
+      MatchStep.create => 'Esta já é a primeira etapa da partida.',
+      MatchStep.teams => null,
+    };
+
     return AppPageHeader.main(
       title: 'Partidas',
       icon: Icons.sports_soccer_rounded,
@@ -612,7 +624,18 @@ class _MatchBanner extends StatelessWidget {
               case _MatchHeaderAction.edit:
                 onEdit?.call();
               case _MatchHeaderAction.rewind:
-                onRewind();
+                // A etapa atual prevalece sobre `canRewind`, pois esse valor
+                // pode ter vindo de um header anterior durante um refresh.
+                // Aceitação nunca pode retornar para criação.
+                if (rewindBlockedReason != null) {
+                  ScaffoldMessenger.of(context)
+                    ..hideCurrentSnackBar()
+                    ..showSnackBar(
+                      SnackBar(content: Text(rewindBlockedReason)),
+                    );
+                } else if (canRewind) {
+                  onRewind();
+                }
               case _MatchHeaderAction.delete:
                 onDelete?.call();
               case _MatchHeaderAction.create:
@@ -632,9 +655,9 @@ class _MatchBanner extends StatelessWidget {
                 ),
               ),
             if (isAdmin && s.hasMatch)
-              PopupMenuItem(
-                value: canRewind ? _MatchHeaderAction.rewind : null,
-                child: const ListTile(
+              const PopupMenuItem(
+                value: _MatchHeaderAction.rewind,
+                child: ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.undo_rounded),
                   title: Text('Voltar uma etapa'),

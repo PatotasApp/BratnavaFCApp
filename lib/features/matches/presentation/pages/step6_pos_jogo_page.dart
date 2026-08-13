@@ -42,8 +42,22 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
     return gid.isNotEmpty && (acc?.isGroupAdmin(gid) ?? false);
   }
 
-  String get _myPlayerId =>
-      ref.read(accountStoreProvider).activeAccount?.activePlayerId ?? '';
+  MatchPlayerInfo? _currentMatchPlayer(MatchState s) {
+    final account = ref.read(accountStoreProvider).activeAccount;
+    if (account == null) return null;
+
+    final playersByMatchPlayerId = <String, MatchPlayerInfo>{
+      for (final player in [...s.participants, ...s.eligibleVoters])
+        player.matchPlayerId: player,
+    };
+    final players = playersByMatchPlayerId.values;
+
+    final activePlayerId = account.activePlayerId;
+    if (activePlayerId == null || activePlayerId.isEmpty) return null;
+    return players
+        .where((player) => player.playerId == activePlayerId)
+        .firstOrNull;
+  }
 
   @override
   void dispose() {
@@ -59,8 +73,7 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
     if (s.teamBGoals != null) _scoreBCtrl.text = '${s.teamBGoals}';
     // Para não-admins, pré-seleciona o voter como o próprio jogador
     if (!_isAdmin) {
-      final myMp =
-          s.eligibleVoters.where((p) => p.playerId == _myPlayerId).firstOrNull;
+      final myMp = _currentMatchPlayer(s);
       if (myMp != null) _voterMpId = myMp.matchPlayerId;
     }
   }
@@ -152,12 +165,8 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
     final allPlayers = [...s.participants, ...s.eligibleVoters];
 
     // Para não-admin o voter é sempre o próprio usuário (derivado do estado atual).
-    final effectiveVoterMpId = _isAdmin
-        ? _voterMpId
-        : allPlayers
-            .where((p) => p.playerId == _myPlayerId)
-            .firstOrNull
-            ?.matchPlayerId;
+    final effectiveVoterMpId =
+        _isAdmin ? _voterMpId : _currentMatchPlayer(s)?.matchPlayerId;
 
     if (effectiveVoterMpId == null) return;
 
@@ -264,18 +273,16 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
   // ── View do não-admin ──────────────────────────────────────────────────────
 
   Widget _buildUserView(BuildContext context, MatchState s, GroupIcons icons) {
-    final myPlayerId = _myPlayerId;
-    final myMatchPlayer =
-        s.participants.where((p) => p.playerId == myPlayerId).firstOrNull;
+    final myMatchPlayer = _currentMatchPlayer(s);
     final myMatchPlayerId = myMatchPlayer?.matchPlayerId ?? '';
 
     final isParticipant = myMatchPlayerId.isNotEmpty;
-    final canVote =
+    final canVote = s.canVote ??
         s.eligibleVoters.any((p) => p.matchPlayerId == myMatchPlayerId);
     final myVote = s.votes
         .where((v) => v.voterMatchPlayerId == myMatchPlayerId)
         .firstOrNull;
-    final hasVoted = myVote != null;
+    final hasVoted = s.hasVoted ?? myVote != null;
 
     final scoreText = (s.teamAGoals == null || s.teamBGoals == null)
         ? '—'
