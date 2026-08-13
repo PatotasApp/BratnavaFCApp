@@ -14,7 +14,7 @@ DateTime? _parseWallTimeOrNull(String? raw) {
 
 /// Parseia data da API preservando o horario literal recebido.
 ///
-/// Datas de partida no Bratnava sao horarios do dominio: se o admin salva
+/// Datas de partida no PatotasApp sao horarios do dominio: se o admin salva
 /// 21:00, todos os clientes devem exibir 21:00, independente do fuso do
 /// dispositivo.
 DateTime parseApiDate(String? raw, {DateTime? fallback}) =>

@@ -2,18 +2,22 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CLIENT_ID</key>
+	<string>100539922332-s5lnr0ji1m2rkqirvh5b2qo6lief89r5.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.100539922332-s5lnr0ji1m2rkqirvh5b2qo6lief89r5</string>
 	<key>API_KEY</key>
-	<string>AIzaSyB6W1_9QHzRx_f_Sr54xnT2fcXilJZylvY</string>
+	<string>AIzaSyB1zHEwDz5r1P_KnH7XYuad4VIn-ovsjTg</string>
 	<key>GCM_SENDER_ID</key>
-	<string>978316808614</string>
+	<string>100539922332</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.bratnava.bratnavaapp</string>
+	<string>br.com.patotasapp</string>
 	<key>PROJECT_ID</key>
-	<string>bratnavafc</string>
+	<string>production-2153f</string>
 	<key>STORAGE_BUCKET</key>
-	<string>bratnavafc.firebasestorage.app</string>
+	<string>production-2153f.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -25,6 +29,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:978316808614:ios:7638c3ec45bde0c827bf67</string>
+	<string>1:100539922332:ios:aef8dfe821cc9db8adba59</string>
 </dict>
 </plist>

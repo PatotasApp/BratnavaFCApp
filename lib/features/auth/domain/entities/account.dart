@@ -1,12 +1,18 @@
 import 'package:equatable/equatable.dart';
 
+/// Perfil do usuário logado, do lado do app.
+///
+/// NÃO guarda token: a sessão é do Firebase, que persiste o refresh token no
+/// aparelho e emite ID tokens de ~1h sozinho. O que sobra aqui é o que o
+/// backend nos conta — a identidade interna e as permissões por patota.
+///
+/// O [userId] é o GUID interno vindo do `GET /api/users/me`, nunca o UID do
+/// Firebase: é ele que aparece como FK em todas as tabelas de negócio.
 class Account extends Equatable {
   final String userId;
   final String name;
   final String email;
   final List<String> roles;
-  final String accessToken;
-  final String refreshToken;
   final String? activeGroupId;
   final String? activePlayerId;
   final List<String> groupAdminIds;
@@ -14,22 +20,18 @@ class Account extends Equatable {
   final bool?
       activeGroupIsAdmin; // role na patota ATIVA — atualiza a cada troca
   final bool? activeGroupIsFinanceiro; // idem para financeiro
-  final bool keepLoggedIn;
 
   const Account({
     required this.userId,
     required this.name,
     required this.email,
     required this.roles,
-    required this.accessToken,
-    required this.refreshToken,
     this.activeGroupId,
     this.activePlayerId,
     this.groupAdminIds = const [],
     this.groupFinanceiroIds = const [],
     this.activeGroupIsAdmin,
     this.activeGroupIsFinanceiro,
-    this.keepLoggedIn = true,
   });
 
   // ── RBAC helpers ──────────────────────────────────────────────────────────
@@ -91,15 +93,12 @@ class Account extends Equatable {
         'name': name,
         'email': email,
         'roles': roles,
-        'accessToken': accessToken,
-        'refreshToken': refreshToken,
         'activeGroupId': activeGroupId,
         'activePlayerId': activePlayerId,
         'groupAdminIds': groupAdminIds,
         'groupFinanceiroIds': groupFinanceiroIds,
         'activeGroupIsAdmin': activeGroupIsAdmin,
         'activeGroupIsFinanceiro': activeGroupIsFinanceiro,
-        'keepLoggedIn': keepLoggedIn,
       };
 
   factory Account.fromJson(Map<String, dynamic> json) => Account(
@@ -111,8 +110,6 @@ class Account extends Equatable {
         roles: List<String>.from(json['roles'] as List? ?? [])
             .where((role) => role.trim().toLowerCase() != 'godmode')
             .toList(growable: false),
-        accessToken: json['accessToken'] as String,
-        refreshToken: json['refreshToken'] as String,
         activeGroupId: json['activeGroupId'] as String?,
         activePlayerId: json['activePlayerId'] as String?,
         groupAdminIds: List<String>.from(json['groupAdminIds'] as List? ?? []),
@@ -120,7 +117,6 @@ class Account extends Equatable {
             List<String>.from(json['groupFinanceiroIds'] as List? ?? []),
         activeGroupIsAdmin: json['activeGroupIsAdmin'] as bool?,
         activeGroupIsFinanceiro: json['activeGroupIsFinanceiro'] as bool?,
-        keepLoggedIn: json['keepLoggedIn'] as bool? ?? true,
       );
 
   Account copyWith({
@@ -128,23 +124,18 @@ class Account extends Equatable {
     String? name,
     String? email,
     List<String>? roles,
-    String? accessToken,
-    String? refreshToken,
     String? activeGroupId,
     String? activePlayerId,
     List<String>? groupAdminIds,
     List<String>? groupFinanceiroIds,
     bool? activeGroupIsAdmin,
     bool? activeGroupIsFinanceiro,
-    bool? keepLoggedIn,
   }) =>
       Account(
         userId: userId ?? this.userId,
         name: name ?? this.name,
         email: email ?? this.email,
         roles: roles ?? this.roles,
-        accessToken: accessToken ?? this.accessToken,
-        refreshToken: refreshToken ?? this.refreshToken,
         activeGroupId: activeGroupId ?? this.activeGroupId,
         activePlayerId: activePlayerId ?? this.activePlayerId,
         groupAdminIds: groupAdminIds ?? this.groupAdminIds,
@@ -152,7 +143,6 @@ class Account extends Equatable {
         activeGroupIsAdmin: activeGroupIsAdmin ?? this.activeGroupIsAdmin,
         activeGroupIsFinanceiro:
             activeGroupIsFinanceiro ?? this.activeGroupIsFinanceiro,
-        keepLoggedIn: keepLoggedIn ?? this.keepLoggedIn,
       );
 
   @override
@@ -161,14 +151,11 @@ class Account extends Equatable {
         name,
         email,
         roles,
-        accessToken,
-        refreshToken,
         activeGroupId,
         activePlayerId,
         groupAdminIds,
         groupFinanceiroIds,
         activeGroupIsAdmin,
         activeGroupIsFinanceiro,
-        keepLoggedIn,
       ];
 }

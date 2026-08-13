@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/widgets.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/api_constants.dart';
 import '../constants/app_constants.dart';
@@ -24,15 +25,15 @@ const _kCategoryEventPoll = 'EVENT_POLL';
 
 // ─── Canais Android ───────────────────────────────────────────────────────────
 
-const _channelId = 'bratnavafc_high';
+const _channelId = 'patotasapp_high';
 const _channelName = 'PatotasApp';
 const _channelDesc = 'Notificações do PatotasApp';
 
-const _inviteChannelId = 'bratnavafc_match_invite';
+const _inviteChannelId = 'patotasapp_match_invite';
 const _inviteChannelName = 'Partidas';
 const _inviteChannelDesc = 'Convites e confirmações de presença em partidas';
 
-const _pollChannelId = 'bratnavafc_event_poll';
+const _pollChannelId = 'patotasapp_event_poll';
 const _pollChannelName = 'Votações de Evento';
 const _pollChannelDesc = 'Lembretes de votação com botões de resposta rápida';
 
@@ -60,8 +61,8 @@ Future<bool> _handleNotificationAction(NotificationResponse response) async {
     final groupId = parts[0];
     final matchId = parts[1];
 
-    final session = await _readStoredSession();
-    if (session == null) return false;
+    final token = await _backgroundIdToken();
+    if (token == null) return false;
 
     final isAccept = actionId == _kActionAccept;
     final path = isAccept
@@ -71,7 +72,7 @@ Future<bool> _handleNotificationAction(NotificationResponse response) async {
     final succeeded = await _callAuthorizedApi(
       method: 'PATCH',
       path: path,
-      session: session,
+      token: token,
     );
     if (succeeded) await _cancelHandledNotification(response.id);
     return succeeded;
@@ -97,8 +98,8 @@ Future<bool> _handleNotificationAction(NotificationResponse response) async {
     };
     if (optionId == null) return false;
 
-    final session = await _readStoredSession();
-    if (session == null) return false;
+    final token = await _backgroundIdToken();
+    if (token == null) return false;
 
     final path = ApiConstants.castVote(groupId, pollId);
     final body = jsonEncode({
@@ -108,7 +109,7 @@ Future<bool> _handleNotificationAction(NotificationResponse response) async {
       method: 'POST',
       path: path,
       body: body,
-      session: session,
+      token: token,
     );
     if (succeeded) await _cancelHandledNotification(response.id);
     return succeeded;
@@ -119,137 +120,70 @@ Future<bool> _handleNotificationAction(NotificationResponse response) async {
 
 // ─── Helpers internos ─────────────────────────────────────────────────────────
 
-class _StoredPushSession {
-  const _StoredPushSession({
-    required this.preferences,
-    required this.accounts,
-    required this.accountIndex,
-  });
+/// ID token do Firebase dentro do isolate de background.
+///
+/// As ações rápidas (SIM/NÃO em partida, SIM/TALVEZ/NÃO em enquete) rodam num
+/// isolate separado, criado pelo flutter_local_notifications — não é o isolate
+/// da UI, então nada dele está inicializado aqui.
+///
+/// Antes este caminho lia accessToken e refreshToken do SharedPreferences e
+/// renovava contra `/api/Authentication/refresh-token`. Os dois deixaram de
+/// existir: a sessão é do Firebase e o endpoint foi removido da API.
+///
+/// `DartPluginRegistrant.ensureInitialized()` é obrigatório: sem ele os canais
+/// de plataforma não existem neste isolate e qualquer chamada ao SDK falha.
+Future<String?> _backgroundIdToken() async {
+  try {
+    DartPluginRegistrant.ensureInitialized();
 
-  final SharedPreferences preferences;
-  final List<Map<String, dynamic>> accounts;
-  final int accountIndex;
+    // Idempotente: se o engine de background já subiu o Firebase, reaproveita.
+    if (Firebase.apps.isEmpty) await Firebase.initializeApp();
 
-  Map<String, dynamic> get account => accounts[accountIndex];
-  String? get accessToken => account['accessToken'] as String?;
-  String? get refreshToken => account['refreshToken'] as String?;
+    final user = FirebaseAuth.instance.currentUser;
 
-  Future<void> updateTokens(String accessToken, String refreshToken) async {
-    account['accessToken'] = accessToken;
-    account['refreshToken'] = refreshToken;
-    await preferences.setString(
-      AppConstants.accountsStorageKey,
-      jsonEncode(accounts),
-    );
+    if (user == null) {
+      // ignore: avoid_print
+      print('[Push Action] Sem sessão do Firebase neste isolate.');
+      return null;
+    }
+
+    return await user.getIdToken();
+  } catch (error) {
+    // ignore: avoid_print
+    print('[Push Action] Falha ao obter o ID token no background: $error');
+    return null;
   }
 }
 
 class _PushHttpResponse {
-  const _PushHttpResponse(this.statusCode, this.body);
+  const _PushHttpResponse(this.statusCode);
 
   final int statusCode;
-  final String body;
 
   bool get succeeded => statusCode >= 200 && statusCode < 300;
-}
-
-Future<_StoredPushSession?> _readStoredSession() async {
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.reload();
-    final raw = prefs.getString(AppConstants.accountsStorageKey);
-    final activeId = prefs.getString(AppConstants.activeAccountKey);
-    if (raw == null) return null;
-
-    final decoded = jsonDecode(raw);
-    if (decoded is! List || decoded.isEmpty) return null;
-    final accounts = decoded
-        .whereType<Map>()
-        .map((item) => item.map(
-              (key, value) => MapEntry(key.toString(), value),
-            ))
-        .toList();
-    if (accounts.isEmpty) return null;
-
-    final activeIndex = accounts.indexWhere(
-      (account) => account['userId']?.toString() == activeId,
-    );
-    final session = _StoredPushSession(
-      preferences: prefs,
-      accounts: accounts,
-      accountIndex: activeIndex >= 0 ? activeIndex : 0,
-    );
-    if (session.accessToken == null || session.accessToken!.isEmpty) {
-      return null;
-    }
-    return session;
-  } catch (_) {
-    return null;
-  }
 }
 
 Future<bool> _callAuthorizedApi({
   required String method,
   required String path,
-  required _StoredPushSession session,
+  required String token,
   String? body,
 }) async {
-  var response = await _callApi(method, path, body, session.accessToken!);
+  final response = await _callApi(method, path, body, token);
 
-  if (response?.statusCode == HttpStatus.unauthorized) {
-    final refreshed = await _refreshPushSession(session);
-    if (refreshed) {
-      response = await _callApi(method, path, body, session.accessToken!);
-    }
-  }
-
+  // Não há retentativa com token novo: `getIdToken()` já devolve um token
+  // válido, renovando de forma transparente. Um 401 aqui significa sessão
+  // inválida de verdade, e o isolate de background não é lugar de deslogar.
   final succeeded = response?.succeeded ?? false;
+
   // ignore: avoid_print
   print(
     '[Push Action] $method $path: '
     '${succeeded ? 'success' : 'failure'} '
     '(HTTP ${response?.statusCode ?? 'no response'})',
   );
+
   return succeeded;
-}
-
-Future<bool> _refreshPushSession(_StoredPushSession session) async {
-  final refreshToken = session.refreshToken;
-  if (refreshToken == null || refreshToken.isEmpty) return false;
-
-  final response = await _callApi(
-    'POST',
-    ApiConstants.refreshToken,
-    jsonEncode({'refreshToken': refreshToken}),
-    '',
-  );
-  if (response == null || !response.succeeded) return false;
-
-  try {
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map) return false;
-    final envelope = decoded.map(
-      (key, value) => MapEntry(key.toString(), value),
-    );
-    final rawData = envelope['data'] ?? envelope;
-    if (rawData is! Map) return false;
-    final data = rawData.map(
-      (key, value) => MapEntry(key.toString(), value),
-    );
-    final access =
-        (data['token'] ?? data['accessToken'] ?? data['jwt'])?.toString();
-    final refresh = (data['refreshToken'] ?? data['refresh'])?.toString();
-    if (access == null ||
-        access.isEmpty ||
-        refresh == null ||
-        refresh.isEmpty) {
-      return false;
-    }
-    await session.updateTokens(access, refresh);
-    return true;
-  } catch (_) {
-    return false;
-  }
 }
 
 Future<_PushHttpResponse?> _callApi(
@@ -273,8 +207,13 @@ Future<_PushHttpResponse?> _callApi(
       request.contentLength = 0;
     }
     final resp = await request.close();
-    final responseBody = await utf8.decoder.bind(resp).join();
-    return _PushHttpResponse(resp.statusCode, responseBody);
+
+    // Drena o corpo antes de fechar, senão a conexão fica pendurada. O conteúdo
+    // não interessa mais: quem o lia era o refresh manual de token, que morreu
+    // junto com o endpoint de refresh.
+    await resp.drain<void>();
+
+    return _PushHttpResponse(resp.statusCode);
   } catch (e) {
     // ignore: avoid_print
     print('[Push Action] Erro ao chamar API: $e');

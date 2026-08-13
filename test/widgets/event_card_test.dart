@@ -1,5 +1,5 @@
-import 'package:bratnava_fc_app/features/polls/domain/entities/poll_summary.dart';
-import 'package:bratnava_fc_app/features/polls/presentation/widgets/event_card.dart';
+import 'package:patotas_app/features/polls/domain/entities/poll_summary.dart';
+import 'package:patotas_app/features/polls/presentation/widgets/event_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -1,9 +1,9 @@
-import 'package:bratnava_fc_app/features/dashboard/domain/entities/my_player.dart';
-import 'package:bratnava_fc_app/features/members/domain/entities/app_user.dart';
-import 'package:bratnava_fc_app/features/members/domain/entities/group_player.dart';
-import 'package:bratnava_fc_app/features/matches/domain/entities/match_models.dart';
-import 'package:bratnava_fc_app/features/player_spotlight/domain/entities/spotlight_report.dart';
-import 'package:bratnava_fc_app/features/history/domain/entities/match_details.dart'
+import 'package:patotas_app/features/dashboard/domain/entities/my_player.dart';
+import 'package:patotas_app/features/members/domain/entities/app_user.dart';
+import 'package:patotas_app/features/members/domain/entities/group_player.dart';
+import 'package:patotas_app/features/matches/domain/entities/match_models.dart';
+import 'package:patotas_app/features/player_spotlight/domain/entities/spotlight_report.dart';
+import 'package:patotas_app/features/history/domain/entities/match_details.dart'
     as history;
 import 'package:flutter_test/flutter_test.dart';
 

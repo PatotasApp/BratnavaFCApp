@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:signalr_netcore/signalr_client.dart';
 
-import '../../features/auth/presentation/providers/account_store.dart';
+import '../../features/auth/presentation/providers/auth_provider.dart';
+import '../../features/auth/presentation/providers/session_provider.dart';
 import '../constants/app_constants.dart';
 
 class BratnavaRealtimeEvent {
@@ -40,11 +41,11 @@ class BratnavaRealtimeEvent {
 final realtimeEventsProvider =
     StreamProvider.autoDispose.family<BratnavaRealtimeEvent, String>(
   (ref, groupId) {
-    final account = ref.watch(accountStoreProvider).activeAccount;
-    final token = account?.accessToken;
+    final isAuthenticated =
+        ref.watch(sessionProvider.select((s) => s.isAuthenticated));
     final controller = StreamController<BratnavaRealtimeEvent>.broadcast();
 
-    if (groupId.isEmpty || token == null || token.isEmpty) {
+    if (groupId.isEmpty || !isAuthenticated) {
       controller.close();
       return controller.stream;
     }
@@ -55,9 +56,10 @@ final realtimeEventsProvider =
         .withUrl(
           url,
           options: HttpConnectionOptions(
+            // Chamado a cada (re)conexão, então o SignalR sempre recebe um
+            // token fresco — o SDK renova sozinho quando necessário.
             accessTokenFactory: () async =>
-                ref.read(accountStoreProvider).activeAccount?.accessToken ??
-                token,
+                await ref.read(firebaseAuthServiceProvider).idToken() ?? '',
           ),
         )
         .withAutomaticReconnect()

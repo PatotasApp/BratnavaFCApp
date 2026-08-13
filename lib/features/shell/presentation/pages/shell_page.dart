@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/auth/jwt_helper.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../auth/presentation/widgets/email_verification_banner.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../domain/shell_navigation_policy.dart';
@@ -75,17 +75,8 @@ class _ShellPageState extends ConsumerState<ShellPage>
 
   Future<void> _handleResume() async {
     await ref.read(accountStoreProvider.notifier).reloadFromStorage();
-    await _checkTokenOnResume();
     if (!mounted) return;
     await ref.read(authNotifierProvider.notifier).refreshGroupMembership();
-  }
-
-  Future<void> _checkTokenOnResume() async {
-    final account = ref.read(accountStoreProvider).activeAccount;
-    if (account == null) return;
-    if (JwtHelper.isExpiring(account.accessToken, bufferSeconds: 300)) {
-      await ref.read(authNotifierProvider.notifier).proactiveRefresh();
-    }
   }
 
   int _selectedIndex(BuildContext context) {
@@ -95,21 +86,30 @@ class _ShellPageState extends ConsumerState<ShellPage>
 
   @override
   Widget build(BuildContext context) {
-    // Mantém o serviço de refresh ativo enquanto o shell estiver na tela.
-    ref.watch(tokenRefreshServiceProvider);
+    // O refresh de token deixou de existir aqui: o SDK do Firebase renova o ID
+    // token sozinho, e o interceptor pega o token válido a cada request.
 
     final selected = _selectedIndex(context);
     // Key forces full widget subtree recreation on account switch, clearing
     // any widget-local state (timers, refresh flags) from the previous account.
     final accountKey = ref.watch(
-      accountStoreProvider.select((s) => s.activeAccountId),
+      accountStoreProvider.select((s) => s.account?.userId),
     );
 
     return Scaffold(
       appBar: const AppTopBar(),
-      body: KeyedSubtree(
-        key: ValueKey(accountKey),
-        child: widget.child,
+      body: Column(
+        children: [
+          // Fica acima de tudo e some sozinho quando o e-mail é verificado.
+          // Não bloqueia navegação: verificar é recomendado, não exigido.
+          const EmailVerificationBanner(),
+          Expanded(
+            child: KeyedSubtree(
+              key: ValueKey(accountKey),
+              child: widget.child,
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: _PrototypeBottomNavigation(
         selectedIndex: selected,

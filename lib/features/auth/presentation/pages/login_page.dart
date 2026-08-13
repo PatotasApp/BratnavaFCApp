@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/errors/app_exception.dart';
+import '../../../../core/auth/auth_errors.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/presentation/widgets/app_button.dart';
 import '../../../../shared/presentation/widgets/app_text_field.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/google_sign_in_button.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -20,7 +21,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
-  bool _keepLoggedIn = true;
 
   @override
   void dispose() {
@@ -35,17 +35,30 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     await ref.read(authNotifierProvider.notifier).login(
           _emailCtrl.text.trim(),
           _passwordCtrl.text,
-          keepLoggedIn: _keepLoggedIn,
         );
 
+    _handleResult('Não foi possível entrar.');
+  }
+
+  Future<void> _submitGoogle() async {
+    await ref.read(authNotifierProvider.notifier).loginWithGoogle();
+
+    _handleResult('Falha ao entrar com o Google.');
+  }
+
+  /// Não navega em caso de sucesso: quem redireciona é o router, quando a sessão
+  /// e o perfil ficam prontos. Um `context.go('/app')` daqui entraria no app
+  /// antes do GET /me e mostraria a tela com os fallbacks.
+  void _handleResult(String fallback) {
     if (!mounted) return;
 
-    final state = ref.read(authNotifierProvider);
-    state.whenOrNull(
-      error: (e, _) =>
-          _showError(extractDioError(e, 'Usuário ou senha incorretos.')),
-      data: (_) => context.go('/app'),
-    );
+    ref.read(authNotifierProvider).whenOrNull(
+          error: (error, _) {
+            // Cancelar o seletor de conta do Google não é erro.
+            if (isUserCancelled(error)) return;
+            _showError(authErrorMessage(error, fallback));
+          },
+        );
   }
 
   void _showError(String msg) {
@@ -155,53 +168,66 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                   return null;
                                 },
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 8),
 
-                              // ── Manter logado ─────────────────────────────
-                              InkWell(
-                                onTap: () => setState(
-                                    () => _keepLoggedIn = !_keepLoggedIn),
-                                borderRadius: BorderRadius.circular(10),
-                                child: Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 12),
-                                  child: Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: Checkbox(
-                                          value: _keepLoggedIn,
-                                          onChanged: (v) => setState(
-                                              () => _keepLoggedIn = v ?? true),
-                                          materialTapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      const Text(
-                                        'Manter logado',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: AppColors.lightTextSecondary,
-                                        ),
-                                      ),
-                                    ],
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: isLoading
+                                      ? null
+                                      : () => context.push('/forgot-password'),
+                                  child: const Text(
+                                    'Esqueci minha senha',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
                               ),
-
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 12),
 
                               AppButton(
                                 label: 'Entrar',
                                 onPressed: _submit,
                                 isLoading: isLoading,
                                 width: double.infinity,
+                              ),
+
+                              const SizedBox(height: 20),
+
+                              Row(
+                                children: [
+                                  const Expanded(
+                                    child: Divider(
+                                        color: AppColors.lightBorder,
+                                        height: 1),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12),
+                                    child: Text(
+                                      'OU',
+                                      style: loginTheme.textTheme.bodySmall
+                                          ?.copyWith(
+                                        color: AppColors.lightTextSecondary,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 1,
+                                      ),
+                                    ),
+                                  ),
+                                  const Expanded(
+                                    child: Divider(
+                                        color: AppColors.lightBorder,
+                                        height: 1),
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(height: 20),
+
+                              GoogleSignInButton(
+                                onPressed: isLoading ? null : _submitGoogle,
                               ),
                             ],
                           ),

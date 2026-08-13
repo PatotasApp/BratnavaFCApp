@@ -1,12 +1,17 @@
 class ApiConstants {
   ApiConstants._();
 
-  // Auth
-  static const String login = '/api/Authentication/login';
-  static const String refreshToken = '/api/Authentication/refresh-token';
+  // Auth — não há endpoints. Login, cadastro, renovação de token, logout e
+  // reset de senha são feitos direto no SDK do Firebase; a API só valida o ID
+  // token e resolve a identidade interna.
 
   // Users
   static const String users = '/api/Users';
+
+  /// Perfil do usuário autenticado. É a fonte autoritativa do `userId`: o `sub`
+  /// do token é o UID do Firebase, e as claims `internal_id`/`role` nem existem
+  /// no primeiro login. Também é o que provisiona o usuário no backend.
+  static const String usersMe = '/api/Users/me';
   static String userById(String id) => '/api/Users/$id';
   static String userPhoto(String id) => '/api/Users/$id/photo';
 

@@ -1,4 +1,4 @@
-import 'package:bratnava_fc_app/features/auth/domain/entities/account.dart';
+import 'package:patotas_app/features/auth/domain/entities/account.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -15,8 +15,6 @@ void main() {
         name: 'Luis',
         email: 'luis@example.com',
         roles: const ['Admin'],
-        accessToken: 'token',
-        refreshToken: 'refresh',
         activeGroupId: activeGroupId,
         groupAdminIds: const [bratnava],
         groupFinanceiroIds: const [bratnava],
@@ -63,8 +61,6 @@ void main() {
       name: 'Luis',
       email: 'luis@example.com',
       roles: const ['User', 'GodMode'],
-      accessToken: 'token',
-      refreshToken: 'refresh',
       activeGroupId: patoteiros,
       activeGroupIsAdmin: false,
       activeGroupIsFinanceiro: false,

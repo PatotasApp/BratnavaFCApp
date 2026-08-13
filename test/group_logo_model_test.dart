@@ -1,5 +1,5 @@
-import 'package:bratnava_fc_app/features/group_settings/domain/entities/group_settings.dart';
-import 'package:bratnava_fc_app/features/groups/domain/entities/group_invite.dart';
+import 'package:patotas_app/features/group_settings/domain/entities/group_settings.dart';
+import 'package:patotas_app/features/groups/domain/entities/group_invite.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

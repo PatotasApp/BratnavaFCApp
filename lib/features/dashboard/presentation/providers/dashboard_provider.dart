@@ -203,11 +203,9 @@ final myPlayersProvider = FutureProvider<List<MyPlayer>>((ref) {
   // Re-fetch também quando a mesma conta recebe uma nova sessão. Observar só
   // o userId mantinha em cache o erro/resultado vazio obtido com token vencido
   // quando o usuário fazia login novamente na mesma conta.
-  ref.watch(
-    accountStoreProvider.select(
-      (s) => (s.activeAccountId, s.activeAccount?.accessToken),
-    ),
-  );
+  // Refaz a consulta quando a identidade muda. O token saiu daqui: ele é do
+  // Firebase agora e não faz parte do perfil.
+  ref.watch(accountStoreProvider.select((s) => s.account?.userId));
   final ds = ref.watch(_dashboardDsProvider);
   return ds.fetchMyPlayers();
 });

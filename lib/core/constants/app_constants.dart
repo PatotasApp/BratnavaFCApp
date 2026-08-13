@@ -1,30 +1,62 @@
-import 'package:flutter/foundation.dart';
-
 class AppConstants {
   AppConstants._();
 
-  static const String productionApiUrl = 'https://production-env.fly.dev';
-  static const String developmentApiUrl = 'https://development-env.fly.dev';
+  // ── Configuração de ambiente ────────────────────────────────────────────────
+  //
+  // Tudo aqui vem de `--dart-define-from-file=config/<env>.json`, que precisa
+  // acompanhar o `--flavor`: o flavor decide qual `google-services.json` entra
+  // no APK, e a API valida o audience do ID token contra o próprio projeto
+  // Firebase. Flavor e config divergentes resultam em 401 em toda request
+  // autenticada. O `.vscode/launch.json` amarra o par.
+  //
+  // Antes o ambiente vinha de `kReleaseMode`, o que quebrava as variantes
+  // cruzadas: `prodDebug` usava o Firebase de produção contra a API de
+  // desenvolvimento.
+  //
+  // Nenhum destes valores é segredo — são URLs públicas, e tudo que é compilado
+  // no app é extraível de um APK. Por isso os arquivos são versionados.
 
-  /// Permite sobrescrever o endpoint sem alterar o código, por exemplo:
-  /// `flutter run --dart-define=API_URL=https://localhost:44356`.
-  static const String _apiUrlOverride = String.fromEnvironment(
+  static const String environmentName = String.fromEnvironment(
+    'ENV',
+    defaultValue: '',
+  );
+
+  static bool get isProduction => environmentName == 'production';
+
+  static const String _apiUrl = String.fromEnvironment(
     'API_URL',
     defaultValue: '',
   );
 
-  /// Release aponta para produção; debug e profile apontam para desenvolvimento.
-  static String get apiUrl {
-    if (_apiUrlOverride.isNotEmpty) return _apiUrlOverride;
-    return kReleaseMode ? productionApiUrl : developmentApiUrl;
+  static const String _webUrl = String.fromEnvironment(
+    'WEB_URL',
+    defaultValue: '',
+  );
+
+  /// Endpoint da API. Para apontar a uma instância local, sobrescreva a chave
+  /// depois do arquivo: `--dart-define=API_URL=https://localhost:44356`.
+  static String get apiUrl => _require(_apiUrl, 'API_URL');
+
+  /// Site público, usado para montar links compartilháveis de replay.
+  static String get webUrl => _require(_webUrl, 'WEB_URL');
+
+  /// Falha explícita em vez de cair num padrão silencioso.
+  ///
+  /// Mesma postura do `api/http.ts` no front web: um build sem config quebraria
+  /// toda request com erro de rede obscuro. É melhor dizer o que faltou.
+  static String _require(String value, String key) {
+    if (value.isNotEmpty) return value;
+    throw StateError(
+      '$key não definida. Rode com --dart-define-from-file=config/dev.json '
+      '(ou config/prod.json), casando com o --flavor.',
+    );
   }
 
-  static String get environmentName =>
-      kReleaseMode ? 'production' : 'development';
-
-  static const String accountsStorageKey = 'bratnava.accounts.v2';
-  static const String activeAccountKey = 'bratnava.activeAccountId';
-  static const String themeStorageKey = 'bratnava-theme';
+  /// Perfil da sessão única. A chave subiu para v3 porque o formato deixou de
+  /// ser uma lista de contas com tokens e passou a ser um objeto só, sem token —
+  /// a sessão agora é do Firebase. Ler o v2 daria erro de tipo.
+  static const String accountStorageKey = 'patotas.account.v3';
+  static const String themeStorageKey = 'patotas-theme';
 
   /// A API roda no Fly.io com autostop: quando a máquina está parada, a primeira
   /// requisição paga o cold start (subir a VM + iniciar o runtime). O TCP costuma

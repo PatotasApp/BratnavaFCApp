@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:bratnava_fc_app/features/replays/data/datasources/replays_remote_datasource.dart';
+import 'package:patotas_app/features/replays/data/datasources/replays_remote_datasource.dart';
 
 /// Regressão: a paginação do backend passou a devolver
 /// `{ data: { page, pageSize, total, items: [...] } }`. O parser precisa

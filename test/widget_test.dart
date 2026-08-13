@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:bratnava_fc_app/core/theme/app_theme.dart';
-import 'package:bratnava_fc_app/shared/presentation/widgets/app_button.dart';
-import 'package:bratnava_fc_app/shared/presentation/widgets/group_icon_renderer.dart';
-import 'package:bratnava_fc_app/shared/presentation/widgets/prototype_ui.dart';
+import 'package:patotas_app/core/theme/app_theme.dart';
+import 'package:patotas_app/shared/presentation/widgets/app_button.dart';
+import 'package:patotas_app/shared/presentation/widgets/group_icon_renderer.dart';
+import 'package:patotas_app/shared/presentation/widgets/prototype_ui.dart';
 
 void main() {
   for (final brightness in Brightness.values) {

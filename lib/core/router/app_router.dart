@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
+import '../../features/auth/presentation/pages/forgot_password_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
-import '../../features/auth/presentation/providers/account_store.dart';
+import '../../features/auth/presentation/providers/session_provider.dart';
 import '../../features/account/presentation/pages/my_account_page.dart';
 import '../../features/calendar/presentation/pages/calendar_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
@@ -85,6 +86,19 @@ class _MatchesTestPage extends StatelessWidget {
   }
 }
 
+// ── Tela de espera da sessão ─────────────────────────────────────────────────
+//
+// Cobre duas esperas: o SDK do Firebase lendo a sessão do disco no cold start, e
+// o GET /me que traz identidade e permissões.
+class _SessionLoadingPage extends StatelessWidget {
+  const _SessionLoadingPage();
+
+  @override
+  Widget build(BuildContext context) => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+}
+
 // ── NavigatorKey global (compartilhado com PushService) ──────────────────────
 
 final navigatorKeyProvider = Provider<GlobalKey<NavigatorState>>(
@@ -95,24 +109,56 @@ final navigatorKeyProvider = Provider<GlobalKey<NavigatorState>>(
 
 final routerProvider = Provider<GoRouter>((ref) {
   final navigatorKey = ref.watch(navigatorKeyProvider);
-  final authListenable = _AccountStateListenable(ref);
+  final authListenable = _SessionListenable(ref);
 
   return GoRouter(
     navigatorKey: navigatorKey,
     refreshListenable: authListenable,
-    initialLocation: '/login',
+    initialLocation: '/splash',
     redirect: (context, state) {
-      final isLoggedIn = ref.read(accountStoreProvider).isLoggedIn;
+      final session = ref.read(sessionProvider);
       final path = state.uri.path;
-      final isAuthRoute =
-          path == '/login' || path == '/register' || path.startsWith('/login');
+      // /forgot-password é alcançável nos dois estados: deslogado (esqueceu a
+      // senha) e logado (troca de senha vem de Minha conta). Por isso não entra
+      // em isAuthRoute, que redireciona para /app quando há sessão.
+      if (path == '/forgot-password') return null;
 
-      if (!isLoggedIn && !isAuthRoute) return '/login';
-      if (isLoggedIn && isAuthRoute) return '/app';
+      final isAuthRoute = path == '/login' || path == '/register';
+
+      // 1. O SDK ainda está lendo a sessão do disco. Tratar este instante como
+      //    "deslogado" chutaria para o login quem estava autenticado — é o bug
+      //    clássico de cold start.
+      if (session.initializing) {
+        return path == '/splash' ? null : '/splash';
+      }
+
+      // 2. Sem sessão no Firebase.
+      if (!session.isAuthenticated) {
+        return isAuthRoute ? null : '/login';
+      }
+
+      // 3. Tem sessão, mas o GET /me ainda não voltou. Esperar o PERFIL, não só
+      //    a sessão: nome, GUID interno e permissões vêm dele, e entrar antes
+      //    renderiza o app inteiro com os fallbacks — patota vazia, sem admin.
+      //
+      //    `forbidden` e `error` seguem para o app de propósito: o que fazer com
+      //    conta inativa ou e-mail não verificado é decisão de produto, não
+      //    desta rota.
+      if (session.profileStatus == ProfileStatus.idle ||
+          session.profileStatus == ProfileStatus.loading) {
+        return path == '/splash' ? null : '/splash';
+      }
+
+      if (isAuthRoute || path == '/splash') return '/app';
+
       return null;
     },
     routes: [
       // ── Auth ──────────────────────────────────────────────────────
+      GoRoute(
+        path: '/splash',
+        builder: (_, __) => const _SessionLoadingPage(),
+      ),
       GoRoute(
         path: '/login',
         builder: (_, __) => const LoginPage(),
@@ -120,6 +166,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/register',
         builder: (_, __) => const RegisterPage(),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (context, state) => ForgotPasswordPage(
+          // Pré-preenche quando vem da tela Minha conta de quem já está logado.
+          initialEmail: state.uri.queryParameters['email'],
+        ),
       ),
 
       // ── App shell ─────────────────────────────────────────────────
@@ -240,11 +293,13 @@ final routerProvider = Provider<GoRouter>((ref) {
 });
 
 /// Conecta o Riverpod AccountState ao sistema de refresh do GoRouter.
-class _AccountStateListenable extends ChangeNotifier {
+class _SessionListenable extends ChangeNotifier {
   final Ref _ref;
 
-  _AccountStateListenable(this._ref) {
-    _ref.listen<AccountState>(accountStoreProvider, (_, __) {
+  _SessionListenable(this._ref) {
+    // Escuta a sessão do Firebase e o estado do perfil. Antes escutava o
+    // AccountStore, que deixou de ser quem decide se há sessão.
+    _ref.listen<SessionState>(sessionProvider, (_, __) {
       notifyListeners();
     });
   }
