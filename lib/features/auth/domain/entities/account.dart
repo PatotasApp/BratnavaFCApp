@@ -21,6 +21,13 @@ class Account extends Equatable {
       activeGroupIsAdmin; // role na patota ATIVA — atualiza a cada troca
   final bool? activeGroupIsFinanceiro; // idem para financeiro
 
+  /// URL pública do avatar, vinda do `GET /api/users/me`. Representa o USUÁRIO.
+  ///
+  /// A barra superior lê daqui e não de MyPlayer: a lista de jogadores é vazia para
+  /// quem ainda não entrou em nenhuma patota, e nesse caso a foto nunca chegava à tela
+  /// mesmo estando gravada no perfil.
+  final String? photoUrl;
+
   const Account({
     required this.userId,
     required this.name,
@@ -32,6 +39,7 @@ class Account extends Equatable {
     this.groupFinanceiroIds = const [],
     this.activeGroupIsAdmin,
     this.activeGroupIsFinanceiro,
+    this.photoUrl,
   });
 
   // ── RBAC helpers ──────────────────────────────────────────────────────────
@@ -99,6 +107,7 @@ class Account extends Equatable {
         'groupFinanceiroIds': groupFinanceiroIds,
         'activeGroupIsAdmin': activeGroupIsAdmin,
         'activeGroupIsFinanceiro': activeGroupIsFinanceiro,
+        'photoUrl': photoUrl,
       };
 
   factory Account.fromJson(Map<String, dynamic> json) => Account(
@@ -117,6 +126,8 @@ class Account extends Equatable {
             List<String>.from(json['groupFinanceiroIds'] as List? ?? []),
         activeGroupIsAdmin: json['activeGroupIsAdmin'] as bool?,
         activeGroupIsFinanceiro: json['activeGroupIsFinanceiro'] as bool?,
+        // Ausente em contas gravadas antes desta versão: abre sem foto, sem estourar.
+        photoUrl: json['photoUrl'] as String?,
       );
 
   Account copyWith({
@@ -130,6 +141,7 @@ class Account extends Equatable {
     List<String>? groupFinanceiroIds,
     bool? activeGroupIsAdmin,
     bool? activeGroupIsFinanceiro,
+    String? photoUrl,
   }) =>
       Account(
         userId: userId ?? this.userId,
@@ -143,6 +155,26 @@ class Account extends Equatable {
         activeGroupIsAdmin: activeGroupIsAdmin ?? this.activeGroupIsAdmin,
         activeGroupIsFinanceiro:
             activeGroupIsFinanceiro ?? this.activeGroupIsFinanceiro,
+        photoUrl: photoUrl ?? this.photoUrl,
+      );
+
+  /// Troca a foto — inclusive para NULO.
+  ///
+  /// Existe porque `copyWith` não consegue limpar campo opcional: lá `null` significa
+  /// "mantém o valor atual", então remover a foto pelo copyWith deixaria o avatar antigo
+  /// na barra superior até o próximo login.
+  Account withPhoto(String? photoUrl) => Account(
+        userId: userId,
+        name: name,
+        email: email,
+        roles: roles,
+        activeGroupId: activeGroupId,
+        activePlayerId: activePlayerId,
+        groupAdminIds: groupAdminIds,
+        groupFinanceiroIds: groupFinanceiroIds,
+        activeGroupIsAdmin: activeGroupIsAdmin,
+        activeGroupIsFinanceiro: activeGroupIsFinanceiro,
+        photoUrl: photoUrl,
       );
 
   @override
@@ -157,5 +189,6 @@ class Account extends Equatable {
         groupFinanceiroIds,
         activeGroupIsAdmin,
         activeGroupIsFinanceiro,
+        photoUrl,
       ];
 }

@@ -4,6 +4,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
+import '../../../auth/presentation/providers/account_store.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../members/presentation/providers/members_provider.dart';
 
@@ -95,7 +97,7 @@ class _EditableProfileAvatarState extends ConsumerState<EditableProfileAvatar> {
       await ref
           .read(membersDsProvider)
           .uploadProfilePhoto(compressed);
-      _refreshPhoto();
+      await _refreshPhoto();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Foto atualizada com sucesso.')),
@@ -135,7 +137,7 @@ class _EditableProfileAvatarState extends ConsumerState<EditableProfileAvatar> {
     setState(() => _busy = true);
     try {
       await ref.read(membersDsProvider).deleteProfilePhoto();
-      _refreshPhoto();
+      await _refreshPhoto();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Foto removida.')),
@@ -146,10 +148,23 @@ class _EditableProfileAvatarState extends ConsumerState<EditableProfileAvatar> {
     }
   }
 
-  void _refreshPhoto() {
+  Future<void> _refreshPhoto() async {
     ref.invalidate(myProfileProvider);
     ref.invalidate(myPlayersProvider);
     ref.invalidate(usersProvider);
+
+    // A barra superior lê a foto do Account, não dos providers acima. Sem reconciliar
+    // aqui, o avatar de lá só mudaria no próximo login. Usa withPhoto e não copyWith
+    // porque a exclusão precisa gravar nulo, e no copyWith nulo significa "mantém".
+    try {
+      final me = await ref.read(authDataSourceProvider).fetchMe();
+      await ref
+          .read(accountStoreProvider.notifier)
+          .patchActive((account) => account.withPhoto(me.photoUrl));
+    } catch (_) {
+      // A troca no servidor já aconteceu; falhar em reconciliar o cache local não
+      // deve virar erro na cara do usuário.
+    }
   }
 
   @override
