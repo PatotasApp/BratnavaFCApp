@@ -695,7 +695,7 @@ class _UserMenuButton extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             AvatarWidget(
-                name: displayName, photoUrl: activePlayer?.photoUrl, size: 24),
+                name: displayName, photoUrl: active?.photoUrl, size: 24),
             const SizedBox(width: 6),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 100),

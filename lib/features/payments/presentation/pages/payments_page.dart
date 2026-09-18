@@ -163,7 +163,7 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppColors.transparent,
       builder: (_) => PaymentSelectionSheet(
         groupId: gid,
         onSaved: _refreshMyPayments,

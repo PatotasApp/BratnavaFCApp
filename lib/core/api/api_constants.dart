@@ -17,7 +17,6 @@ class ApiConstants {
   /// Somente LEITURA da foto de outro usuário. É `AllowAnonymous` no backend porque
   /// alimenta avatares direto na tag de imagem, e o id na rota é o que torna o
   /// recurso endereçável e cacheável.
-  static String userPhoto(String id) => '/api/Users/$id/photo';
 
   /// Trocar ou remover a PRÓPRIA foto. O backend resolve o alvo pela identidade do
   /// token, então não há id na rota — mandar um não teria efeito.

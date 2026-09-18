@@ -106,7 +106,10 @@ class EventCard extends StatelessWidget {
                     spacing: 4,
                     runSpacing: 4,
                     children: [
-                      ParticipationStatusBadge(hasVoted: poll.hasVoted),
+                      ParticipationStatusBadge(
+                        hasVoted: poll.hasVoted,
+                        completedLabel: 'Respondeu',
+                      ),
                       _StatusBadge(isOpen: poll.isOpen),
                       if (poll.allowGuests)
                         const _Pill(

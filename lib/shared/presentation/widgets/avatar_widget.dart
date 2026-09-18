@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
 import 'prototype_ui.dart';
@@ -49,12 +50,25 @@ class AvatarWidget extends StatelessWidget {
       final radius = gradient ? size / 2 : _resolvedRadius(size, borderRadius);
       return ClipRRect(
         borderRadius: BorderRadius.circular(radius),
-        child: Image.network(
-          resolvedPhotoUrl,
+        // CachedNetworkImage e não Image.network: o NetworkImage guarda apenas em
+        // memória (ImageCache) e o HttpClient do dart:io não implementa cache HTTP —
+        // o Cache-Control immutable com que o R2 serve a imagem era simplesmente
+        // ignorado, e toda abertura do app rebaixava todos os avatares da tela.
+        // Este persiste em disco, então cada imagem é baixada uma vez por aparelho.
+        child: CachedNetworkImage(
+          imageUrl: resolvedPhotoUrl,
           width: size,
           height: size,
           fit: fit,
-          errorBuilder: (_, __, ___) => _InitialsAvatar(
+          // Sem placeholder animado: as iniciais já são o estado neutro, e um spinner
+          // por avatar faria uma lista de 20 jogadores piscar inteira.
+          placeholder: (_, __) => _InitialsAvatar(
+            name: name,
+            size: size,
+            gradient: gradient,
+            borderRadius: borderRadius,
+          ),
+          errorWidget: (_, __, ___) => _InitialsAvatar(
             name: name,
             size: size,
             gradient: gradient,

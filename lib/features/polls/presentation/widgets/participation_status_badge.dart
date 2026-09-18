@@ -4,10 +4,12 @@ import '../../../../core/theme/app_colors.dart';
 
 class ParticipationStatusBadge extends StatelessWidget {
   final bool hasVoted;
+  final String completedLabel;
 
   const ParticipationStatusBadge({
     super.key,
     required this.hasVoted,
+    this.completedLabel = 'Já votou',
   });
 
   @override
@@ -33,7 +35,7 @@ class ParticipationStatusBadge extends StatelessWidget {
           ),
           const SizedBox(width: 3),
           Text(
-            hasVoted ? 'Já votou' : 'Pendente',
+            hasVoted ? completedLabel : 'Pendente',
             style: TextStyle(
               fontSize: 10,
               height: 1.1,
