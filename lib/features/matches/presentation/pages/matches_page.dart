@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/realtime/realtime_provider.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../auth/domain/entities/account.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
@@ -393,6 +394,22 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
     if (!s.loading && s.groupSettings != null) _initForm(s);
 
     if (s.loading) return const Center(child: CircularProgressIndicator());
+
+    if (groupId.isEmpty) {
+      return const Column(
+        children: [
+          AppPageHeader.main(
+            title: 'Partidas',
+            icon: Icons.sports_soccer_rounded,
+          ),
+          Expanded(
+            child: NoActiveGroupView(
+              message: 'Selecione uma patota para acompanhar as partidas.',
+            ),
+          ),
+        ],
+      );
+    }
 
     if (s.error != null && !s.hasMatch) {
       return _ErrorView(

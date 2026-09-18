@@ -15,6 +15,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/group_settings_provider.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 
 // ── Icon types ────────────────────────────────────────────────────────────────
 
@@ -247,9 +248,8 @@ class _GroupSettingsPageWrapperState extends ConsumerState<GroupSettingsPage> {
 
     if (groupId == null || groupId.isEmpty) {
       return const _SettingsPageFrame(
-        child: _NoGroupState(
-          title: 'Nenhuma patota ativa',
-          message: 'Crie ou entre em um grupo para acessar as configurações.',
+        child: NoActiveGroupView(
+          message: 'Selecione uma patota para acessar as configurações.',
         ),
       );
     }
@@ -370,10 +370,16 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   // ── Notificações configuráveis ────────────────────────────────────────────
   int? _paymentDueDay; // null = sem lembrete
+  // Configuração preservada para reativação futura, mas temporariamente fora da UI.
+  bool get _showPaymentDueDaySettings => false;
   int? _autoFinalizeMvpHours; // null = desativado
+  // Bloco preservado para reativação futura, mas temporariamente fora da UI.
+  bool get _showAutoFinalizeMvpSettings => false;
   late final TextEditingController _autoFinalizeCtrl;
 
   bool _matchSchedulingEnabled = false;
+  // Bloco preservado para reativação futura, mas temporariamente fora da UI.
+  bool get _showMatchSchedulingSettings => false;
   int _matchSchedulingMode = 0;
   int? _matchScheduleDayOfWeek;
   String? _matchScheduleTime;
@@ -1443,126 +1449,102 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          _subCard(
-            isDark: isDark,
-            accentBg: AppColors.blue50,
-            accentFg: AppColors.infoLight,
-            icon: Icons.event_repeat_outlined,
-            title: 'Agendar inicio das partidas',
-            subtitle: 'Manual ou recorrente',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
-                  value: _matchSchedulingEnabled,
-                  onChanged: (v) => setState(() => _matchSchedulingEnabled = v),
-                  title: Text(
-                    'Ativar agendamento',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: isDark ? AppColors.slate100 : AppColors.slate900,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Cria partidas usando os padroes de local, dia e horario.',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark ? AppColors.slate500 : AppColors.slate400,
-                    ),
-                  ),
-                  activeThumbColor:
-                      isDark ? AppColors.slate100 : AppColors.slate900,
-                ),
-                if (_matchSchedulingEnabled) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(child: _scheduleModeBtn(0, 'Manual', isDark)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                          child: _scheduleModeBtn(1, 'Recorrente', isDark)),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  if (_matchSchedulingMode == 0) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _ManualDateField(
-                            label: 'Data',
-                            value: _manualScheduleDate,
-                            isDark: isDark,
-                            onTap: _pickManualDate,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _TimeField(
-                            label: 'Horario',
-                            value: _manualScheduleTime,
-                            isDark: isDark,
-                            onTap: _pickManualTime,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _manualScheduleDate != null &&
-                                _manualScheduleTime != null
-                            ? _addManualSchedule
-                            : null,
-                        icon: const Icon(Icons.add_rounded, size: 18),
-                        label: const Text('Adicionar agendamento'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accent,
-                          foregroundColor: AppColors.lightText,
-                          disabledBackgroundColor:
-                              isDark ? AppColors.slate800 : AppColors.slate200,
-                          disabledForegroundColor:
-                              isDark ? AppColors.slate500 : AppColors.slate400,
-                        ),
+          if (_showMatchSchedulingSettings) ...[
+            const SizedBox(height: 12),
+            _subCard(
+              isDark: isDark,
+              accentBg: AppColors.blue50,
+              accentFg: AppColors.infoLight,
+              icon: Icons.event_repeat_outlined,
+              title: 'Agendar inicio das partidas',
+              subtitle: 'Manual ou recorrente',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    value: _matchSchedulingEnabled,
+                    onChanged: (v) =>
+                        setState(() => _matchSchedulingEnabled = v),
+                    title: Text(
+                      'Ativar agendamento',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? AppColors.slate100 : AppColors.slate900,
                       ),
                     ),
+                    subtitle: Text(
+                      'Cria partidas usando os padroes de local, dia e horario.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? AppColors.slate500 : AppColors.slate400,
+                      ),
+                    ),
+                    activeThumbColor:
+                        isDark ? AppColors.slate100 : AppColors.slate900,
+                  ),
+                  if (_matchSchedulingEnabled) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(child: _scheduleModeBtn(0, 'Manual', isDark)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                            child: _scheduleModeBtn(1, 'Recorrente', isDark)),
+                      ],
+                    ),
                     const SizedBox(height: 12),
-                    if (_manualMatchSchedules.isEmpty)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: isDark
-                                ? AppColors.slate700
-                                : AppColors.slate200,
+                    if (_matchSchedulingMode == 0) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _ManualDateField(
+                              label: 'Data',
+                              value: _manualScheduleDate,
+                              isDark: isDark,
+                              onTap: _pickManualDate,
+                            ),
                           ),
-                        ),
-                        child: Text(
-                          'Nenhum agendamento manual cadastrado.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _TimeField(
+                              label: 'Horario',
+                              value: _manualScheduleTime,
+                              isDark: isDark,
+                              onTap: _pickManualTime,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _manualScheduleDate != null &&
+                                  _manualScheduleTime != null
+                              ? _addManualSchedule
+                              : null,
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                          label: const Text('Adicionar agendamento'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.accent,
+                            foregroundColor: AppColors.lightText,
+                            disabledBackgroundColor: isDark
+                                ? AppColors.slate800
+                                : AppColors.slate200,
+                            disabledForegroundColor: isDark
                                 ? AppColors.slate500
                                 : AppColors.slate400,
                           ),
                         ),
-                      )
-                    else
-                      ..._manualMatchSchedules.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final item = entry.value;
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(10),
+                      ),
+                      const SizedBox(height: 12),
+                      if (_manualMatchSchedules.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color:
-                                isDark ? AppColors.slate800 : AppColors.slate50,
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
                               color: isDark
@@ -1570,114 +1552,147 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                                   : AppColors.slate200,
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                item.created
-                                    ? Icons.check_circle_rounded
-                                    : Icons.schedule_rounded,
-                                size: 18,
-                                color: item.created
-                                    ? AppColors.accent
-                                    : AppColors.warning,
-                              ),
-                              const SizedBox(width: 9),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _formatManualSchedule(item.playedAt),
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w700,
-                                        color: isDark
-                                            ? AppColors.slate100
-                                            : AppColors.slate900,
-                                      ),
-                                    ),
-                                    Text(
-                                      item.created
-                                          ? 'Partida criada. Remover aqui nao exclui a partida.'
-                                          : 'Aguardando horario',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: isDark
-                                            ? AppColors.slate500
-                                            : AppColors.slate400,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                onPressed: item.created
-                                    ? null
-                                    : () => _editManualSchedule(index),
-                                icon: const Icon(Icons.edit_outlined, size: 18),
+                          child: Text(
+                            'Nenhum agendamento manual cadastrado.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark
+                                  ? AppColors.slate500
+                                  : AppColors.slate400,
+                            ),
+                          ),
+                        )
+                      else
+                        ..._manualMatchSchedules.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final item = entry.value;
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppColors.slate800
+                                  : AppColors.slate50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
                                 color: isDark
-                                    ? AppColors.slate300
-                                    : AppColors.slate600,
+                                    ? AppColors.slate700
+                                    : AppColors.slate200,
                               ),
-                              if (item.created &&
-                                  (item.matchId?.isNotEmpty ?? false))
-                                IconButton(
-                                  tooltip: 'Alterar partida',
-                                  onPressed: () => _editCreatedMatch(
-                                    item.matchId!,
-                                    scheduleIndex: index,
-                                    fallbackPlaceName: _placeCtrl.text.trim(),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  item.created
+                                      ? Icons.check_circle_rounded
+                                      : Icons.schedule_rounded,
+                                  size: 18,
+                                  color: item.created
+                                      ? AppColors.accent
+                                      : AppColors.warning,
+                                ),
+                                const SizedBox(width: 9),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _formatManualSchedule(item.playedAt),
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDark
+                                              ? AppColors.slate100
+                                              : AppColors.slate900,
+                                        ),
+                                      ),
+                                      Text(
+                                        item.created
+                                            ? 'Partida criada. Remover aqui nao exclui a partida.'
+                                            : 'Aguardando horario',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: isDark
+                                              ? AppColors.slate500
+                                              : AppColors.slate400,
+                                        ),
+                                      ),
+                                    ],
                                   ),
+                                ),
+                                IconButton(
+                                  onPressed: item.created
+                                      ? null
+                                      : () => _editManualSchedule(index),
                                   icon:
                                       const Icon(Icons.edit_outlined, size: 18),
-                                  color: AppColors.infoLight,
+                                  color: isDark
+                                      ? AppColors.slate300
+                                      : AppColors.slate600,
                                 ),
-                              IconButton(
-                                onPressed: () => _removeManualSchedule(index),
-                                icon: const Icon(Icons.delete_outline_rounded,
-                                    size: 18),
-                                color: AppColors.prototypeDanger,
-                              ),
-                            ],
+                                if (item.created &&
+                                    (item.matchId?.isNotEmpty ?? false))
+                                  IconButton(
+                                    tooltip: 'Alterar partida',
+                                    onPressed: () => _editCreatedMatch(
+                                      item.matchId!,
+                                      scheduleIndex: index,
+                                      fallbackPlaceName: _placeCtrl.text.trim(),
+                                    ),
+                                    icon: const Icon(Icons.edit_outlined,
+                                        size: 18),
+                                    color: AppColors.infoLight,
+                                  ),
+                                IconButton(
+                                  onPressed: () => _removeManualSchedule(index),
+                                  icon: const Icon(Icons.delete_outline_rounded,
+                                      size: 18),
+                                  color: AppColors.prototypeDanger,
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                    ] else ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _DayDropdown(
+                              label: 'Criar em',
+                              value: _matchScheduleDayOfWeek,
+                              isDark: isDark,
+                              onChanged: (v) =>
+                                  setState(() => _matchScheduleDayOfWeek = v),
+                            ),
                           ),
-                        );
-                      }),
-                  ] else ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _DayDropdown(
-                            label: 'Criar em',
-                            value: _matchScheduleDayOfWeek,
-                            isDark: isDark,
-                            onChanged: (v) =>
-                                setState(() => _matchScheduleDayOfWeek = v),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _TimeField(
+                              label: 'Horario',
+                              value: _matchScheduleTime,
+                              isDark: isDark,
+                              onTap: _pickScheduleTime,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _TimeField(
-                            label: 'Horario',
-                            value: _matchScheduleTime,
-                            isDark: isDark,
-                            onTap: _pickScheduleTime,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'No horario configurado, o sistema cria a proxima partida usando os padroes acima.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isDark ? AppColors.slate500 : AppColors.slate400,
+                        ],
                       ),
-                    ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'No horario configurado, o sistema cria a proxima partida usando os padroes acima.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color:
+                              isDark ? AppColors.slate500 : AppColors.slate400,
+                        ),
+                      ),
+                    ],
                   ],
                 ],
-              ],
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 12),
           Container(
             decoration: BoxDecoration(
@@ -1791,13 +1806,15 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                 isDark: isDark,
                 type: const TextInputType.numberWithOptions(decimal: true),
               ),
-              const SizedBox(height: 12),
-              _DueDayDropdown(
-                label: 'Dia de vencimento',
-                value: _paymentDueDay,
-                isDark: isDark,
-                onChanged: (v) => setState(() => _paymentDueDay = v),
-              ),
+              if (_showPaymentDueDaySettings) ...[
+                const SizedBox(height: 12),
+                _DueDayDropdown(
+                  label: 'Dia de vencimento',
+                  value: _paymentDueDay,
+                  isDark: isDark,
+                  onChanged: (v) => setState(() => _paymentDueDay = v),
+                ),
+              ],
             ],
             const SizedBox(height: 8),
             Text(
@@ -1827,16 +1844,18 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                 'O que acontece quando dois ou mais jogadores empatam em votos',
             child: _buildMvpTieRule(isDark),
           ),
-          const SizedBox(height: 12),
-          _subCard(
-            isDark: isDark,
-            accentBg: AppColors.blue50,
-            accentFg: AppColors.infoLight,
-            icon: Icons.timer_outlined,
-            title: 'Encerrar votação MVP automaticamente',
-            subtitle: 'Finaliza a partida após um tempo configurado',
-            child: _buildAutoFinalizeSection(isDark),
-          ),
+          if (_showAutoFinalizeMvpSettings) ...[
+            const SizedBox(height: 12),
+            _subCard(
+              isDark: isDark,
+              accentBg: AppColors.blue50,
+              accentFg: AppColors.infoLight,
+              icon: Icons.timer_outlined,
+              title: 'Encerrar votação MVP automaticamente',
+              subtitle: 'Finaliza a partida após um tempo configurado',
+              child: _buildAutoFinalizeSection(isDark),
+            ),
+          ],
         ],
       );
 
@@ -2005,7 +2024,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                     Expanded(child: _payModeBtn(1, 'Por jogo', isDark)),
                   ],
                 ),
-                if (_paymentMode == 0) ...[
+                if (_paymentMode == 0 && _showPaymentDueDaySettings) ...[
                   const SizedBox(height: 12),
                   _labeledInput(
                     label: 'Mensalidade Jogador (R\$)',
@@ -2060,18 +2079,19 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
             child: _buildMvpTieRule(isDark),
           ),
 
-          const SizedBox(height: 12),
-
-          _subCard(
-            isDark: isDark,
-            accentBg: AppColors.blue50,
-            accentFg: AppColors.infoLight,
-            icon: Icons.timer_outlined,
-            title: 'Encerrar votação MVP automaticamente',
-            subtitle:
-                'Finaliza a partida automaticamente após um tempo configurado',
-            child: _buildAutoFinalizeSection(isDark),
-          ),
+          if (_showAutoFinalizeMvpSettings) ...[
+            const SizedBox(height: 12),
+            _subCard(
+              isDark: isDark,
+              accentBg: AppColors.blue50,
+              accentFg: AppColors.infoLight,
+              icon: Icons.timer_outlined,
+              title: 'Encerrar votação MVP automaticamente',
+              subtitle:
+                  'Finaliza a partida automaticamente após um tempo configurado',
+              child: _buildAutoFinalizeSection(isDark),
+            ),
+          ],
 
           const SizedBox(height: 12),
 

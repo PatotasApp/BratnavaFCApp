@@ -8,6 +8,7 @@ import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../data/datasources/payments_remote_datasource.dart';
 import '../../data/datasources/transactions_remote_datasource.dart';
 import '../../domain/entities/payment_entities.dart';
@@ -17,6 +18,7 @@ import '../widgets/monthly_payment_sheet.dart';
 import '../widgets/extra_payment_sheet.dart';
 import '../widgets/create_extra_charge_sheet.dart';
 import '../widgets/bulk_discount_sheet.dart';
+import '../widgets/payment_selection_sheet.dart';
 
 const _months = [
   'Jan',
@@ -143,6 +145,30 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
     if (gid == null) return;
     ref.invalidate(extraChargesProvider(gid));
     ref.invalidate(myExtraChargesProvider(gid));
+  }
+
+  void _refreshMyPayments() {
+    final gid = _groupId;
+    if (gid == null) return;
+    ref.invalidate(myPendingPaymentItemsProvider(gid));
+    ref.invalidate(myPaymentSummaryProvider(gid));
+    _refreshMonthly();
+    _refreshExtra();
+  }
+
+  Future<void> _openPaymentSelectionSheet(BuildContext context) async {
+    final gid = _groupId;
+    if (gid == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => PaymentSelectionSheet(
+        groupId: gid,
+        onSaved: _refreshMyPayments,
+      ),
+    );
   }
 
   // ── Abrir sheet de pagamento mensal ──────────────────────────────────────
@@ -322,12 +348,15 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
 
     if (groupId.isEmpty) {
       return Scaffold(
-        body: Center(
-          child: Text(
-            'Crie ou entre em um grupo',
-            style: TextStyle(
-                color: isDark ? AppColors.slate400 : AppColors.slate500),
-          ),
+        body: Column(
+          children: [
+            _buildHeader(),
+            const Expanded(
+              child: NoActiveGroupView(
+                message: 'Selecione uma patota para acessar os pagamentos.',
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -349,87 +378,109 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    final pendingItemsAsync = ref.watch(myPendingPaymentItemsProvider(groupId));
+
     return Scaffold(
-      body: NestedScrollView(
-        headerSliverBuilder: (ctx, _) => [
-          SliverToBoxAdapter(
-            child: _buildHeader(),
+      body: Column(
+        children: [
+          Expanded(
+            child: NestedScrollView(
+              headerSliverBuilder: (ctx, _) => [
+                SliverToBoxAdapter(
+                  child: _buildHeader(),
+                ),
+              ],
+              body: Column(
+                key: ValueKey(_tabCtrl),
+                children: [
+                  Container(
+                    color: isDark ? AppColors.slate900 : AppColors.onDark,
+                    child: TabBar(
+                      controller: _tabCtrl,
+                      tabs: [
+                        if (_paymentMode == 0)
+                          const Tab(
+                            icon: Icon(Icons.calendar_month_outlined, size: 18),
+                            text: 'Mensalidades',
+                          ),
+                        const Tab(
+                          icon: Icon(Icons.receipt_long_outlined, size: 18),
+                          text: 'Cobranças extras',
+                        ),
+                        if (isAdmin)
+                          const Tab(
+                            icon:
+                                Icon(Icons.account_balance_outlined, size: 18),
+                            text: 'Caixa',
+                          ),
+                      ],
+                      labelColor:
+                          isDark ? AppColors.onDark : AppColors.slate900,
+                      unselectedLabelColor:
+                          isDark ? AppColors.slate500 : AppColors.slate400,
+                      indicatorColor:
+                          isDark ? AppColors.onDark : AppColors.slate900,
+                      labelStyle: const TextStyle(
+                          fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabCtrl,
+                      children: [
+                        if (_paymentMode == 0)
+                          _MonthlyTab(
+                            groupId: groupId,
+                            year: _year,
+                            isAdmin: isAdmin,
+                            onYearChanged: (y) => setState(() => _year = y),
+                            onOpenSheet: (ctx, row, month) =>
+                                _openMonthlySheet(ctx, row, month),
+                          ),
+                        _ExtraTab(
+                          groupId: groupId,
+                          year: _extraYear,
+                          month: _extraMonth,
+                          isAdmin: isAdmin,
+                          onYearChanged: (y) => setState(() => _extraYear = y),
+                          onMonthChanged: (m) =>
+                              setState(() => _extraMonth = m),
+                          onOpenExtraSheet: (ctx, c, p) =>
+                              _openExtraSheet(ctx, c, p),
+                          onCreateSheet: (ctx, players) =>
+                              _openCreateSheet(ctx, players),
+                          onBulkSheet: (ctx, c) => _openBulkSheet(ctx, c),
+                          onCancel: (ctx, id) => _cancelCharge(ctx, id),
+                          onRefresh: _refreshExtra,
+                        ),
+                        if (isAdmin)
+                          _CaixaView(
+                            groupId: groupId,
+                            isDark: isDark,
+                            subTab: _caixaSubTab,
+                            txYear: _txYear,
+                            txMonth: _txMonth,
+                            onSubTab: (s) => setState(() => _caixaSubTab = s),
+                            onTxYear: (y) => setState(() => _txYear = y),
+                            onTxMonth: (m) => setState(() => _txMonth = m),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          pendingItemsAsync.maybeWhen(
+            data: (items) => items.isEmpty
+                ? const SizedBox.shrink()
+                : _PendingPaymentBar(
+                    items: items,
+                    onPay: () => _openPaymentSelectionSheet(context),
+                  ),
+            orElse: () => const SizedBox.shrink(),
           ),
         ],
-        body: Column(
-          key: ValueKey(_tabCtrl),
-          children: [
-            Container(
-              color: isDark ? AppColors.slate900 : AppColors.onDark,
-              child: TabBar(
-                controller: _tabCtrl,
-                tabs: [
-                  if (_paymentMode == 0)
-                    const Tab(
-                      icon: Icon(Icons.calendar_month_outlined, size: 18),
-                      text: 'Mensalidades',
-                    ),
-                  const Tab(
-                    icon: Icon(Icons.receipt_long_outlined, size: 18),
-                    text: 'Cobranças extras',
-                  ),
-                  if (isAdmin)
-                    const Tab(
-                      icon: Icon(Icons.account_balance_outlined, size: 18),
-                      text: 'Caixa',
-                    ),
-                ],
-                labelColor: isDark ? AppColors.onDark : AppColors.slate900,
-                unselectedLabelColor:
-                    isDark ? AppColors.slate500 : AppColors.slate400,
-                indicatorColor: isDark ? AppColors.onDark : AppColors.slate900,
-                labelStyle:
-                    const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-              ),
-            ),
-            Expanded(
-              child: TabBarView(
-                controller: _tabCtrl,
-                children: [
-                  if (_paymentMode == 0)
-                    _MonthlyTab(
-                      groupId: groupId,
-                      year: _year,
-                      isAdmin: isAdmin,
-                      onYearChanged: (y) => setState(() => _year = y),
-                      onOpenSheet: (ctx, row, month) =>
-                          _openMonthlySheet(ctx, row, month),
-                    ),
-                  _ExtraTab(
-                    groupId: groupId,
-                    year: _extraYear,
-                    month: _extraMonth,
-                    isAdmin: isAdmin,
-                    onYearChanged: (y) => setState(() => _extraYear = y),
-                    onMonthChanged: (m) => setState(() => _extraMonth = m),
-                    onOpenExtraSheet: (ctx, c, p) => _openExtraSheet(ctx, c, p),
-                    onCreateSheet: (ctx, players) =>
-                        _openCreateSheet(ctx, players),
-                    onBulkSheet: (ctx, c) => _openBulkSheet(ctx, c),
-                    onCancel: (ctx, id) => _cancelCharge(ctx, id),
-                    onRefresh: _refreshExtra,
-                  ),
-                  if (isAdmin)
-                    _CaixaView(
-                      groupId: groupId,
-                      isDark: isDark,
-                      subTab: _caixaSubTab,
-                      txYear: _txYear,
-                      txMonth: _txMonth,
-                      onSubTab: (s) => setState(() => _caixaSubTab = s),
-                      onTxYear: (y) => setState(() => _txYear = y),
-                      onTxMonth: (m) => setState(() => _txMonth = m),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -439,6 +490,78 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
       title: 'Pagamentos',
       subtitle: 'Mensalidades, cobranças e caixa',
       icon: Icons.payments_outlined,
+    );
+  }
+}
+
+class _PendingPaymentBar extends StatelessWidget {
+  final List<PendingPaymentItem> items;
+  final VoidCallback onPay;
+
+  const _PendingPaymentBar({required this.items, required this.onPay});
+
+  String _formatMoney(double value) {
+    final parts = value.toStringAsFixed(2).split('.');
+    final digits = parts.first;
+    final buffer = StringBuffer();
+    for (var index = 0; index < digits.length; index++) {
+      if (index > 0 && (digits.length - index) % 3 == 0) buffer.write('.');
+      buffer.write(digits[index]);
+    }
+    return 'R\$ $buffer,${parts.last}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final total = items.fold<double>(0, (sum, item) => sum + item.finalAmount);
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+        decoration: BoxDecoration(
+          color: colors.surface,
+          border: Border(top: BorderSide(color: colors.outlineVariant)),
+          boxShadow: [
+            BoxShadow(
+              color: colors.shadow.withValues(alpha: .06),
+              blurRadius: 12,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Total pendente',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                  Text(
+                    _formatMoney(total),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: onPay,
+              icon: const Icon(Icons.checklist_rounded, size: 19),
+              label: const Text('Pagar'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1669,6 +1792,8 @@ class _ExtraTab extends ConsumerWidget {
 
     if (isAdmin) {
       final chargesAsync = ref.watch(extraChargesProvider(groupId));
+      // Cobranças do próprio financeiro (ele também é jogador e pode dever).
+      final myChargesAsync = ref.watch(myExtraChargesProvider(groupId));
       // Precisamos da grade mensal para obter a lista de jogadores
       final gridAsync = ref.watch(
           monthlyGridProvider((groupId: groupId, year: DateTime.now().year)));
@@ -1681,6 +1806,7 @@ class _ExtraTab extends ConsumerWidget {
           return _AdminExtraView(
             groupId: groupId,
             charges: charges,
+            myCharges: myChargesAsync.valueOrNull ?? const [],
             players: players,
             year: year,
             month: month,
@@ -1720,6 +1846,7 @@ class _ExtraTab extends ConsumerWidget {
 class _AdminExtraView extends StatefulWidget {
   final String groupId;
   final List<ExtraCharge> charges;
+  final List<ExtraCharge> myCharges; // cobranças do próprio financeiro
   final List<PlayerRow> players;
   final int year;
   final int month;
@@ -1737,6 +1864,7 @@ class _AdminExtraView extends StatefulWidget {
   const _AdminExtraView({
     required this.groupId,
     required this.charges,
+    required this.myCharges,
     required this.players,
     required this.year,
     required this.month,
@@ -1762,6 +1890,69 @@ class _AdminExtraViewState extends State<_AdminExtraView> {
       .where((c) => c.year == widget.year && c.month == widget.month)
       .toList();
 
+  List<ExtraCharge> get _minhasDoMes => widget.myCharges
+      .where((c) =>
+          c.year == widget.year && c.month == widget.month && !c.isCancelled)
+      .toList();
+
+  Widget _buildMinhasSection(BuildContext context) {
+    final mine = _minhasDoMes;
+    final pendCount = mine.where((c) {
+      final p = c.payments.firstOrNull;
+      return p == null || !p.isPaid;
+    }).length;
+    final border = widget.isDark ? AppColors.slate700 : AppColors.slate200;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: widget.isDark ? AppColors.slate900 : AppColors.onDark,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: AppColors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: false,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          leading: Icon(Icons.account_circle_outlined,
+              size: 20,
+              color: widget.isDark ? AppColors.slate300 : AppColors.slate600),
+          title: Text('Minhas cobranças',
+              style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color:
+                      widget.isDark ? AppColors.onDark : AppColors.slate900)),
+          subtitle: Text(
+            pendCount > 0
+                ? '$pendCount pendente${pendCount != 1 ? 's' : ''}'
+                : 'Tudo em dia',
+            style: TextStyle(
+                fontSize: 11,
+                color: pendCount > 0
+                    ? AppColors.rose500
+                    : AppColors.primaryPressed),
+          ),
+          children: mine.map((c) {
+            final p = c.payments.firstOrNull;
+            if (p == null) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _UserChargeCard(
+                charge: c,
+                payment: p,
+                isDark: widget.isDark,
+                paid: p.isPaid,
+                onTap: () => widget.onOpenSheet(context, c, p),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtered = _filtered;
@@ -1771,6 +1962,12 @@ class _AdminExtraViewState extends State<_AdminExtraView> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // Seção "Minhas cobranças" — o financeiro também é jogador e pode dever.
+        // Fica no topo, separada da visão de gerenciar todos.
+        if (_minhasDoMes.isNotEmpty) ...[
+          _buildMinhasSection(context),
+          const SizedBox(height: 16),
+        ],
         // Nova cobrança e seletor de ano
         Wrap(
             spacing: 8,
@@ -2233,37 +2430,39 @@ class _ChargeCard extends StatelessWidget {
                                 icon: Icons.check_circle_rounded),
                         ]),
                         const SizedBox(height: 2),
-                        Row(children: [
-                          Text('R\$ ${charge.amount.toStringAsFixed(2)}',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: isDark
-                                      ? AppColors.slate400
-                                      : AppColors.slate500)),
-                          if (charge.dueDate != null) ...[
-                            const SizedBox(width: 8),
-                            Text('Venc. ${_fmtDate(charge.dueDate!)}',
+                        // Wrap (não Row) para os metadados quebrarem em telas
+                        // estreitas em vez de espremer/estourar o texto.
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 2,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text('R\$ ${charge.amount.toStringAsFixed(2)}',
                                 style: TextStyle(
                                     fontSize: 11,
                                     color: isDark
                                         ? AppColors.slate400
                                         : AppColors.slate500)),
-                          ],
-                          const SizedBox(width: 8),
-                          Text('$paidCt pago${paidCt != 1 ? 's' : ''}',
-                              style: const TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.primaryPressed,
-                                  fontWeight: FontWeight.w600)),
-                          if (pendCt > 0) ...[
-                            const SizedBox(width: 6),
-                            Text('$pendCt pendente${pendCt != 1 ? 's' : ''}',
+                            if (charge.dueDate != null)
+                              Text('Venc. ${_fmtDate(charge.dueDate!)}',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: isDark
+                                          ? AppColors.slate400
+                                          : AppColors.slate500)),
+                            Text('$paidCt pago${paidCt != 1 ? 's' : ''}',
                                 style: const TextStyle(
                                     fontSize: 11,
-                                    color: AppColors.rose500,
+                                    color: AppColors.primaryPressed,
                                     fontWeight: FontWeight.w600)),
+                            if (pendCt > 0)
+                              Text('$pendCt pendente${pendCt != 1 ? 's' : ''}',
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.rose500,
+                                      fontWeight: FontWeight.w600)),
                           ],
-                        ]),
+                        ),
                       ]),
                 ),
                 // Actions

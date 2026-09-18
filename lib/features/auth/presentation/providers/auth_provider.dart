@@ -283,7 +283,7 @@ class AuthNotifier extends AsyncNotifier<void> {
   /// primeiro frame da troca.
   Future<void> selectActiveGroup({
     required String groupId,
-    required String playerId,
+    String? playerId,
   }) async {
     final account = ref.read(accountStoreProvider).activeAccount;
     if (account == null) return;
@@ -292,6 +292,7 @@ class AuthNotifier extends AsyncNotifier<void> {
           (current) => current.copyWith(
             activePlayerId: playerId,
             activeGroupId: groupId,
+            clearActivePlayerId: playerId == null || playerId.isEmpty,
             activeGroupIsAdmin: false,
             activeGroupIsFinanceiro: false,
           ),
@@ -345,16 +346,22 @@ class AuthNotifier extends AsyncNotifier<void> {
         dataSource.fetchMyGroupIds(),
       ).wait;
 
+      // Não transforma indisponibilidade da API em "nenhuma patota".
+      if (groupIds == null) return;
+
       final candidateGroupIds = <String>[
         ...groupIds,
         ...?roles?['adminIds'],
         ...?roles?['financeiroIds'],
       ];
       final resolvedGroupId = _resolveActiveGroupId(
-            previousGroupId: account.activeGroupId,
-            candidateGroupIds: candidateGroupIds,
-          ) ??
-          account.activeGroupId;
+        previousGroupId: account.activeGroupId,
+        candidateGroupIds: candidateGroupIds,
+      );
+      final groupChanged = !_sameGroupId(
+        account.activeGroupId,
+        resolvedGroupId,
+      );
 
       // `roles == null` significa que a consulta falhou. Mantém o que já estava
       // salvo em vez de zerar as permissões por causa de uma queda de rede.
@@ -363,6 +370,12 @@ class AuthNotifier extends AsyncNotifier<void> {
               groupAdminIds: roles?['adminIds'],
               groupFinanceiroIds: roles?['financeiroIds'],
               activeGroupId: resolvedGroupId,
+              clearActiveGroupId: resolvedGroupId == null,
+              clearActivePlayerId: resolvedGroupId == null || groupChanged,
+              activeGroupIsAdmin:
+                  groupChanged ? false : account.activeGroupIsAdmin,
+              activeGroupIsFinanceiro:
+                  groupChanged ? false : account.activeGroupIsFinanceiro,
             ),
           );
 
@@ -374,7 +387,6 @@ class AuthNotifier extends AsyncNotifier<void> {
       }
     } catch (_) {}
   }
-
 }
 
 final authNotifierProvider =

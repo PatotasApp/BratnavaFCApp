@@ -10,8 +10,10 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/football_pitch.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../data/datasources/team_builder_datasource.dart';
 import '../../domain/entities/team_builder_models.dart';
@@ -716,12 +718,29 @@ class _TeamBuilderPageState extends ConsumerState<TeamBuilderPage> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final account = ref.watch(accountStoreProvider).activeAccount;
-    final groupId = account?.activeGroupId ?? '';
-    final playersAsync = ref.watch(_groupPlayersProvider(groupId));
+    final activePlayer = ref.watch(activePlayerProvider);
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId ?? '';
     final settings = groupId.isEmpty
         ? null
         : ref.watch(groupSettingsProvider(groupId)).valueOrNull;
     final icons = GroupIcons.from(settings);
+
+    if (groupId.isEmpty) {
+      return Scaffold(
+        body: Column(
+          children: [
+            _buildHeader(icons),
+            const Expanded(
+              child: NoActiveGroupView(
+                message: 'Selecione uma patota para montar seu time.',
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final playersAsync = ref.watch(_groupPlayersProvider(groupId));
 
     return Scaffold(
       body: CustomScrollView(

@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../auth/presentation/providers/account_store.dart';
+import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../domain/entities/match_models.dart';
+import '../../domain/utils/match_participant_resolver.dart';
 import '../providers/match_provider.dart';
 import '../widgets/goal_entry_row.dart';
 import '../widgets/inline_goal_tracker.dart';
@@ -50,13 +52,17 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
       for (final player in [...s.participants, ...s.eligibleVoters])
         player.matchPlayerId: player,
     };
-    final players = playersByMatchPlayerId.values;
-
-    final activePlayerId = account.activePlayerId;
-    if (activePlayerId == null || activePlayerId.isEmpty) return null;
-    return players
-        .where((player) => player.playerId == activePlayerId)
-        .firstOrNull;
+    // O jogador da patota resolvido via `players/me` é a identidade mais
+    // confiável: vem da conta logada, então identifica o usuário mesmo quando
+    // o `activePlayerId` da conta ainda não foi setado.
+    final resolvedPlayerId =
+        ref.read(activePlayerProvider)?.playerId ?? account.activePlayerId;
+    return resolveCurrentMatchPlayer(
+      players: playersByMatchPlayerId.values,
+      userId: account.userId,
+      serverMatchPlayerId: s.myMatchPlayerId,
+      activePlayerId: resolvedPlayerId,
+    );
   }
 
   @override
@@ -274,7 +280,12 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
 
   Widget _buildUserView(BuildContext context, MatchState s, GroupIcons icons) {
     final myMatchPlayer = _currentMatchPlayer(s);
-    final myMatchPlayerId = myMatchPlayer?.matchPlayerId ?? '';
+    // Se o resolver não achou o jogador nas listas, ainda assim confia no
+    // `myMatchPlayerId` que o backend resolve pela conta logada — senão um
+    // jogador que jogou aparecia como "fora da partida" e não podia votar.
+    final resolvedMpId = myMatchPlayer?.matchPlayerId ?? '';
+    final myMatchPlayerId =
+        resolvedMpId.isNotEmpty ? resolvedMpId : (s.myMatchPlayerId ?? '');
 
     final isParticipant = myMatchPlayerId.isNotEmpty;
     final canVote = s.canVote ??

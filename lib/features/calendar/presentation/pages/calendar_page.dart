@@ -4,6 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/datasources/calendar_remote_datasource.dart';
@@ -173,11 +174,21 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     );
   }
 
-  void _openCreateEdit(BuildContext ctx, {CalendarEvent? event, String? date}) {
-    final cats =
-        ref.read(calendarCategoriesProvider(_groupId)).valueOrNull ?? [];
+  Future<void> _openCreateEdit(BuildContext ctx,
+      {CalendarEvent? event, String? date}) async {
+    // Garante que as categorias estejam carregadas ANTES de abrir o sheet.
+    // Antes vinha de `.valueOrNull` (nulo enquanto o provider não resolvia), e
+    // a seção "Categoria" some quando a lista está vazia — por isso as
+    // categorias "só apareciam depois de criar uma nova".
+    List<CalendarCategory> cats;
+    try {
+      cats = await ref.read(calendarCategoriesProvider(_groupId).future);
+    } catch (_) {
+      cats = ref.read(calendarCategoriesProvider(_groupId)).valueOrNull ?? [];
+    }
+    if (!mounted) return;
     CreateEditEventSheet.show(
-      ctx,
+      context,
       groupId: _groupId,
       datasource: _ds,
       categories: cats,
@@ -215,11 +226,16 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     return _events.where((e) => e.date == ds).toList();
   }
 
-  void _openCategories(BuildContext ctx) {
-    final cats =
-        ref.read(calendarCategoriesProvider(_groupId)).valueOrNull ?? [];
+  Future<void> _openCategories(BuildContext ctx) async {
+    List<CalendarCategory> cats;
+    try {
+      cats = await ref.read(calendarCategoriesProvider(_groupId).future);
+    } catch (_) {
+      cats = ref.read(calendarCategoriesProvider(_groupId)).valueOrNull ?? [];
+    }
+    if (!mounted) return;
     CategoryManagerSheet.show(
-      ctx,
+      context,
       groupId: _groupId,
       datasource: _ds,
       categories: cats,
@@ -310,7 +326,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final account = ref.watch(accountStoreProvider).activeAccount;
     final activePlayer = ref.watch(activePlayerProvider);
     final resolvedId = account?.activeGroupId ?? activePlayer?.groupId ?? '';
@@ -328,20 +343,19 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     }
 
     if (resolvedId.isEmpty) {
-      return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.calendar_today_outlined,
-                  size: 44,
-                  color: isDark ? AppColors.slate700 : AppColors.slate200),
-              const SizedBox(height: 12),
-              Text('Crie ou entre em um grupo',
-                  style: TextStyle(
-                      color: isDark ? AppColors.slate500 : AppColors.slate400)),
-            ],
-          ),
+      return const Scaffold(
+        body: Column(
+          children: [
+            AppPageHeader.main(
+              title: 'Calendário',
+              icon: Icons.calendar_month_outlined,
+            ),
+            Expanded(
+              child: NoActiveGroupView(
+                message: 'Selecione uma patota para ver o calendário.',
+              ),
+            ),
+          ],
         ),
       );
     }

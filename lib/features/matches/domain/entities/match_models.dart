@@ -561,6 +561,7 @@ class MatchState {
     this.eligibleVoters = const [],
     this.canVote,
     this.hasVoted,
+    this.myMatchPlayerId,
     this.myVotedForMatchPlayerId,
     this.groupSettings,
     // Multi-match
@@ -634,6 +635,7 @@ class MatchState {
   /// Backend calculou se o usuário autenticado pode votar (null = sem jogador).
   final bool? canVote;
   final bool? hasVoted;
+  final String? myMatchPlayerId;
   final String? myVotedForMatchPlayerId;
 
   final MatchGroupSettings? groupSettings;
@@ -713,6 +715,7 @@ class MatchState {
     List<MatchPlayerInfo>? eligibleVoters,
     bool? canVote,
     bool? hasVoted,
+    String? myMatchPlayerId,
     String? myVotedForMatchPlayerId,
     MatchGroupSettings? groupSettings,
     List<MatchHeaderDto>? upcomingHeaders,
@@ -761,6 +764,7 @@ class MatchState {
         eligibleVoters: eligibleVoters ?? this.eligibleVoters,
         canVote: canVote ?? this.canVote,
         hasVoted: hasVoted ?? this.hasVoted,
+        myMatchPlayerId: myMatchPlayerId ?? this.myMatchPlayerId,
         myVotedForMatchPlayerId:
             myVotedForMatchPlayerId ?? this.myVotedForMatchPlayerId,
         groupSettings: groupSettings ?? this.groupSettings,

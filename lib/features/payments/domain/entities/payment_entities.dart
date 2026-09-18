@@ -1,5 +1,60 @@
 import '../../../../core/utils/date_utils.dart';
 
+// ── Pagamento em lote do próprio usuário ────────────────────────────────────
+
+class PendingPaymentItem {
+  final String id;
+  final String description;
+  final double amount;
+  final double discount;
+  final double finalAmount;
+  final int type; // 0 = mensalidade, 1 = cobrança extra
+  final int? year;
+  final int? month;
+  final String? chargeId;
+  final bool isPaid;
+
+  const PendingPaymentItem({
+    required this.id,
+    required this.description,
+    required this.amount,
+    required this.discount,
+    required this.finalAmount,
+    required this.type,
+    this.year,
+    this.month,
+    this.chargeId,
+    required this.isPaid,
+  });
+
+  factory PendingPaymentItem.fromJson(Map<String, dynamic> json) {
+    T? value<T>(String camel, String pascal) =>
+        (json[camel] ?? json[pascal]) as T?;
+
+    return PendingPaymentItem(
+      id: value<String>('id', 'Id') ?? '',
+      description: value<String>('description', 'Description') ?? '',
+      amount: (json['amount'] ?? json['Amount'] as num? ?? 0).toDouble(),
+      discount: (json['discount'] ?? json['Discount'] as num? ?? 0).toDouble(),
+      finalAmount:
+          (json['finalAmount'] ?? json['FinalAmount'] as num? ?? 0).toDouble(),
+      type: value<int>('type', 'Type') ?? 0,
+      year: value<int>('year', 'Year'),
+      month: value<int>('month', 'Month'),
+      chargeId: value<String>('chargeId', 'ChargeId'),
+      isPaid: value<bool>('isPaid', 'IsPaid') ?? false,
+    );
+  }
+
+  Map<String, dynamic> toPaidRequest() => {
+        'type': type,
+        'year': year,
+        'month': month,
+        'chargeId': chargeId,
+        'isPaid': true,
+      };
+}
+
 // ── Mensalidades ──────────────────────────────────────────────────────────────
 
 class MonthlyCell {

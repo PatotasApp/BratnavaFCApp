@@ -9,6 +9,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../providers/replays_provider.dart';
 import 'replay_video_player_page.dart';
 
@@ -327,22 +328,15 @@ class _ReplayVaultPageState extends ConsumerState<ReplayVaultPage>
 
     if (gid.isEmpty) {
       return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.videocam_outlined,
-                  size: 44,
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? AppColors.onDark24
-                      : AppColors.shadow26),
-              const SizedBox(height: 12),
-              const Text(
-                'Crie ou entre em um grupo',
-                style: TextStyle(color: AppColors.neutral),
+        body: Column(
+          children: [
+            _ReplayHeader(tabController: _tabController),
+            const Expanded(
+              child: NoActiveGroupView(
+                message: 'Selecione uma patota para ver os replays.',
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     }

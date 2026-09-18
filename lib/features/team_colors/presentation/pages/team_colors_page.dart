@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/datasources/team_color_remote_datasource.dart';
@@ -63,12 +64,14 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
               ),
             ),
 
-            if (groupId == null) ...[
+            if (groupId == null || groupId.isEmpty) ...[
               // Enquanto myPlayersProvider carrega, spinner em vez de "sem grupo"
               SliverFillRemaining(
                 child: ref.watch(myPlayersProvider).isLoading
                     ? const Center(child: CircularProgressIndicator())
-                    : _NoGroupState(isDark: isDark),
+                    : const NoActiveGroupView(
+                        message: 'Selecione uma patota para ver os uniformes.',
+                      ),
               ),
             ] else ...[
               SliverToBoxAdapter(
@@ -174,8 +177,8 @@ class _Header extends ConsumerWidget {
 
     final subtitle = isLoading
         ? 'Carregando uniformes...'
-        : groupId == null
-            ? 'Crie ou entre em uma patota'
+        : (groupId?.isEmpty ?? true)
+            ? 'Uniformes usados pela sua patota'
             : '$count uniforme${count != 1 ? 's' : ''} disponível${count != 1 ? 'eis' : ''}';
 
     return AppPageHeader(
@@ -250,58 +253,51 @@ class _ColorsBody extends ConsumerWidget {
         final selected = items[safeIndex];
 
         return Container(
-          margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
           decoration: BoxDecoration(
-            color: isDark ? AppColors.slate800 : AppColors.onDark,
-            borderRadius: BorderRadius.circular(16),
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: isDark ? AppColors.slate700 : AppColors.slate200,
+              color: Theme.of(context).colorScheme.outlineVariant,
             ),
           ),
           child: Column(
             children: [
-              // ── "Ver selecionado" row ──────────────────────────────
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: GestureDetector(
-                    onTap: () => onOpenPreview(selected),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color:
-                              isDark ? AppColors.slate600 : AppColors.slate300,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                padding: const EdgeInsets.fromLTRB(16, 16, 12, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            Icons.visibility_outlined,
-                            size: 14,
-                            color: isDark
-                                ? AppColors.slate300
-                                : AppColors.slate600,
-                          ),
-                          const SizedBox(width: 5),
                           Text(
-                            'Ver selecionado',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: isDark
-                                  ? AppColors.slate300
-                                  : AppColors.slate600,
-                            ),
+                            'Uniforme selecionado',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Deslize para escolher outro uniforme',
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],
                       ),
                     ),
-                  ),
+                    IconButton.outlined(
+                      onPressed: () => onOpenPreview(selected),
+                      tooltip: 'Visualizar uniforme',
+                      icon: const Icon(Icons.visibility_outlined, size: 20),
+                      style: IconButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.primary,
+                        side: BorderSide(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
@@ -318,7 +314,7 @@ class _ColorsBody extends ConsumerWidget {
               if (canManage) ...[
                 Divider(
                   height: 1,
-                  color: isDark ? AppColors.slate700 : AppColors.slate200,
+                  color: Theme.of(context).colorScheme.outlineVariant,
                 ),
                 _ActionBar(
                   selected: selected,
@@ -372,7 +368,7 @@ class _ColorCarouselState extends State<_ColorCarousel> {
     super.initState();
     final n = widget.items.length;
     _ctrl = PageController(
-      viewportFraction: 0.75,
+      viewportFraction: 0.84,
       initialPage: n <= 1 ? 0 : _midOffset + widget.selectedIndex,
     );
   }
@@ -388,7 +384,7 @@ class _ColorCarouselState extends State<_ColorCarousel> {
     if (old.items.length != n) {
       _ctrl.dispose();
       _ctrl = PageController(
-        viewportFraction: 0.75,
+        viewportFraction: 0.84,
         initialPage: n <= 1 ? 0 : _midOffset + widget.selectedIndex,
       );
       return;
@@ -444,7 +440,7 @@ class _ColorCarouselState extends State<_ColorCarousel> {
     return Column(
       children: [
         SizedBox(
-          height: 310,
+          height: 300,
           child: Stack(
             clipBehavior: Clip.none,
             children: [
@@ -453,7 +449,7 @@ class _ColorCarouselState extends State<_ColorCarousel> {
                 builder: (_, __) {
                   return PageView.builder(
                     controller: _ctrl,
-                    clipBehavior: Clip.none,
+                    clipBehavior: Clip.hardEdge,
                     physics:
                         n <= 1 ? const NeverScrollableScrollPhysics() : null,
                     itemCount: n <= 1 ? 1 : n * _kMult,
@@ -464,16 +460,16 @@ class _ColorCarouselState extends State<_ColorCarousel> {
                       final color = items[realIndex];
                       final isSelected = realIndex == widget.selectedIndex;
 
-                      double scale = 0.88;
+                      double scale = 0.94;
                       if (_ctrl.hasClients && _ctrl.position.haveDimensions) {
                         final page = _ctrl.page ??
                             (n <= 1 ? 0 : _midOffset + widget.selectedIndex)
                                 .toDouble();
                         final delta =
                             (page - virtualIndex).abs().clamp(0.0, 1.0);
-                        scale = 1.0 - delta * 0.12;
+                        scale = 1.0 - delta * 0.06;
                       } else {
-                        scale = isSelected ? 1.0 : 0.88;
+                        scale = isSelected ? 1.0 : 0.94;
                       }
 
                       return Transform.scale(
@@ -511,7 +507,6 @@ class _ColorCarouselState extends State<_ColorCarousel> {
                     child: _NavArrow(
                       icon: Icons.chevron_left_rounded,
                       enabled: true,
-                      isDark: widget.isDark,
                       onTap: _goLeft,
                     ),
                   ),
@@ -526,7 +521,6 @@ class _ColorCarouselState extends State<_ColorCarousel> {
                     child: _NavArrow(
                       icon: Icons.chevron_right_rounded,
                       enabled: true,
-                      isDark: widget.isDark,
                       onTap: _goRight,
                     ),
                   ),
@@ -537,7 +531,7 @@ class _ColorCarouselState extends State<_ColorCarousel> {
         ),
 
         // Dot indicators
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         _DotIndicators(
           count: items.length,
           selected: widget.selectedIndex,
@@ -554,45 +548,32 @@ class _ColorCarouselState extends State<_ColorCarousel> {
 class _NavArrow extends StatelessWidget {
   final IconData icon;
   final bool enabled;
-  final bool isDark;
   final VoidCallback onTap;
 
   const _NavArrow({
     required this.icon,
     required this.enabled,
-    required this.isDark,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Opacity(
       opacity: enabled ? 1.0 : 0.25,
-      child: GestureDetector(
-        onTap: enabled ? onTap : null,
-        child: Container(
-          width: 36,
-          height: 36,
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.slate800 : AppColors.onDark,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: isDark ? AppColors.slate700 : AppColors.slate200,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.darkApp.withAlpha(20),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: IconButton.filledTonal(
+          onPressed: enabled ? onTap : null,
+          tooltip: icon == Icons.chevron_left_rounded
+              ? 'Uniforme anterior'
+              : 'Próximo uniforme',
+          style: IconButton.styleFrom(
+            backgroundColor: scheme.surfaceContainerHighest,
+            foregroundColor: scheme.onSurfaceVariant,
+            side: BorderSide(color: scheme.outlineVariant),
           ),
-          child: Icon(
-            icon,
-            size: 20,
-            color: isDark ? AppColors.slate300 : AppColors.slate600,
-          ),
+          icon: Icon(icon, size: 20),
         ),
       ),
     );
@@ -652,35 +633,28 @@ class _ColorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final teamColor = color.color;
+    final scheme = Theme.of(context).colorScheme;
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? AppColors.slate900 : AppColors.onDark,
-        borderRadius: BorderRadius.circular(14),
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isSelected
-              ? teamColor
-              : (isDark ? AppColors.slate700 : AppColors.slate200),
+          color: isSelected ? scheme.primary : scheme.outlineVariant,
           width: isSelected ? 2 : 1,
         ),
         boxShadow: isSelected
             ? [
                 BoxShadow(
-                  color: teamColor.withAlpha(102),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
+                  color: scheme.shadow.withValues(alpha: isDark ? 0.16 : 0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
               ]
-            : [
-                BoxShadow(
-                  color: AppColors.darkApp.withAlpha(15),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+            : null,
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -690,13 +664,7 @@ class _ColorCard extends StatelessWidget {
             // Jersey stage — dark gradient like website
             Expanded(
               child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [AppColors.lightTextSecondary, AppColors.lightText],
-                  ),
-                ),
+                color: scheme.surfaceContainerHighest,
                 child: Center(
                   child: FractionallySizedBox(
                     widthFactor: 0.62,
@@ -711,8 +679,8 @@ class _ColorCard extends StatelessWidget {
 
             // Info section — matches site layout
             Container(
-              color: isDark ? AppColors.slate900 : AppColors.onDark,
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              color: scheme.surface,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -725,39 +693,37 @@ class _ColorCard extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color:
-                                isDark ? AppColors.onDark : AppColors.slate900,
+                            color: scheme.onSurface,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (color.isActive)
-                        const _Badge(
+                        _Badge(
                           label: 'Ativo',
-                          bg: AppColors.emerald50,
-                          fg: AppColors.primaryPressed,
+                          bg: scheme.primaryContainer,
+                          fg: scheme.onPrimaryContainer,
                         ),
                       if (isSelected) ...[
                         const SizedBox(width: 4),
-                        const _Badge(
-                          label: 'Sel.',
-                          bg: AppColors.darkCard,
-                          fg: AppColors.onDark,
+                        _Badge(
+                          label: 'Selecionado',
+                          bg: scheme.primary,
+                          fg: scheme.onPrimary,
                         ),
                       ],
                     ],
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    'CLIQUE PARA SELECIONAR',
+                    isSelected ? 'EM USO' : 'TOQUE PARA SELECIONAR',
                     style: TextStyle(
                       fontSize: 9,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0.5,
-                      color: isSelected
-                          ? teamColor
-                          : (isDark ? AppColors.slate500 : AppColors.slate400),
+                      color:
+                          isSelected ? scheme.primary : scheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -910,7 +876,7 @@ class _ActionBar extends StatelessWidget {
               children: [
                 Expanded(
                   child: _ActionButton(
-                    label: 'Editar selecionado',
+                    label: 'Editar',
                     icon: Icons.edit_outlined,
                     isDark: isDark,
                     onTap: onEdit,
@@ -925,8 +891,8 @@ class _ActionBar extends StatelessWidget {
                         : Icons.check_circle_outline_rounded,
                     isDark: isDark,
                     accent: selected.isActive
-                        ? AppColors.warning // orange – matches website
-                        : AppColors.accent,
+                        ? Theme.of(context).colorScheme.error
+                        : Theme.of(context).colorScheme.primary,
                     onTap: onActivate,
                   ),
                 ),
@@ -962,35 +928,42 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = accent ?? (isDark ? AppColors.slate200 : AppColors.slate700);
+    final scheme = Theme.of(context).colorScheme;
+    final fg = accent ?? scheme.onSurface;
     final bg = accent != null
-        ? accent!.withAlpha(20)
-        : (isDark ? AppColors.slate800 : AppColors.slate100);
-    final border = accent ?? (isDark ? AppColors.slate700 : AppColors.slate200);
+        ? accent!.withValues(alpha: isDark ? 0.14 : 0.08)
+        : scheme.surfaceContainerHighest;
+    final border = accent ?? scheme.outlineVariant;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: border.withAlpha(100)),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 16, color: fg),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: fg,
+    return Material(
+      color: bg,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: border.withValues(alpha: 0.65)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 18, color: fg),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: fg,
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1771,37 +1744,6 @@ class _EmptyState extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ── No group state ────────────────────────────────────────────────────────────
-
-class _NoGroupState extends StatelessWidget {
-  final bool isDark;
-  const _NoGroupState({required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.group_outlined,
-            size: 40,
-            color: isDark ? AppColors.slate600 : AppColors.slate300,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Crie ou entre em um grupo',
-            style: TextStyle(
-              fontSize: 14,
-              color: isDark ? AppColors.slate500 : AppColors.slate400,
-            ),
-          ),
-        ],
       ),
     );
   }

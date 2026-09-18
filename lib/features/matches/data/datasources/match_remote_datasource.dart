@@ -387,11 +387,6 @@ class MatchRemoteDataSource {
         data: {'goals': goals});
   }
 
-  /// Reapply MVP — POST /api/Matches/group/{groupId}/{matchId}/reapply-mvp
-  Future<void> reapplyMvp(String groupId, String matchId) async {
-    await _dio.post(ApiConstants.matchReapplyMvp(groupId, matchId));
-  }
-
   /// Publish match event — POST /api/Matches/group/{groupId}/{matchId}/events
   Future<void> publishMatchEvent(
       String groupId, String matchId, Map<String, dynamic> eventData) async {

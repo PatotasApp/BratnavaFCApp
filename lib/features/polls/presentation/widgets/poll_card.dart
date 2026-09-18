@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/poll_summary.dart';
+import 'participation_status_badge.dart';
 
 class PollCard extends StatelessWidget {
   final PollSummary poll;
@@ -59,25 +60,6 @@ class PollCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (poll.hasVoted) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.blue50,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: AppColors.blue50),
-                          ),
-                          child: Text(
-                            'Votou',
-                            style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.infoLight),
-                          ),
-                        ),
-                      ],
                       // Badge "vinculado à partida"
                       if (poll.linkedMatchId != null &&
                           poll.linkedMatchId!.isNotEmpty) ...[
@@ -92,10 +74,12 @@ class PollCard extends StatelessWidget {
                                 color:
                                     AppColors.emerald500.withValues(alpha: .3)),
                           ),
-                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
                             Icon(Icons.sports_soccer_rounded,
                                 size: 9, color: AppColors.emerald700),
-                            const SizedBox(width: 3),
+                            SizedBox(width: 3),
                             Text('Partida',
                                 style: TextStyle(
                                     fontSize: 10,
@@ -121,7 +105,9 @@ class PollCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Wrap(
                     spacing: 6,
+                    runSpacing: 4,
                     children: [
+                      ParticipationStatusBadge(hasVoted: poll.hasVoted),
                       _Meta(
                           '${poll.optionCount} opç${poll.optionCount != 1 ? 'ões' : 'ão'}',
                           isDark),

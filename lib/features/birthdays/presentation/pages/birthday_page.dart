@@ -4,7 +4,9 @@ import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../auth/presentation/providers/account_store.dart';
+import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../domain/entities/birthday_status.dart';
 import '../providers/birthday_provider.dart';
 
@@ -43,19 +45,24 @@ class BirthdayPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final groupId =
-        ref.watch(accountStoreProvider).activeAccount?.activeGroupId;
+    final account = ref.watch(accountStoreProvider).activeAccount;
+    final activePlayer = ref.watch(activePlayerProvider);
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId;
 
     if (groupId == null || groupId.isEmpty) {
-      return Scaffold(
-        body: const Column(
+      return const Scaffold(
+        body: Column(
           children: [
             AppPageHeader(
               title: 'Aniversários',
               subtitle: 'Datas especiais dos jogadores da patota',
               icon: Icons.cake_outlined,
             ),
-            Expanded(child: _NoGroupState()),
+            Expanded(
+              child: NoActiveGroupView(
+                message: 'Selecione uma patota para ver os aniversários.',
+              ),
+            ),
           ],
         ),
       );
@@ -640,21 +647,4 @@ class _ErrorState extends StatelessWidget {
       ),
     );
   }
-}
-
-class _NoGroupState extends StatelessWidget {
-  const _NoGroupState();
-  @override
-  Widget build(BuildContext context) => const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cake_outlined, size: 48, color: AppColors.slate500),
-            SizedBox(height: 12),
-            Text('Crie ou entre em um grupo',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.slate400, fontSize: 13)),
-          ],
-        ),
-      );
 }

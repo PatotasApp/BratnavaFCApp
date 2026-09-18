@@ -126,6 +126,8 @@ class Account extends Equatable {
     List<String>? roles,
     String? activeGroupId,
     String? activePlayerId,
+    bool clearActiveGroupId = false,
+    bool clearActivePlayerId = false,
     List<String>? groupAdminIds,
     List<String>? groupFinanceiroIds,
     bool? activeGroupIsAdmin,
@@ -136,8 +138,10 @@ class Account extends Equatable {
         name: name ?? this.name,
         email: email ?? this.email,
         roles: roles ?? this.roles,
-        activeGroupId: activeGroupId ?? this.activeGroupId,
-        activePlayerId: activePlayerId ?? this.activePlayerId,
+        activeGroupId:
+            clearActiveGroupId ? null : activeGroupId ?? this.activeGroupId,
+        activePlayerId:
+            clearActivePlayerId ? null : activePlayerId ?? this.activePlayerId,
         groupAdminIds: groupAdminIds ?? this.groupAdminIds,
         groupFinanceiroIds: groupFinanceiroIds ?? this.groupFinanceiroIds,
         activeGroupIsAdmin: activeGroupIsAdmin ?? this.activeGroupIsAdmin,

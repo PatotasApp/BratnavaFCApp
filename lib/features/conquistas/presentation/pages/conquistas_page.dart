@@ -9,6 +9,7 @@ import '../../domain/entities/conquista_models.dart';
 import '../providers/conquistas_provider.dart';
 import '../widgets/conquistas_section.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 
 class ConquistasPage extends ConsumerStatefulWidget {
   const ConquistasPage({super.key});
@@ -51,11 +52,8 @@ class _ConquistasPageState extends ConsumerState<ConquistasPage> {
           ),
           Expanded(
             child: groupId == null || groupId.isEmpty
-                ? const _MessageState(
-                    icon: Icons.groups_outlined,
-                    title: 'Selecione uma patota',
-                    message:
-                        'As conquistas são calculadas dentro de cada patota.',
+                ? const NoActiveGroupView(
+                    message: 'Selecione uma patota para ver as conquistas.',
                   )
                 : RefreshIndicator(
                     onRefresh: () async =>
@@ -97,12 +95,12 @@ class _ConquistasPageState extends ConsumerState<ConquistasPage> {
                                         value: false,
                                         icon:
                                             Icon(Icons.person_outline_rounded),
-                                        label: Text('Minhas'),
+                                        label: Text('Minha'),
                                       ),
                                       ButtonSegment(
                                         value: true,
                                         icon: Icon(Icons.groups_outlined),
-                                        label: Text('Patota'),
+                                        label: Text('Do grupo'),
                                       ),
                                     ],
                                     selected: {_showGroup},
@@ -121,8 +119,7 @@ class _ConquistasPageState extends ConsumerState<ConquistasPage> {
                                     }),
                                   )
                                 else if (own != null)
-                                  ConquistasSection(
-                                      player: own, season: data.season)
+                                  ConquistasSection(player: own)
                                 else
                                   const _MessageState(
                                     icon: Icons.emoji_events_outlined,
@@ -293,7 +290,10 @@ class _GroupOverview extends StatelessWidget {
                                       runSpacing: 4,
                                       children: badges
                                           .map((item) => ConquistaBadge(
-                                              conquista: item, compact: true))
+                                                conquista: item,
+                                                player: player,
+                                                compact: true,
+                                              ))
                                           .toList(),
                                     ),
                                   ),
@@ -333,7 +333,6 @@ class _GroupOverview extends StatelessWidget {
                       color: context.appSurfaceSubtle,
                       child: ConquistasSection(
                         player: player,
-                        season: data.season,
                         showHeading: false,
                       ),
                     ),

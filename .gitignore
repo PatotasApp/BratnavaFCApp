@@ -24,6 +24,14 @@ android/.gradle/
 android/local.properties
 android/**/GeneratedPluginRegistrant.java
 
+# Chaves de assinatura de release: senhas e chave privada, NUNCA no repo.
+# (o debug.keystore em android/keystores/ é versionado de propósito e fica de fora
+#  por ser nomeado explicitamente, não por extensão)
+android/key.properties
+*.jks
+*.p12
+upload-keystore.*
+
 # NÃO ignore gradlew (é necessário pro build)
 # android/gradlew
 # android/gradlew.bat

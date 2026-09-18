@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/poll_summary.dart';
+import 'participation_status_badge.dart';
 
 class EventCard extends StatelessWidget {
   final PollSummary poll;
@@ -105,12 +106,7 @@ class EventCard extends StatelessWidget {
                     spacing: 4,
                     runSpacing: 4,
                     children: [
-                      if (poll.hasVoted)
-                        const _Pill(
-                          label: 'Respondeu',
-                          color: AppColors.infoLight,
-                          bg: AppColors.blue50,
-                        ),
+                      ParticipationStatusBadge(hasVoted: poll.hasVoted),
                       _StatusBadge(isOpen: poll.isOpen),
                       if (poll.allowGuests)
                         const _Pill(

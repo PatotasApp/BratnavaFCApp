@@ -46,13 +46,7 @@ class AvatarWidget extends StatelessWidget {
     final resolvedPhotoUrl = _resolvePhotoUrl(photoUrl);
 
     if (resolvedPhotoUrl != null) {
-      final radius = gradient
-          ? size / 2
-          : borderRadius ??
-              (size *
-                      (PrototypeLayout.avatarRadius /
-                          PrototypeLayout.avatarSize))
-                  .clamp(8.0, 18.0);
+      final radius = gradient ? size / 2 : _resolvedRadius(size, borderRadius);
       return ClipRRect(
         borderRadius: BorderRadius.circular(radius),
         child: Image.network(
@@ -90,12 +84,9 @@ class AvatarWidget extends StatelessWidget {
       );
     }
 
-    // Proporções do protótipo: 34px de lado, raio 12, fonte 11, peso 800.
-    // O raio acompanha o tamanho para o avatar não ficar quadrado demais quando
-    // usado grande (46) nem redondo demais quando pequeno (24).
-    final radius = borderRadius ??
-        (size * (PrototypeLayout.avatarRadius / PrototypeLayout.avatarSize))
-            .clamp(8.0, 18.0);
+    // O raio acompanha o tamanho, mantendo o avatar como um quadrado
+    // suavemente arredondado em listas pequenas e médias.
+    final radius = _resolvedRadius(size, borderRadius);
 
     return Container(
       width: size,
@@ -129,6 +120,16 @@ class AvatarWidget extends StatelessWidget {
     if (url == null || url.isEmpty) return null;
     if (url.startsWith('http://') || url.startsWith('https://')) return url;
     return '${AppConstants.apiUrl}${url.startsWith('/') ? url : '/$url'}';
+  }
+
+  static double _resolvedRadius(double size, double? requestedRadius) {
+    if (requestedRadius != null && requestedRadius > 0) {
+      return requestedRadius;
+    }
+    // Avatares de lista lembram um quadrado suavemente arredondado, sem se
+    // aproximar do formato circular. Raios explícitos de perfil e logo
+    // continuam sendo respeitados.
+    return (size * 0.24).clamp(6.0, 12.0);
   }
 }
 

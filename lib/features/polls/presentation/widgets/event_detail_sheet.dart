@@ -5,6 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../auth/presentation/providers/account_store.dart';
+import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/datasources/polls_remote_datasource.dart';
 import '../../domain/entities/poll_detail.dart';
 import '../providers/polls_provider.dart';
@@ -54,7 +55,9 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
     _resetDetailsDraft();
     // Seed local guest cache from poll data
     for (final v in _poll.votes ?? <PollVote>[]) {
-      if (v.guests.isNotEmpty) _localGuests[v.playerId] = List.of(v.guests);
+      if (v.guests.isNotEmpty) {
+        _localGuests[_playerKey(v.playerId)] = List.of(v.guests);
+      }
     }
   }
 
@@ -78,7 +81,10 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
           ..clear()
           ..addEntries((updated.votes ?? <PollVote>[])
               .where((v) => v.guests.isNotEmpty)
-              .map((v) => MapEntry(v.playerId, List<PollGuest>.of(v.guests))));
+              .map((v) => MapEntry(
+                    _playerKey(v.playerId),
+                    List<PollGuest>.of(v.guests),
+                  )));
       });
       widget.onUpdated(updated);
     } catch (_) {
@@ -96,10 +102,19 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
   String? get _myVote =>
       _poll.myVotedOptionIds.isNotEmpty ? _poll.myVotedOptionIds.first : null;
 
-  String? get _myPlayerId =>
-      ref.read(accountStoreProvider).activeAccount?.activePlayerId;
+  String _playerKey(String? id) =>
+      (id ?? '').trim().toLowerCase().replaceAll(RegExp(r'[{}]'), '');
+
+  String? get _myPlayerId {
+    final resolved = ref.read(activePlayerProvider)?.playerId;
+    if (resolved != null && resolved.isNotEmpty) return resolved;
+    return ref.read(accountStoreProvider).activeAccount?.activePlayerId;
+  }
+
   String get _myPlayerName =>
-      ref.read(accountStoreProvider).activeAccount?.name ?? '';
+      ref.read(activePlayerProvider)?.playerName ??
+      ref.read(accountStoreProvider).activeAccount?.name ??
+      '';
 
   String? get _goingOptionId {
     try {
@@ -119,10 +134,12 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
   }
 
   List<PollGuest> _guestsForPlayer(String playerId) {
-    if (_localGuests.containsKey(playerId)) {
-      return _localGuests[playerId]!;
+    final key = _playerKey(playerId);
+    if (_localGuests.containsKey(key)) {
+      return _localGuests[key]!;
     }
-    final vote = _poll.votes?.where((v) => v.playerId == playerId).firstOrNull;
+    final vote =
+        _poll.votes?.where((v) => _playerKey(v.playerId) == key).firstOrNull;
     return vote?.guests ?? const [];
   }
 
@@ -185,14 +202,15 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
         _poll = updated;
         // Reseed local guests from updated poll data
         for (final v in updated.votes ?? <PollVote>[]) {
-          if (!_localGuests.containsKey(v.playerId) && v.guests.isNotEmpty) {
-            _localGuests[v.playerId] = List.of(v.guests);
+          final key = _playerKey(v.playerId);
+          if (!_localGuests.containsKey(key) && v.guests.isNotEmpty) {
+            _localGuests[key] = List.of(v.guests);
           }
         }
         // If user unvoted, clear their local guests
         if (isRemoving) {
           final myId = _myPlayerId;
-          if (myId != null) _localGuests.remove(myId);
+          if (myId != null) _localGuests.remove(_playerKey(myId));
         }
       });
       widget.onUpdated(updated);
@@ -385,8 +403,9 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
 
     final tempId = 'tmp_${DateTime.now().millisecondsSinceEpoch}';
     final optimistic = PollGuest(id: tempId, name: name, isAdult: isAdult);
+    final myKey = _playerKey(myId);
     setState(() {
-      _localGuests[myId] = [..._guestsForPlayer(myId), optimistic];
+      _localGuests[myKey] = [..._guestsForPlayer(myId), optimistic];
     });
 
     try {
@@ -397,14 +416,14 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
       });
       if (mounted) {
         setState(() {
-          final list = List<PollGuest>.of(_localGuests[myId] ?? []);
+          final list = List<PollGuest>.of(_localGuests[myKey] ?? []);
           final idx = list.indexWhere((g) => g.id == tempId);
           if (idx >= 0) {
             list[idx] = saved;
           } else {
             list.add(saved);
           }
-          _localGuests[myId] = list;
+          _localGuests[myKey] = list;
         });
       }
     } catch (_) {
@@ -421,8 +440,9 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
     }
     final myId = _myPlayerId;
     if (myId == null) return;
+    final myKey = _playerKey(myId);
     setState(() {
-      _localGuests[myId] =
+      _localGuests[myKey] =
           _guestsForPlayer(myId).where((g) => g.id != guest.id).toList();
     });
     try {
@@ -523,6 +543,9 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // Mantém o vínculo do jogador sincronizado quando a patota ativa termina
+    // de carregar depois que o bottom sheet já foi aberto.
+    ref.watch(activePlayerProvider);
     ref.listen<AsyncValue<BratnavaRealtimeEvent>>(
       realtimeEventsProvider(widget.groupId),
       (_, next) {
@@ -1397,11 +1420,28 @@ class _InfoChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final c = color ?? (isDark ? AppColors.slate400 : AppColors.slate500);
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(icon, size: 13, color: c),
-      const SizedBox(width: 4),
-      Text(label, style: TextStyle(fontSize: 12, color: c)),
-    ]);
+    final availableWidth = MediaQuery.sizeOf(context).width - 40;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: availableWidth),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(icon, size: 13, color: c),
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              label,
+              softWrap: true,
+              style: TextStyle(fontSize: 12, color: c),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

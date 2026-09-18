@@ -110,7 +110,20 @@ class SessionNotifier extends StateNotifier<SessionState> {
 
     try {
       final account = await _ref.read(authDataSourceProvider).fetchMe();
-      await _ref.read(accountStoreProvider.notifier).setAccount(account);
+
+      // O GET /me traz identidade + roles globais, mas NÃO a patota selecionada
+      // (isso é preferência local do app). Sem preservar a seleção anterior, o
+      // app reabria sempre na primeira patota em vez da última usada.
+      final previous = _ref.read(accountStoreProvider).activeAccount;
+      final merged = previous == null
+          ? account
+          : account.copyWith(
+              activeGroupId: previous.activeGroupId,
+              activePlayerId: previous.activePlayerId,
+              activeGroupIsAdmin: previous.activeGroupIsAdmin,
+              activeGroupIsFinanceiro: previous.activeGroupIsFinanceiro,
+            );
+      await _ref.read(accountStoreProvider.notifier).setAccount(merged);
 
       // Antes de liberar a UI: as requests que ela vai disparar devem sair já
       // com o token novo, senão todas pagam o caminho lento do backend.

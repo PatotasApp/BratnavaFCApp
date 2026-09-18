@@ -1,3 +1,24 @@
+class ConquistaEtapa {
+  final String nome;
+  final String descricao;
+  final int? meta;
+  final bool desbloqueada;
+
+  const ConquistaEtapa({
+    required this.nome,
+    required this.descricao,
+    required this.meta,
+    required this.desbloqueada,
+  });
+
+  factory ConquistaEtapa.fromJson(Map<String, dynamic> json) => ConquistaEtapa(
+        nome: json['nome']?.toString() ?? '',
+        descricao: json['descricao']?.toString() ?? '',
+        meta: (json['meta'] as num?)?.toInt(),
+        desbloqueada: json['desbloqueada'] == true,
+      );
+}
+
 class Conquista {
   final String id;
   final String nome;
@@ -15,6 +36,7 @@ class Conquista {
   final String? proximoNome;
   final int? ano;
   final int? posicao;
+  final List<ConquistaEtapa> etapas;
 
   const Conquista({
     required this.id,
@@ -33,6 +55,7 @@ class Conquista {
     this.proximoNome,
     this.ano,
     this.posicao,
+    this.etapas = const [],
   });
 
   factory Conquista.fromJson(Map<String, dynamic> json) => Conquista(
@@ -52,6 +75,7 @@ class Conquista {
         proximoNome: json['proximoNome']?.toString(),
         ano: (json['ano'] as num?)?.toInt(),
         posicao: (json['posicao'] as num?)?.toInt(),
+        etapas: _list(json['etapas'], ConquistaEtapa.fromJson),
       );
 }
 

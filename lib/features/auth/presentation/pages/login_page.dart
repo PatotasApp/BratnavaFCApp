@@ -53,12 +53,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     if (!mounted) return;
 
     ref.read(authNotifierProvider).whenOrNull(
-          error: (error, _) {
-            // Cancelar o seletor de conta do Google não é erro.
-            if (isUserCancelled(error)) return;
-            _showError(authErrorMessage(error, fallback));
-          },
-        );
+      error: (error, _) {
+        // Cancelar o seletor de conta do Google não é erro.
+        if (isUserCancelled(error)) return;
+        _showError(authErrorMessage(error, fallback));
+      },
+    );
   }
 
   void _showError(String msg) {
@@ -138,7 +138,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 ),
                               ),
                               const SizedBox(height: 24),
-
                               AppTextField(
                                 label: 'E-mail',
                                 hint: 'seu@email.com',
@@ -153,7 +152,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 },
                               ),
                               const SizedBox(height: 16),
-
                               AppTextField(
                                 label: 'Senha',
                                 hint: '••••••',
@@ -169,7 +167,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 },
                               ),
                               const SizedBox(height: 8),
-
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton(
@@ -186,16 +183,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 ),
                               ),
                               const SizedBox(height: 12),
-
                               AppButton(
                                 label: 'Entrar',
                                 onPressed: _submit,
                                 isLoading: isLoading,
                                 width: double.infinity,
                               ),
-
                               const SizedBox(height: 20),
-
                               Row(
                                 children: [
                                   const Expanded(
@@ -223,9 +217,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                   ),
                                 ],
                               ),
-
                               const SizedBox(height: 20),
-
                               GoogleSignInButton(
                                 onPressed: isLoading ? null : _submitGoogle,
                               ),

@@ -106,6 +106,34 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
     }
   }
 
+  Future<void> _pickTime() async {
+    if (_timeTBD) return;
+    var initial = TimeOfDay.now();
+    final parts = _timeCtrl.text.split(':');
+    if (parts.length == 2) {
+      final h = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      if (h != null && m != null) {
+        initial = TimeOfDay(hour: h.clamp(0, 23), minute: m.clamp(0, 59));
+      }
+    }
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      // Sempre 24h e HH:mm — é o formato que o backend valida (TimeOnly.TryParse).
+      builder: (ctx, child) => MediaQuery(
+        data: MediaQuery.of(ctx).copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      setState(() {
+        _timeCtrl.text =
+            '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+      });
+    }
+  }
+
   Future<void> _save() async {
     final title = _titleCtrl.text.trim();
     if (title.isEmpty) {
@@ -246,12 +274,51 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
                 Row(
                   children: [
                     Expanded(
-                      child: _field(
-                        controller: _timeCtrl,
-                        hint: 'HH:MM',
-                        isDark: isDark,
-                        enabled: !_timeTBD,
-                        keyboard: TextInputType.datetime,
+                      child: GestureDetector(
+                        onTap: _timeTBD ? null : _pickTime,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 13),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                                color: isDark
+                                    ? AppColors.slate700
+                                    : AppColors.slate200),
+                            borderRadius: BorderRadius.circular(12),
+                            color: _timeTBD
+                                ? (isDark
+                                    ? AppColors.slate900
+                                    : AppColors.slate100)
+                                : (isDark
+                                    ? AppColors.slate800
+                                    : AppColors.slate50),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.schedule_outlined,
+                                  size: 16,
+                                  color: isDark
+                                      ? AppColors.slate400
+                                      : AppColors.slate500),
+                              const SizedBox(width: 10),
+                              Text(
+                                _timeCtrl.text.isEmpty
+                                    ? 'Selecionar'
+                                    : _timeCtrl.text,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: _timeCtrl.text.isEmpty
+                                      ? (isDark
+                                          ? AppColors.slate600
+                                          : AppColors.slate400)
+                                      : (isDark
+                                          ? AppColors.slate200
+                                          : AppColors.slate700),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),

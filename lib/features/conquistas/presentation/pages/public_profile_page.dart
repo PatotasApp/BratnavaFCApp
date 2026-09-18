@@ -8,6 +8,8 @@ import '../../../account/presentation/widgets/editable_profile_avatar.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../domain/entities/conquista_models.dart';
 import '../providers/conquistas_provider.dart';
+import '../widgets/achievement_info_sheet.dart';
+import '../widgets/achievement_progress_sheet.dart';
 import '../widgets/conquistas_section.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
 
@@ -169,11 +171,30 @@ class _ProfileBody extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 22),
-        Text(
-          'Patotas',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Patotas',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                  if (p.patotas.isNotEmpty)
+                    Text(
+                      'Conquistas em destaque em cada grupo',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: context.appTextSecondary,
+                          ),
+                    ),
+                ],
               ),
+            ),
+            if (p.patotas.isNotEmpty) const AchievementInfoButton(),
+          ],
         ),
         const SizedBox(height: 10),
         if (p.patotas.isEmpty)
@@ -296,7 +317,10 @@ class _PatotaCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: achievements
-                  .map((item) => _CompactAchievement(conquista: item))
+                  .map((item) => _CompactAchievement(
+                        conquista: item,
+                        player: patota.conquistas,
+                      ))
                   .toList(),
             ),
           ],
@@ -308,34 +332,44 @@ class _PatotaCard extends StatelessWidget {
 
 class _CompactAchievement extends StatelessWidget {
   final Conquista conquista;
+  final PlayerConquistas player;
 
-  const _CompactAchievement({required this.conquista});
+  const _CompactAchievement({
+    required this.conquista,
+    required this.player,
+  });
 
   @override
   Widget build(BuildContext context) => Tooltip(
-        message: '${conquista.nome}\n${conquista.descricao}',
-        triggerMode: TooltipTriggerMode.tap,
-        showDuration: const Duration(seconds: 4),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: context.appSurfaceSubtle,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: context.appBorder),
+        message: 'Ver evolução de ${conquista.categoria}',
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => showAchievementProgressSheet(
+            context,
+            selected: conquista,
+            player: player,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.workspace_premium_outlined,
-                  size: 15, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: 6),
-              Text(
-                conquista.nome,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-            ],
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: context.appSurfaceSubtle,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: context.appBorder),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.workspace_premium_outlined,
+                    size: 15, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 6),
+                Text(
+                  conquista.nome,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ),
           ),
         ),
       );

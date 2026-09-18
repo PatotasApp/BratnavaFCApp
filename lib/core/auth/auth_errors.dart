@@ -15,23 +15,19 @@ const Map<String, String> _messages = {
   'invalid-login-credentials': 'E-mail ou senha incorretos.',
   'wrong-password': 'E-mail ou senha incorretos.',
   'user-not-found': 'E-mail ou senha incorretos.',
-
   'invalid-email': 'E-mail inválido.',
   'user-disabled': 'Esta conta foi desativada.',
   'email-already-in-use':
       'Já existe uma conta com este e-mail. Tente entrar ou recuperar a senha.',
   'weak-password': 'A senha precisa ter pelo menos 6 caracteres.',
   'missing-password': 'Informe a senha.',
-
   'too-many-requests':
       'Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.',
   'network-request-failed':
       'Sem conexão com o servidor. Verifique sua internet.',
-
   'account-exists-with-different-credential':
       'Já existe uma conta com este e-mail usando outro método de login. '
           'Entre por ele e vincule depois.',
-
   'requires-recent-login':
       'Por segurança, entre novamente antes de fazer esta alteração.',
 };

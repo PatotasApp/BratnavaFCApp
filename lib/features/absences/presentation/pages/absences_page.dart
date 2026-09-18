@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/datasources/absences_remote_datasource.dart';
@@ -298,9 +299,11 @@ class _AbsencesPageState extends ConsumerState<AbsencesPage> {
                 ),
               ),
               if (groupId.isEmpty)
-                const SliverToBoxAdapter(
-                  child: _InfoState(
-                      message: 'Selecione uma patota para ver ausências.'),
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: NoActiveGroupView(
+                    message: 'Selecione uma patota para ver as ausências.',
+                  ),
                 )
               else if (_loading)
                 const SliverToBoxAdapter(child: _SkeletonList())

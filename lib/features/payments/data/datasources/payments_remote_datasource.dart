@@ -161,10 +161,14 @@ class PaymentsRemoteDataSource {
 
   // Get pending payment items for current user
   // GET /api/groups/{groupId}/payments/my-pending-items
-  Future<List<Map<String, dynamic>>> getMyPendingItems(String groupId) async {
+  Future<List<PendingPaymentItem>> getMyPendingItems(String groupId) async {
     final res = await _dio.get(ApiConstants.myPendingItems(groupId));
     final d = _unwrap(res.data);
-    return (d is List ? d : []).cast<Map<String, dynamic>>();
+    return (d is List ? d : const [])
+        .whereType<Map>()
+        .map((item) =>
+            PendingPaymentItem.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
   }
 
   // Pay selected items (batch)

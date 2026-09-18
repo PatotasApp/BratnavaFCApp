@@ -5,10 +5,12 @@ import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../domain/entities/visual_stats_report.dart';
+import '../../domain/utils/competition_ranking.dart';
 import '../providers/visual_stats_provider.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -28,7 +30,12 @@ Color _wrColor(double v) {
 }
 
 String _pct(double v) => '${v.toStringAsFixed(0)}%';
-String _rankText(int? rank) => rank != null && rank > 0 ? '${rank}º' : '—';
+
+double _perGame(num value, int gamesPlayed) =>
+    gamesPlayed > 0 ? value / gamesPlayed : 0;
+
+String _perGameText(num value, int gamesPlayed) =>
+    _perGame(value, gamesPlayed).toStringAsFixed(2).replaceAll('.', ',');
 
 /// Deduplicate synergies into unique pairs, sort by WR desc
 List<_GlobalSynergyRow> _buildGlobalSynergy(
@@ -101,20 +108,127 @@ enum _SortKey {
 
 enum _StatsViewMode { general, perMatch, classification }
 
-extension _SortKeyLabel on _SortKey {
-  String get shortLabel => switch (this) {
-        _SortKey.points => 'Pontos',
-        _SortKey.winRate => 'Win Rate',
-        _SortKey.wins => 'Vitórias',
-        _SortKey.games => 'Jogos',
-        _SortKey.mvps => 'MVPs',
-        _SortKey.mvpVotes => 'Votos MVP',
-        _SortKey.goals => 'Gols',
-        _SortKey.assists => 'Assists',
-        _SortKey.ownGoals => 'GC',
-        _SortKey.name => 'Nome',
-      };
+enum _ClassificationMetric {
+  points,
+  winRate,
+  games,
+  wins,
+  ties,
+  losses,
+  goals,
+  assists,
+  mvps,
+  mvpVotes,
+  ownGoals,
 }
+
+class _ClassificationRanks {
+  final Map<_ClassificationMetric, Map<String, int>> _values;
+
+  _ClassificationRanks(List<PlayerVisualStatsItem> players)
+      : _values = {
+          for (final metric in _ClassificationMetric.values)
+            metric: _build(players, metric),
+        };
+
+  static num _metricValue(
+    PlayerVisualStatsItem player,
+    _ClassificationMetric metric,
+  ) =>
+      switch (metric) {
+        _ClassificationMetric.points => calculateClassificationPoints(
+            wins: player.wins,
+            ties: player.ties,
+          ),
+        _ClassificationMetric.winRate => _normalizeWR(player.winRate),
+        _ClassificationMetric.games => player.gamesPlayed,
+        _ClassificationMetric.wins => player.wins,
+        _ClassificationMetric.ties => player.ties,
+        _ClassificationMetric.losses => player.losses,
+        _ClassificationMetric.goals => player.goals,
+        _ClassificationMetric.assists => player.assists,
+        _ClassificationMetric.mvps => player.mvps,
+        _ClassificationMetric.mvpVotes => player.mvpVotes,
+        _ClassificationMetric.ownGoals => player.ownGoals,
+      };
+
+  static Map<String, int> _build(
+    List<PlayerVisualStatsItem> players,
+    _ClassificationMetric metric,
+  ) =>
+      buildCompetitionRanks<PlayerVisualStatsItem, String>(
+        items: players,
+        keyOf: (player) => player.playerId,
+        valueOf: (player) => _metricValue(player, metric),
+        tieBreaker: (a, b) =>
+            a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+      );
+
+  int rank(PlayerVisualStatsItem player, _ClassificationMetric metric) =>
+      _values[metric]?[player.playerId] ?? 0;
+
+  String text(PlayerVisualStatsItem player, _ClassificationMetric metric) {
+    final value = rank(player, metric);
+    return value > 0 ? '$valueº' : '—';
+  }
+}
+
+_ClassificationMetric _classificationMetricFor(_SortKey key) => switch (key) {
+      _SortKey.points => _ClassificationMetric.points,
+      _SortKey.winRate => _ClassificationMetric.winRate,
+      _SortKey.wins => _ClassificationMetric.wins,
+      _SortKey.games => _ClassificationMetric.games,
+      _SortKey.mvps => _ClassificationMetric.mvps,
+      _SortKey.mvpVotes => _ClassificationMetric.mvpVotes,
+      _SortKey.goals => _ClassificationMetric.goals,
+      _SortKey.assists => _ClassificationMetric.assists,
+      _SortKey.ownGoals => _ClassificationMetric.ownGoals,
+      _SortKey.name => _ClassificationMetric.points,
+    };
+
+extension _SortKeyLabel on _SortKey {
+  String label({bool perMatch = false}) {
+    if (perMatch) {
+      return switch (this) {
+        _SortKey.wins => 'Vitórias por jogo',
+        _SortKey.mvps => 'MVPs por jogo',
+        _SortKey.mvpVotes => 'Votos MVP por jogo',
+        _SortKey.goals => 'Gols por jogo',
+        _SortKey.assists => 'Assistências por jogo',
+        _SortKey.ownGoals => 'Gols contra por jogo',
+        _ => label(),
+      };
+    }
+
+    return switch (this) {
+      _SortKey.points => 'Pontos na classificação',
+      _SortKey.winRate => 'Aproveitamento',
+      _SortKey.wins => 'Vitórias',
+      _SortKey.games => 'Jogos disputados',
+      _SortKey.mvps => 'MVPs',
+      _SortKey.mvpVotes => 'Votos MVP',
+      _SortKey.goals => 'Gols',
+      _SortKey.assists => 'Assistências',
+      _SortKey.ownGoals => 'Gols contra',
+      _SortKey.name => 'Nome',
+    };
+  }
+}
+
+Color _sortMetricColor(
+  _SortKey key,
+  PlayerVisualStatsItem player,
+  bool isDark,
+) =>
+    switch (key) {
+      _SortKey.winRate => _wrColor(_normalizeWR(player.winRate)),
+      _SortKey.mvps => AppColors.warning,
+      _SortKey.ownGoals => player.ownGoals > 0
+          ? AppColors.prototypeDanger
+          : (isDark ? AppColors.slate200 : AppColors.slate800),
+      _SortKey.name => isDark ? AppColors.slate200 : AppColors.slate800,
+      _ => AppColors.accent,
+    };
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -141,28 +255,54 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
   List<PlayerVisualStatsItem> _sorted(List<PlayerVisualStatsItem> players) {
     final q = _search.trim().toLowerCase();
     var list = [...players];
-    if (q.isNotEmpty)
+    if (q.isNotEmpty) {
       list = list.where((p) => p.name.toLowerCase().contains(q)).toList();
+    }
+    final perMatch = _viewMode == _StatsViewMode.perMatch;
+    void compareMetric(num Function(PlayerVisualStatsItem) selector) {
+      // Mantém mais jogos como desempate para privilegiar a amostra maior.
+      list.sort((a, b) {
+        final comparison = selector(b).compareTo(selector(a));
+        if (comparison != 0) return comparison;
+        return b.gamesPlayed.compareTo(a.gamesPlayed);
+      });
+    }
+
+    num countMetric(PlayerVisualStatsItem player, int value) =>
+        perMatch ? _perGame(value, player.gamesPlayed) : value;
+
     switch (_sortKey) {
       case _SortKey.points:
-        list.sort((a, b) => b.points.compareTo(a.points));
+        list.sort((a, b) {
+          final bPoints = calculateClassificationPoints(
+            wins: b.wins,
+            ties: b.ties,
+          );
+          final aPoints = calculateClassificationPoints(
+            wins: a.wins,
+            ties: a.ties,
+          );
+          final comparison = bPoints.compareTo(aPoints);
+          if (comparison != 0) return comparison;
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        });
       case _SortKey.winRate:
         list.sort((a, b) =>
             _normalizeWR(b.winRate).compareTo(_normalizeWR(a.winRate)));
       case _SortKey.wins:
-        list.sort((a, b) => b.wins.compareTo(a.wins));
+        compareMetric((p) => countMetric(p, p.wins));
       case _SortKey.games:
         list.sort((a, b) => b.gamesPlayed.compareTo(a.gamesPlayed));
       case _SortKey.mvps:
-        list.sort((a, b) => b.mvps.compareTo(a.mvps));
+        compareMetric((p) => countMetric(p, p.mvps));
       case _SortKey.mvpVotes:
-        list.sort((a, b) => b.mvpVotes.compareTo(a.mvpVotes));
+        compareMetric((p) => countMetric(p, p.mvpVotes));
       case _SortKey.goals:
-        list.sort((a, b) => b.goals.compareTo(a.goals));
+        compareMetric((p) => countMetric(p, p.goals));
       case _SortKey.assists:
-        list.sort((a, b) => b.assists.compareTo(a.assists));
+        compareMetric((p) => countMetric(p, p.assists));
       case _SortKey.ownGoals:
-        list.sort((a, b) => b.ownGoals.compareTo(a.ownGoals));
+        compareMetric((p) => countMetric(p, p.ownGoals));
       case _SortKey.name:
         list.sort((a, b) => a.name.compareTo(b.name));
     }
@@ -184,15 +324,19 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
       if (playersAsync.isLoading) {
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       }
-      return Scaffold(
-        body: const Column(
+      return const Scaffold(
+        body: Column(
           children: [
             AppPageHeader(
               title: 'Estatísticas',
               subtitle: 'Desempenho dos jogadores da patota',
               icon: Icons.bar_chart_rounded,
             ),
-            Expanded(child: _NoGroupState()),
+            Expanded(
+              child: NoActiveGroupView(
+                message: 'Selecione uma patota para ver as estatísticas.',
+              ),
+            ),
           ],
         ),
       );
@@ -319,8 +463,16 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
       subtitle = 'Carregando...';
     } else {
       subtitle = '$playerCount jogadores';
-      if (finalizedCount > 0) subtitle += ' · $finalizedCount finalizadas';
-      if (consideredCount > 0) subtitle += ' · $consideredCount consideradas';
+      if (consideredCount > 0 && consideredCount == finalizedCount) {
+        subtitle += ' · $consideredCount partidas analisadas';
+      } else {
+        if (finalizedCount > 0) {
+          subtitle += ' · $finalizedCount partidas finalizadas';
+        }
+        if (consideredCount > 0) {
+          subtitle += ' · $consideredCount usadas no ranking';
+        }
+      }
     }
 
     return AppPageHeader(
@@ -366,7 +518,6 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
       ),
     );
   }
-
 }
 
 // ── Rankings content ──────────────────────────────────────────────────────────
@@ -400,6 +551,7 @@ class _RankingsContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final globalSynergy = _buildGlobalSynergy(report.players);
+    final classificationRanks = _ClassificationRanks(report.players);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -423,13 +575,38 @@ class _RankingsContent extends StatelessWidget {
                     children: [
                       _searchField(isDark, searchCtrl, onSearch),
                       const SizedBox(height: 8),
-                      _sortChips(
+                      _sortSelector(
                         isDark,
                         sortKey,
-                        icons,
                         onSort,
                         classificationMode: classificationMode,
                       ),
+                      if (classificationMode) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline_rounded,
+                              size: 14,
+                              color: isDark
+                                  ? AppColors.slate400
+                                  : AppColors.slate500,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Vitória: 3 pontos · Empate: 1 · Derrota: 0',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: isDark
+                                      ? AppColors.slate400
+                                      : AppColors.slate500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -450,13 +627,17 @@ class _RankingsContent extends StatelessWidget {
                   )
                 else
                   ...sorted.asMap().entries.map((e) => _RankingListItem(
-                        rank:
-                            classificationMode && e.value.classificationRank > 0
-                                ? e.value.classificationRank
-                                : e.key + 1,
+                        rank: classificationMode
+                            ? classificationRanks.rank(
+                                e.value,
+                                _classificationMetricFor(sortKey),
+                              )
+                            : e.key + 1,
                         player: e.value,
                         icons: icons,
+                        sortKey: sortKey,
                         classificationMode: classificationMode,
+                        classificationRanks: classificationRanks,
                         isDark: isDark,
                         onTap: () => onPlayerTap(e.value.playerId),
                       )),
@@ -835,7 +1016,9 @@ class _RankingListItem extends StatelessWidget {
   final int rank;
   final PlayerVisualStatsItem player;
   final GroupIcons icons;
+  final _SortKey sortKey;
   final bool classificationMode;
+  final _ClassificationRanks classificationRanks;
   final bool isDark;
   final VoidCallback onTap;
 
@@ -843,21 +1026,17 @@ class _RankingListItem extends StatelessWidget {
     required this.rank,
     required this.player,
     required this.icons,
+    required this.sortKey,
     required this.classificationMode,
+    required this.classificationRanks,
     required this.isDark,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final wr = _normalizeWR(player.winRate);
-    final rankIcon = rank == 1
-        ? icons.rank1
-        : rank == 2
-            ? icons.rank2
-            : rank == 3
-                ? icons.rank3
-                : null;
+    final effectiveSortKey = classificationMode ? _SortKey.points : sortKey;
+    final metricColor = _sortMetricColor(effectiveSortKey, player, isDark);
 
     return InkWell(
       onTap: onTap,
@@ -870,98 +1049,193 @@ class _RankingListItem extends StatelessWidget {
                     color: isDark ? AppColors.slate700 : AppColors.slate100,
                     width: 0.5)),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Rank number
-              SizedBox(
-                width: 22,
-                child: Text(
-                  '$rank',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? AppColors.slate500 : AppColors.slate400,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              // Medal (top 3) or blank space
-              SizedBox(
-                width: 18,
-                child: rankIcon == null
-                    ? null
-                    : renderGroupIcon(rankIcon, size: 13),
-              ),
-              const SizedBox(width: 6),
-              // Name + inline stats
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      renderGroupIcon(
-                        player.isGoalkeeper ? icons.goalkeeper : icons.player,
-                        size: 11,
-                        color: isDark ? AppColors.slate400 : AppColors.slate500,
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: rank <= 3
+                          ? AppColors.accent
+                              .withValues(alpha: isDark ? 0.18 : 0.10)
+                          : (isDark ? AppColors.slate800 : AppColors.slate50),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '$rankº',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: rank <= 3
+                            ? AppColors.accent
+                            : (isDark
+                                ? AppColors.slate400
+                                : AppColors.slate500),
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
-                      const SizedBox(width: 3),
-                      Flexible(
-                          child: Text(
-                        player.name,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: isDark ? AppColors.onDark : AppColors.slate900,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          player.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color:
+                                isDark ? AppColors.onDark : AppColors.slate900,
+                          ),
                         ),
-                      )),
-                      if (player.mvps > 0) ...[
-                        const SizedBox(width: 4),
-                        renderGroupIcon(icons.mvp,
-                            size: 11, color: AppColors.warning),
-                      ],
-                      if (!player.isActive) ...[
-                        const SizedBox(width: 4),
-                        Text('inativo',
-                            style: TextStyle(
-                                fontSize: 9,
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            renderGroupIcon(
+                              player.isGoalkeeper
+                                  ? icons.goalkeeper
+                                  : icons.player,
+                              size: 11,
+                              color: isDark
+                                  ? AppColors.slate400
+                                  : AppColors.slate500,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              player.isGoalkeeper ? 'Goleiro' : 'Jogador',
+                              style: TextStyle(
+                                fontSize: 10,
                                 color: isDark
-                                    ? AppColors.slate500
-                                    : AppColors.slate400)),
+                                    ? AppColors.slate400
+                                    : AppColors.slate500,
+                              ),
+                            ),
+                            if (!player.isActive) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                'Inativo',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: isDark
+                                      ? AppColors.slate500
+                                      : AppColors.slate400,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ],
-                    ]),
-                    const SizedBox(height: 2),
-                    _InlineStats(
-                      player: player,
-                      icons: icons,
+                    ),
+                  ),
+                  if (classificationMode) ...[
+                    const SizedBox(width: 8),
+                    _ClassificationPointsSummary(
+                      points: calculateClassificationPoints(
+                        wins: player.wins,
+                        ties: player.ties,
+                      ),
                       isDark: isDark,
-                      classificationMode: classificationMode,
+                    ),
+                  ] else ...[
+                    const SizedBox(width: 8),
+                    _SelectedSortMetric(
+                      player: player,
+                      sortKey: effectiveSortKey,
+                      isDark: isDark,
+                      accent: metricColor,
                     ),
                   ],
-                ),
+                ],
               ),
-              const SizedBox(width: 8),
-              // WR bar or points
-              classificationMode
-                  ? SizedBox(
-                      width: 52,
-                      child: Text(
-                        '${player.points} pts',
-                        textAlign: TextAlign.right,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w900,
-                          color: isDark ? AppColors.onDark : AppColors.slate900,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.slate900 : AppColors.slate50,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: classificationMode
+                    ? _ClassificationMetricsGrid(
+                        player: player,
+                        ranks: classificationRanks,
+                        isDark: isDark,
+                      )
+                    : Column(
+                        children: [
+                          Row(
+                            children: [
+                              _RankingMetric(
+                                label: 'Jogos',
+                                value: player.gamesPlayed,
+                                isDark: isDark,
+                              ),
+                              _RankingMetric(
+                                label: 'Vitórias',
+                                value: player.wins,
+                                isDark: isDark,
+                                valueColor: AppColors.primaryPressed,
+                              ),
+                              _RankingMetric(
+                                label: 'Empates',
+                                value: player.ties,
+                                isDark: isDark,
+                              ),
+                              _RankingMetric(
+                                label: 'Derrotas',
+                                value: player.losses,
+                                isDark: isDark,
+                                valueColor: AppColors.prototypeDanger,
+                              ),
+                            ],
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Divider(
+                              height: 1,
+                              color: isDark
+                                  ? AppColors.slate700
+                                  : AppColors.slate200,
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              _RankingMetric(
+                                label: 'Gols',
+                                value: player.goals,
+                                isDark: isDark,
+                              ),
+                              _RankingMetric(
+                                label: 'Assistências',
+                                value: player.assists,
+                                isDark: isDark,
+                              ),
+                              _RankingMetric(
+                                label: 'MVPs',
+                                value: player.mvps,
+                                isDark: isDark,
+                                valueColor: AppColors.warning,
+                              ),
+                              _RankingMetric(
+                                label: 'Gols contra',
+                                value: player.ownGoals,
+                                isDark: isDark,
+                                valueColor: player.ownGoals > 0
+                                    ? AppColors.prototypeDanger
+                                    : null,
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                    )
-                  : SizedBox(
-                      width: 90, child: _WRBar(value: wr, isDark: isDark)),
+              ),
             ],
           ),
         ),
@@ -970,126 +1244,290 @@ class _RankingListItem extends StatelessWidget {
   }
 }
 
-class _InlineStats extends StatelessWidget {
-  final PlayerVisualStatsItem player;
-  final GroupIcons icons;
+class _ClassificationPointsSummary extends StatelessWidget {
+  final int points;
   final bool isDark;
-  final bool classificationMode;
 
-  const _InlineStats({
-    required this.player,
-    required this.icons,
+  const _ClassificationPointsSummary({
+    required this.points,
     required this.isDark,
-    required this.classificationMode,
   });
 
   @override
   Widget build(BuildContext context) {
-    final dim = isDark ? AppColors.slate300 : AppColors.slate600;
-    return Wrap(
-      spacing: 7,
-      runSpacing: 3,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        RichText(
-          text: TextSpan(
+    return SizedBox(
+      width: 58,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            '$points',
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              color: AppColors.accent,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+          Text(
+            'Pontos',
             style: TextStyle(
-              fontSize: 10,
-              color: dim,
+              fontSize: 9,
+              color: isDark ? AppColors.slate400 : AppColors.slate500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SelectedSortMetric extends StatelessWidget {
+  final PlayerVisualStatsItem player;
+  final _SortKey sortKey;
+  final bool isDark;
+  final Color accent;
+  final bool perMatchMode;
+
+  const _SelectedSortMetric({
+    required this.player,
+    required this.sortKey,
+    required this.isDark,
+    required this.accent,
+    this.perMatchMode = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    String countValue(int value) =>
+        perMatchMode ? _perGameText(value, player.gamesPlayed) : '$value';
+
+    final value = switch (sortKey) {
+      _SortKey.points => '${calculateClassificationPoints(
+          wins: player.wins,
+          ties: player.ties,
+        )}',
+      _SortKey.winRate => _pct(_normalizeWR(player.winRate)),
+      _SortKey.wins => countValue(player.wins),
+      _SortKey.games => '${player.gamesPlayed}',
+      _SortKey.mvps => countValue(player.mvps),
+      _SortKey.mvpVotes => countValue(player.mvpVotes),
+      _SortKey.goals => countValue(player.goals),
+      _SortKey.assists => countValue(player.assists),
+      _SortKey.ownGoals => countValue(player.ownGoals),
+      _SortKey.name => 'A–Z',
+    };
+
+    return SizedBox(
+      width: perMatchMode ? 98 : 86,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              color: sortKey == _SortKey.name
+                  ? (isDark ? AppColors.slate200 : AppColors.slate800)
+                  : accent,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
-            children: [
-              TextSpan(text: '${player.gamesPlayed}j '),
-              TextSpan(
-                text: '${player.wins}V',
-                style: const TextStyle(
-                  color: AppColors.primaryPressed,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              TextSpan(text: ' ${player.ties}E '),
-              TextSpan(
-                text: '${player.losses}D',
-                style: const TextStyle(
-                  color: AppColors.prototypeDanger,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
           ),
-        ),
-        if (classificationMode) ...[
-          _InlineIconStat(
-            icon: icons.goal,
-            value: _rankText(player.goalsRank),
-            color: dim,
-          ),
-          _InlineIconStat(
-            icon: icons.assist,
-            value: _rankText(player.assistsRank),
-            color: dim,
-          ),
-          _InlineIconStat(
-            icon: icons.mvp,
-            value: _rankText(player.mvpsRank),
-            color: dim,
-          ),
-          _InlineIconStat(
-            icon: icons.ownGoal,
-            value: player.ownGoals > 0 ? _rankText(player.ownGoalsRank) : '—',
-            color: dim,
-          ),
-        ] else ...[
-          if (player.mvps > 0)
-            _InlineIconStat(
-              icon: icons.mvp,
-              value: '${player.mvps}',
-              color: dim,
+          Text(
+            sortKey.label(perMatch: perMatchMode),
+            maxLines: perMatchMode ? 3 : 2,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontSize: 9,
+              height: 1.15,
+              color: isDark ? AppColors.slate400 : AppColors.slate500,
             ),
-          if (player.goals > 0)
-            _InlineIconStat(
-              icon: icons.goal,
-              value: '${player.goals}',
-              color: dim,
-            ),
-          if (player.assists > 0)
-            _InlineIconStat(
-              icon: icons.assist,
-              value: '${player.assists}',
-              color: dim,
-            ),
-          if (player.ownGoals > 0)
-            _InlineIconStat(
-              icon: icons.ownGoal,
-              value: '${player.ownGoals}',
-              color: AppColors.prototypeDanger,
-            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _RankingMetric extends StatelessWidget {
+  final String label;
+  final int value;
+  final bool isDark;
+  final Color? valueColor;
+
+  const _RankingMetric({
+    required this.label,
+    required this.value,
+    required this.isDark,
+    this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            '$value',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: valueColor ??
+                  (isDark ? AppColors.slate100 : AppColors.slate900),
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 8.5,
+              color: isDark ? AppColors.slate400 : AppColors.slate500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ClassificationMetricsGrid extends StatelessWidget {
+  final PlayerVisualStatsItem player;
+  final _ClassificationRanks ranks;
+  final bool isDark;
+
+  const _ClassificationMetricsGrid({
+    required this.player,
+    required this.ranks,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Widget divider() => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Divider(
+            height: 1,
+            color: isDark ? AppColors.slate700 : AppColors.slate200,
+          ),
+        );
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            _RankingPositionMetric(
+              label: 'Jogos',
+              position: ranks.text(player, _ClassificationMetric.games),
+              isDark: isDark,
+            ),
+            _RankingPositionMetric(
+              label: 'Vitórias',
+              position: ranks.text(player, _ClassificationMetric.wins),
+              isDark: isDark,
+              valueColor: AppColors.primaryPressed,
+            ),
+            _RankingPositionMetric(
+              label: 'Empates',
+              position: ranks.text(player, _ClassificationMetric.ties),
+              isDark: isDark,
+            ),
+          ],
+        ),
+        divider(),
+        Row(
+          children: [
+            _RankingPositionMetric(
+              label: 'Derrotas',
+              position: ranks.text(player, _ClassificationMetric.losses),
+              isDark: isDark,
+              valueColor: AppColors.prototypeDanger,
+            ),
+            _RankingPositionMetric(
+              label: 'Gols',
+              position: ranks.text(player, _ClassificationMetric.goals),
+              isDark: isDark,
+            ),
+            _RankingPositionMetric(
+              label: 'Assistências',
+              position: ranks.text(player, _ClassificationMetric.assists),
+              isDark: isDark,
+            ),
+          ],
+        ),
+        divider(),
+        Row(
+          children: [
+            _RankingPositionMetric(
+              label: 'MVPs',
+              position: ranks.text(player, _ClassificationMetric.mvps),
+              isDark: isDark,
+              valueColor: AppColors.warning,
+            ),
+            _RankingPositionMetric(
+              label: 'Votos MVP',
+              position: ranks.text(player, _ClassificationMetric.mvpVotes),
+              isDark: isDark,
+            ),
+            _RankingPositionMetric(
+              label: 'Gols contra',
+              position: player.ownGoals > 0
+                  ? ranks.text(player, _ClassificationMetric.ownGoals)
+                  : '—',
+              isDark: isDark,
+              valueColor:
+                  player.ownGoals > 0 ? AppColors.prototypeDanger : null,
+            ),
+          ],
+        ),
       ],
     );
   }
 }
 
-class _InlineIconStat extends StatelessWidget {
-  final String icon;
-  final String value;
-  final Color color;
+class _RankingPositionMetric extends StatelessWidget {
+  final String label;
+  final String position;
+  final bool isDark;
+  final Color? valueColor;
 
-  const _InlineIconStat({
-    required this.icon,
-    required this.value,
-    required this.color,
+  const _RankingPositionMetric({
+    required this.label,
+    required this.position,
+    required this.isDark,
+    this.valueColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        renderGroupIcon(icon, size: 9, color: color),
-        const SizedBox(width: 2),
-        Text(value, style: TextStyle(fontSize: 10, color: color)),
-      ],
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            position,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: valueColor ??
+                  (isDark ? AppColors.slate100 : AppColors.slate900),
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 9,
+              color: isDark ? AppColors.slate400 : AppColors.slate500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1145,12 +1583,12 @@ class _PlayersContent extends StatelessWidget {
                 children: [
                   _searchField(isDark, searchCtrl, onSearch),
                   const SizedBox(height: 8),
-                  _sortChips(
+                  _sortSelector(
                     isDark,
                     sortKey,
-                    icons,
                     onSort,
                     classificationMode: false,
+                    perMatchMode: true,
                   ),
                 ],
               ),
@@ -1173,6 +1611,7 @@ class _PlayersContent extends StatelessWidget {
               ...sorted.map((p) => _PlayerListItem(
                     player: p,
                     icons: icons,
+                    sortKey: sortKey,
                     isDark: isDark,
                     onTap: () => _showDetail(context, p),
                   )),
@@ -1260,21 +1699,20 @@ class _PlayerDetailSheetState extends State<_PlayerDetailSheet> {
 class _PlayerListItem extends StatelessWidget {
   final PlayerVisualStatsItem player;
   final GroupIcons icons;
+  final _SortKey sortKey;
   final bool isDark;
   final VoidCallback onTap;
 
   const _PlayerListItem({
     required this.player,
     required this.icons,
+    required this.sortKey,
     required this.isDark,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final wr = _normalizeWR(player.winRate);
-    final wrCol = _wrColor(wr);
-
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -1323,7 +1761,9 @@ class _PlayerListItem extends StatelessWidget {
                   )),
                 ]),
                 Text(
-                  '${player.gamesPlayed}j · ${player.wins}V${player.ties}E${player.losses}D',
+                  '${player.gamesPlayed} jogos · ${player.wins} vitórias · '
+                  '${player.ties} empates · ${player.losses} derrotas',
+                  maxLines: 2,
                   style: TextStyle(
                       fontSize: 10,
                       color: isDark ? AppColors.slate500 : AppColors.slate400,
@@ -1331,20 +1771,13 @@ class _PlayerListItem extends StatelessWidget {
                 ),
               ],
             )),
-            // WR % + chevron
-            Row(mainAxisSize: MainAxisSize.min, children: [
-              Text(_pct(wr),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: wrCol,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  )),
-              const SizedBox(width: 4),
-              Icon(Icons.chevron_right_rounded,
-                  size: 16,
-                  color: isDark ? AppColors.slate600 : AppColors.slate300),
-            ]),
+            _SelectedSortMetric(
+              player: player,
+              sortKey: sortKey,
+              isDark: isDark,
+              accent: _sortMetricColor(sortKey, player, isDark),
+              perMatchMode: true,
+            ),
           ],
         ),
       ),
@@ -1969,62 +2402,95 @@ Widget _searchField(bool isDark, TextEditingController ctrl,
       ),
     );
 
-Widget _sortChips(
+Widget _sortSelector(
   bool isDark,
   _SortKey current,
-  GroupIcons icons,
   ValueChanged<_SortKey> onSort, {
   required bool classificationMode,
-}) =>
-    Wrap(
-      spacing: 5,
-      runSpacing: 6,
-      children: _SortKey.values
-          .where((k) => classificationMode || k != _SortKey.points)
-          .map((k) {
-        final active = k == current;
-        Widget label;
-        switch (k) {
-          case _SortKey.goals:
-            label = renderGroupIcon(icons.goal, size: 12);
-            break;
-          case _SortKey.assists:
-            label = renderGroupIcon(icons.assist, size: 12);
-            break;
-          case _SortKey.ownGoals:
-            label = renderGroupIcon(icons.ownGoal, size: 12);
-            break;
-          default:
-            label = Text(k.shortLabel,
-                style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: active
-                        ? (isDark ? AppColors.slate900 : AppColors.onDark)
-                        : (isDark ? AppColors.slate400 : AppColors.slate600)));
-        }
-        return GestureDetector(
-          onTap: () => onSort(k),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: active
-                  ? (isDark ? AppColors.onDark : AppColors.slate900)
-                  : (isDark ? AppColors.slate800 : AppColors.onDark),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: active
-                    ? (isDark ? AppColors.onDark : AppColors.slate900)
-                    : (isDark ? AppColors.slate700 : AppColors.slate200),
-                width: active ? 1.5 : 1,
-              ),
-            ),
-            child: label,
+  bool perMatchMode = false,
+}) {
+  final options = classificationMode
+      ? <_SortKey>[
+          _SortKey.points,
+          _SortKey.winRate,
+          _SortKey.wins,
+          _SortKey.games,
+          _SortKey.mvps,
+          _SortKey.mvpVotes,
+          _SortKey.goals,
+          _SortKey.assists,
+          _SortKey.ownGoals,
+        ]
+      : _SortKey.values.where((key) => key != _SortKey.points).toList();
+  final selected = options.contains(current) ? current : options.first;
+
+  return Container(
+    height: 48,
+    padding: const EdgeInsets.symmetric(horizontal: 12),
+    decoration: BoxDecoration(
+      color: isDark ? AppColors.slate800 : AppColors.onDark,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(
+        color: isDark ? AppColors.slate700 : AppColors.slate200,
+      ),
+    ),
+    child: Row(
+      children: [
+        Icon(
+          Icons.swap_vert_rounded,
+          size: 18,
+          color: isDark ? AppColors.slate400 : AppColors.slate500,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'Ordenar por',
+          style: TextStyle(
+            fontSize: 11,
+            color: isDark ? AppColors.slate400 : AppColors.slate500,
           ),
-        );
-      }).toList(),
-    );
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<_SortKey>(
+              value: selected,
+              isExpanded: true,
+              alignment: Alignment.centerRight,
+              borderRadius: BorderRadius.circular(12),
+              dropdownColor: isDark ? AppColors.slate800 : AppColors.onDark,
+              icon: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: isDark ? AppColors.slate300 : AppColors.slate700,
+              ),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isDark ? AppColors.slate100 : AppColors.slate900,
+              ),
+              items: options
+                  .map(
+                    (key) => DropdownMenuItem<_SortKey>(
+                      value: key,
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        key.label(perMatch: perMatchMode),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) onSort(value);
+              },
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
 
 // ── Card wrapper ──────────────────────────────────────────────────────────────
 
@@ -2144,20 +2610,5 @@ class _ErrorState extends StatelessWidget {
               style: const TextStyle(
                   fontSize: 13, color: AppColors.prototypeDanger)),
         ),
-      );
-}
-
-class _NoGroupState extends StatelessWidget {
-  const _NoGroupState();
-
-  @override
-  Widget build(BuildContext context) => const Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.bar_chart_rounded, size: 48, color: AppColors.slate500),
-          SizedBox(height: 12),
-          Text('Crie ou entre em um grupo',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.slate400, fontSize: 13)),
-        ]),
       );
 }

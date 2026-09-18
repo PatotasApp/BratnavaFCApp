@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/realtime/realtime_provider.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/datasources/polls_remote_datasource.dart';
@@ -181,7 +182,7 @@ class _PollsPageState extends ConsumerState<PollsPage> {
       );
     }
 
-    if (groupId == null) {
+    if (groupId == null || groupId.isEmpty) {
       // Spinner enquanto myPlayersProvider ainda carrega
       if (ref.watch(myPlayersProvider).isLoading) {
         return Scaffold(
@@ -191,7 +192,23 @@ class _PollsPageState extends ConsumerState<PollsPage> {
       }
       return Scaffold(
         backgroundColor: isDark ? AppColors.slate950 : AppColors.slate50,
-        body: _NoGroup(isDark: isDark),
+        body: Column(
+          children: [
+            _PollsTopHeader(
+              isEvents: _activeTab == _Tab.events,
+              isAdmin: false,
+              count: 0,
+              onCreateTap: _openCreate,
+            ),
+            Expanded(
+              child: NoActiveGroupView(
+                message: _activeTab == _Tab.events
+                    ? 'Selecione uma patota para ver os eventos.'
+                    : 'Selecione uma patota para ver as votações.',
+              ),
+            ),
+          ],
+        ),
       );
     }
 
@@ -1072,28 +1089,6 @@ class _GroupCardState extends ConsumerState<_GroupCard> {
 }
 
 // ── States ─────────────────────────────────────────────────────────────────────
-
-class _NoGroup extends StatelessWidget {
-  final bool isDark;
-  const _NoGroup({required this.isDark});
-
-  @override
-  Widget build(BuildContext context) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.how_to_vote_outlined,
-                size: 40,
-                color: isDark ? AppColors.slate700 : AppColors.slate200),
-            const SizedBox(height: 12),
-            Text('Crie ou entre em um grupo',
-                style: TextStyle(
-                    fontSize: 14,
-                    color: isDark ? AppColors.slate500 : AppColors.slate400)),
-          ],
-        ),
-      );
-}
 
 class _Empty extends StatelessWidget {
   final bool isEvents;

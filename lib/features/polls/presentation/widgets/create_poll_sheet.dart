@@ -9,6 +9,15 @@ import '../../domain/entities/poll_detail.dart';
 import '../providers/polls_provider.dart';
 import 'poll_form_widgets.dart';
 
+/// Opção montada localmente enquanto a votação ainda não foi criada.
+/// Nada é enviado ao backend até o usuário confirmar em "Criar Votação".
+class _DraftOption {
+  final String text;
+  final String? description;
+  final String? imageB64;
+  const _DraftOption(this.text, this.description, this.imageB64);
+}
+
 class CreatePollSheet extends ConsumerStatefulWidget {
   final String groupId;
   final ValueChanged<PollDetail> onCreated;
@@ -31,15 +40,12 @@ class _CreatePollSheetState extends ConsumerState<CreatePollSheet> {
   final _deadlineDateCtrl = TextEditingController();
   final _deadlineTimeCtrl = TextEditingController();
 
-  // Step 2 — Options
-  late String _pollId; // set after poll created
-  late PollDetail _poll;
-  bool _pollCreated = false;
-
+  // Step 2 — Options (mantidas localmente até a criação final)
+  final List<_DraftOption> _options = [];
   final _optTextCtrl = TextEditingController();
   final _optDescCtrl = TextEditingController();
   String? _optImageB64;
-  bool _savingOpt = false;
+  bool _submitting = false;
 
   @override
   void dispose() {
@@ -54,37 +60,14 @@ class _CreatePollSheetState extends ConsumerState<CreatePollSheet> {
 
   PollsRemoteDataSource get _ds => ref.read(pollsDsProvider);
 
-  Future<void> _createPollAndNextStep() async {
+  // Apenas avança de etapa — não cria nada no backend ainda.
+  void _goToOptions() {
     if (_titleCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Informe o título.')));
       return;
     }
-    try {
-      final poll = await _ds.createPoll(widget.groupId, {
-        'title': _titleCtrl.text.trim(),
-        'description':
-            _descCtrl.text.trim().isNotEmpty ? _descCtrl.text.trim() : null,
-        'allowMultipleVotes': _multipleVotes,
-        'showVotes': _showVotes,
-        'deadlineDate':
-            _deadlineDateCtrl.text.isNotEmpty ? _deadlineDateCtrl.text : null,
-        'deadlineTime':
-            _deadlineTimeCtrl.text.isNotEmpty ? _deadlineTimeCtrl.text : null,
-      });
-      setState(() {
-        _poll = poll;
-        _pollId = poll.id;
-        _pollCreated = true;
-        _step = 1;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Erro ao criar: $e'),
-            backgroundColor: AppColors.rose500));
-      }
-    }
+    setState(() => _step = 1);
   }
 
   Future<void> _pickImage() async {
@@ -116,37 +99,60 @@ class _CreatePollSheetState extends ConsumerState<CreatePollSheet> {
         _optImageB64 = 'data:image/jpeg;base64,${base64Encode(compressed)}');
   }
 
-  Future<void> _addOption() async {
+  void _addOptionLocal() {
     if (_optTextCtrl.text.trim().isEmpty) return;
-    setState(() => _savingOpt = true);
-    try {
-      final updated = await _ds.addOption(widget.groupId, _pollId, {
-        'text': _optTextCtrl.text.trim(),
-        'description': _optDescCtrl.text.trim().isNotEmpty
-            ? _optDescCtrl.text.trim()
-            : null,
-        'imageUrl': _optImageB64,
-      });
-      setState(() {
-        _poll = updated;
-        _optTextCtrl.clear();
-        _optDescCtrl.clear();
-        _optImageB64 = null;
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Erro: $e'), backgroundColor: AppColors.rose500));
-      }
-    } finally {
-      if (mounted) setState(() => _savingOpt = false);
-    }
+    setState(() {
+      _options.add(_DraftOption(
+        _optTextCtrl.text.trim(),
+        _optDescCtrl.text.trim().isNotEmpty ? _optDescCtrl.text.trim() : null,
+        _optImageB64,
+      ));
+      _optTextCtrl.clear();
+      _optDescCtrl.clear();
+      _optImageB64 = null;
+    });
   }
 
-  void _finish() {
-    if (!_pollCreated) return;
-    Navigator.of(context).pop();
-    widget.onCreated(_poll);
+  void _removeOptionLocal(int index) {
+    setState(() => _options.removeAt(index));
+  }
+
+  // Cria a votação UMA única vez, com todas as opções, ao confirmar.
+  Future<void> _submit() async {
+    if (_options.isEmpty || _submitting) return;
+    setState(() => _submitting = true);
+    try {
+      final poll = await _ds.createPoll(widget.groupId, {
+        'title': _titleCtrl.text.trim(),
+        'description':
+            _descCtrl.text.trim().isNotEmpty ? _descCtrl.text.trim() : null,
+        'allowMultipleVotes': _multipleVotes,
+        'showVotes': _showVotes,
+        'deadlineDate':
+            _deadlineDateCtrl.text.isNotEmpty ? _deadlineDateCtrl.text : null,
+        'deadlineTime':
+            _deadlineTimeCtrl.text.isNotEmpty ? _deadlineTimeCtrl.text : null,
+      });
+      for (final opt in _options) {
+        await _ds.addOption(widget.groupId, poll.id, {
+          'text': opt.text,
+          'description': opt.description,
+          'images': opt.imageB64 != null ? [opt.imageB64] : <String>[],
+        });
+      }
+      // Busca o poll completo (com as opções) para entregar ao caller.
+      final full = await _ds.getPoll(widget.groupId, poll.id);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      widget.onCreated(full);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _submitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Erro ao criar: $e'),
+            backgroundColor: AppColors.rose500));
+      }
+    }
   }
 
   @override
@@ -239,20 +245,21 @@ class _CreatePollSheetState extends ConsumerState<CreatePollSheet> {
                       onMultipleChanged: (v) =>
                           setState(() => _multipleVotes = v),
                       onShowVotesChanged: (v) => setState(() => _showVotes = v),
-                      onNext: _createPollAndNextStep,
+                      onNext: _goToOptions,
                     )
                   : _Step2(
                       controller: controller,
-                      poll: _poll,
+                      options: _options,
                       optTextCtrl: _optTextCtrl,
                       optDescCtrl: _optDescCtrl,
                       optImageB64: _optImageB64,
-                      saving: _savingOpt,
+                      submitting: _submitting,
                       isDark: isDark,
                       onPickImage: _pickImage,
-                      onAddOption: _addOption,
+                      onAddOption: _addOptionLocal,
+                      onRemoveOption: _removeOptionLocal,
                       onBack: () => setState(() => _step = 0),
-                      onFinish: _finish,
+                      onSubmit: _submit,
                     ),
             ),
           ],
@@ -394,29 +401,31 @@ class _Step1 extends StatelessWidget {
 
 class _Step2 extends StatelessWidget {
   final ScrollController controller;
-  final PollDetail poll;
+  final List<_DraftOption> options;
   final TextEditingController optTextCtrl;
   final TextEditingController optDescCtrl;
   final String? optImageB64;
-  final bool saving;
+  final bool submitting;
   final bool isDark;
   final VoidCallback onPickImage;
   final VoidCallback onAddOption;
+  final ValueChanged<int> onRemoveOption;
   final VoidCallback onBack;
-  final VoidCallback onFinish;
+  final VoidCallback onSubmit;
 
   const _Step2({
     required this.controller,
-    required this.poll,
+    required this.options,
     required this.optTextCtrl,
     required this.optDescCtrl,
     required this.optImageB64,
-    required this.saving,
+    required this.submitting,
     required this.isDark,
     required this.onPickImage,
     required this.onAddOption,
+    required this.onRemoveOption,
     required this.onBack,
-    required this.onFinish,
+    required this.onSubmit,
   });
 
   @override
@@ -425,58 +434,69 @@ class _Step2 extends StatelessWidget {
       controller: controller,
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
       children: [
-        // Existing options
-        if (poll.options.isNotEmpty) ...[
-          Text('Opções adicionadas (${poll.options.length})',
+        // Existing options (local)
+        if (options.isNotEmpty) ...[
+          Text('Opções adicionadas (${options.length})',
               style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: isDark ? AppColors.slate300 : AppColors.slate600)),
           const SizedBox(height: 8),
-          ...poll.options.map((opt) => Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: isDark ? AppColors.slate800 : AppColors.slate50,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                      color: isDark ? AppColors.slate700 : AppColors.slate200),
-                ),
-                child: Row(children: [
-                  if (opt.imageUrl != null) ...[
-                    ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: Image.network(opt.imageUrl!,
-                            width: 36,
-                            height: 36,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
-                                const Icon(Icons.image_outlined, size: 36))),
-                    const SizedBox(width: 8),
-                  ],
-                  Expanded(
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                        Text(opt.text,
+          ...options.asMap().entries.map((entry) {
+            final i = entry.key;
+            final opt = entry.value;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.slate800 : AppColors.slate50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: isDark ? AppColors.slate700 : AppColors.slate200),
+              ),
+              child: Row(children: [
+                if (opt.imageB64 != null) ...[
+                  ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.memory(
+                          base64Decode(opt.imageB64!.split(',').last),
+                          width: 36,
+                          height: 36,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              const Icon(Icons.image_outlined, size: 36))),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text(opt.text,
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: isDark
+                                  ? AppColors.onDark
+                                  : AppColors.slate900)),
+                      if (opt.description != null)
+                        Text(opt.description!,
                             style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
+                                fontSize: 11,
                                 color: isDark
-                                    ? AppColors.onDark
-                                    : AppColors.slate900)),
-                        if (opt.description != null)
-                          Text(opt.description!,
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: isDark
-                                      ? AppColors.slate400
-                                      : AppColors.slate500)),
-                      ])),
-                  const Icon(Icons.check_circle_outline,
-                      size: 16, color: AppColors.accent),
-                ]),
-              )),
+                                    ? AppColors.slate400
+                                    : AppColors.slate500)),
+                    ])),
+                IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 32),
+                    icon: const Icon(Icons.close,
+                        size: 16, color: AppColors.rose500),
+                    onPressed: submitting ? null : () => onRemoveOption(i)),
+              ]),
+            );
+          }),
           const Divider(height: 20),
         ],
 
@@ -537,7 +557,7 @@ class _Step2 extends StatelessWidget {
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
-            onPressed: saving ? null : onAddOption,
+            onPressed: submitting ? null : onAddOption,
             icon: const Icon(Icons.add, size: 16),
             label: const Text('Adicionar opção'),
           ),
@@ -546,16 +566,23 @@ class _Step2 extends StatelessWidget {
         Row(children: [
           Expanded(
               child: OutlinedButton(
-                  onPressed: onBack, child: const Text('Voltar'))),
+                  onPressed: submitting ? null : onBack,
+                  child: const Text('Voltar'))),
           const SizedBox(width: 12),
           Expanded(
             child: ElevatedButton(
-              onPressed: poll.options.isEmpty ? null : onFinish,
-              child: const Text('Criar Votação'),
+              onPressed: (options.isEmpty || submitting) ? null : onSubmit,
+              child: submitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.onDark))
+                  : const Text('Criar Votação'),
             ),
           ),
         ]),
-        if (poll.options.isEmpty)
+        if (options.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text('Adicione pelo menos uma opção para criar.',

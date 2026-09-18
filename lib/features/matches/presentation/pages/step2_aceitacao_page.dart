@@ -594,7 +594,6 @@ class _PlayerRow extends StatelessWidget {
                     photoUrl: photoUrl,
                     size: _avatarSize,
                     fit: BoxFit.cover,
-                    borderRadius: 0,
                   )
                 : Container(
                     width: _avatarSize,

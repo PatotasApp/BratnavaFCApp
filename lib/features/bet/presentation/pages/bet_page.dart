@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../widgets/current_bet_tab.dart';
@@ -42,20 +43,16 @@ class _BetPageState extends ConsumerState<BetPage>
     final groupId = account?.activeGroupId ?? activePlayer?.groupId ?? '';
 
     if (groupId.isEmpty) {
-      return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.sports_soccer_outlined,
-                  size: 44,
-                  color: isDark ? AppColors.slate700 : AppColors.slate200),
-              const SizedBox(height: 12),
-              Text('Crie ou entre em um grupo',
-                  style: TextStyle(
-                      color: isDark ? AppColors.slate500 : AppColors.slate400)),
-            ],
-          ),
+      return const Scaffold(
+        body: Column(
+          children: [
+            _BetHeader(),
+            Expanded(
+              child: NoActiveGroupView(
+                message: 'Selecione uma patota para acessar o Bet.',
+              ),
+            ),
+          ],
         ),
       );
     }

@@ -290,6 +290,12 @@ class _GroupsTab extends StatelessWidget {
                 ],
               ),
             ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: () => context.go('/app/groups?create=true'),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Nova patota'),
+          ),
         ],
       ),
     );

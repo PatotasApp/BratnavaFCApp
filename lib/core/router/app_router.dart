@@ -191,7 +191,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/app/groups',
-            builder: (_, __) => const GroupsPage(),
+            builder: (_, state) => GroupsPage(
+              openCreateSheet: state.uri.queryParameters['create'] == 'true',
+            ),
           ),
           GoRoute(
             path: '/app/history',

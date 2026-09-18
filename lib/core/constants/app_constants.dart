@@ -23,6 +23,22 @@ class AppConstants {
 
   static bool get isProduction => environmentName == 'production';
 
+  /// Rótulo curto do ambiente para o selo no topbar. Vazio em produção — lá o
+  /// app não deve ostentar nada; a ausência do selo já significa "produção".
+  /// Qualquer ambiente não-produção aparece para evitar mexer em dados reais
+  /// achando que é dev.
+  static String get environmentBadge {
+    if (isProduction) return '';
+    switch (environmentName) {
+      case 'development':
+        return 'DEV';
+      case '':
+        return 'SEM ENV';
+      default:
+        return environmentName.toUpperCase();
+    }
+  }
+
   static const String _apiUrl = String.fromEnvironment(
     'API_URL',
     defaultValue: '',

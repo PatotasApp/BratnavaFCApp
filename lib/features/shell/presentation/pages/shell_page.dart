@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -89,6 +90,7 @@ class _ShellPageState extends ConsumerState<ShellPage>
     // O refresh de token deixou de existir aqui: o SDK do Firebase renova o ID
     // token sozinho, e o interceptor pega o token válido a cada request.
 
+    final location = GoRouterState.of(context).uri.path;
     final selected = _selectedIndex(context);
     // Key forces full widget subtree recreation on account switch, clearing
     // any widget-local state (timers, refresh flags) from the previous account.
@@ -96,7 +98,24 @@ class _ShellPageState extends ConsumerState<ShellPage>
       accountStoreProvider.select((s) => s.account?.userId),
     );
 
-    return Scaffold(
+    // O back nativo do Android saía do app porque todas as telas navegam com
+    // `context.go` (substitui a pilha, então o navigator não tem o que "pop").
+    // Aqui: telas empilhadas (push) voltam normalmente; telas de aba voltam ao
+    // Dashboard; só no Dashboard o back encerra o app.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        final router = GoRouter.of(context);
+        if (router.canPop()) {
+          router.pop();
+        } else if (location != '/app') {
+          context.go('/app');
+        } else {
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
       appBar: const AppTopBar(),
       body: Column(
         children: [
@@ -120,6 +139,7 @@ class _ShellPageState extends ConsumerState<ShellPage>
             _openDrawer(context);
           }
         },
+      ),
       ),
     );
   }

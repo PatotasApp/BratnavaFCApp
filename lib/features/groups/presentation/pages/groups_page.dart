@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../../../core/api/api_response.dart';
 import '../../../../core/errors/app_exception.dart';
+import '../../../../core/home_widget/match_home_widget_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -203,7 +204,12 @@ final _dioProv = Provider<Dio>((ref) => ref.watch(dioProvider));
 // ─────────────────────────────────────────────────────────────────────────────
 
 class GroupsPage extends ConsumerStatefulWidget {
-  const GroupsPage({super.key});
+  final bool openCreateSheet;
+
+  const GroupsPage({
+    super.key,
+    this.openCreateSheet = false,
+  });
 
   @override
   ConsumerState<GroupsPage> createState() => _GroupsPageState();
@@ -417,6 +423,11 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
   @override
   void initState() {
     super.initState();
+    if (widget.openCreateSheet) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showCreateGroup();
+      });
+    }
     _loadMine().then((_) {
       _loadAdminGroups();
       if (_myGroups.length == 1) {
@@ -529,11 +540,75 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
 
   Future<void> _handleLeave() async {
     if (_activePlayerId.isEmpty) return;
+    final leavingGroupId = _expandedGroupId;
     try {
       await _dio.post(ApiConstants.playerLeaveGroup(_activePlayerId));
+      unawaited(MatchHomeWidgetService.clearActiveGroup());
+
+      // A saída já foi confirmada pelo servidor. Revoga imediatamente o
+      // contexto anterior para nenhuma tela continuar exibindo seus dados.
+      await ref.read(accountStoreProvider.notifier).patchActive(
+            (account) => account.copyWith(
+              clearActiveGroupId: true,
+              clearActivePlayerId: true,
+              activeGroupIsAdmin: false,
+              activeGroupIsFinanceiro: false,
+            ),
+          );
+      ref.read(activePlayerIdProvider.notifier).state = null;
+      ref.invalidate(myPlayersProvider);
+
+      if (mounted) {
+        setState(() {
+          _expandedGroupId = null;
+          _group = null;
+          _groupError = null;
+          _paymentMap = {};
+          if (leavingGroupId != null) {
+            _adminOnlyGroups.removeWhere(
+              (group) => _sameId(group['groupId'] ?? '', leavingGroupId),
+            );
+          }
+        });
+      }
+
       await _loadMine();
-      _reloadGroup();
-    } catch (_) {}
+      await _loadAdminGroups();
+
+      // Escolhe localmente a próxima patota para a troca não depender de uma
+      // segunda ida à API. A reconciliação abaixo confirma papéis e vínculos.
+      final nextGroup = _myGroups.firstOrNull;
+      if (nextGroup != null) {
+        final groupId = nextGroup['groupId']!;
+        final nextPlayer = _myPlayers
+            .where((player) => _sameId(player.groupId, groupId))
+            .firstOrNull;
+        await ref.read(authNotifierProvider.notifier).selectActiveGroup(
+              groupId: groupId,
+              playerId: nextPlayer?.playerId,
+            );
+      }
+
+      await ref.read(authNotifierProvider.notifier).refreshGroupMembership();
+      ref.invalidate(myPlayersProvider);
+
+      final selectedGroupId =
+          ref.read(accountStoreProvider).activeAccount?.activeGroupId;
+      if (selectedGroupId != null && selectedGroupId.isNotEmpty && mounted) {
+        await _openGroup(selectedGroupId);
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(extractDioError(
+              error,
+              'Não foi possível sair da patota.',
+            )),
+          ),
+        );
+      }
+    }
   }
 
   void _showCreateGroup() {
@@ -668,7 +743,15 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
         _isGroupAdmin(activeGroupId);
     final activeGroupName = _group?.name ??
         (_myGroups.isNotEmpty ? _myGroups.first['groupName'] : null);
-
+    final isCreator = _group?.createdByUserId == account?.userId;
+    final myPlayer = _myPlayerInExpanded;
+    final canLeave = !_groupLoading &&
+        _group != null &&
+        ((canConfigure && isCreator) ||
+            (!canConfigure &&
+                _activePlayerId.isNotEmpty &&
+                myPlayer != null &&
+                !myPlayer.isGuest));
     return SafeArea(
       bottom: false,
       child: Column(
@@ -676,9 +759,16 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
           _GroupsHeader(
             groupName: activeGroupName,
             logoUrl: _group?.logoUrl,
+            loading: _mineLoading || _groupLoading,
+            activePlayers: _activePlayers.length,
+            guestPlayers: _guestPlayers.length,
             onSettings: canConfigure && _myGroups.isNotEmpty
                 ? () => context.push('/app/settings')
                 : null,
+            onInvite: canConfigure && _group != null
+                ? () => _showInvite(activeGroupId)
+                : null,
+            onLeave: canLeave ? _showLeaveConfirm : null,
           ),
           Expanded(
             child: SingleChildScrollView(
@@ -759,102 +849,106 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _GradientCard(
-          dotPattern: true,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Protótipo: eyebrow "PATOTA ATIVA", nome grande e o avatar do
-              // grupo à DIREITA. Antes o avatar vinha à esquerda e faltava o
-              // rótulo, então a faixa não se lia como "esta é a patota ativa".
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'PATOTA ATIVA',
-                          style: TextStyle(
-                            fontSize: 11,
-                            height: 1.25,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: .77,
-                            color: AppColors.primaryHover,
+        Visibility(
+          visible: false,
+          maintainState: false,
+          child: _GradientCard(
+            dotPattern: true,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Protótipo: eyebrow "PATOTA ATIVA", nome grande e o avatar do
+                // grupo à DIREITA. Antes o avatar vinha à esquerda e faltava o
+                // rótulo, então a faixa não se lia como "esta é a patota ativa".
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'PATOTA ATIVA',
+                            style: TextStyle(
+                              fontSize: 11,
+                              height: 1.25,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: .77,
+                              color: AppColors.primaryHover,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          groupName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            color: AppColors.onDark,
-                            height: 1.2,
+                          const SizedBox(height: 5),
+                          Text(
+                            groupName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.onDark,
+                              height: 1.2,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _groupLoading
-                              ? 'Carregando...'
-                              : _group != null
-                                  ? '${_activePlayers.length} mensalista${_activePlayers.length != 1 ? 's' : ''} · ${_guestPlayers.length} convidado${_guestPlayers.length != 1 ? 's' : ''}'
-                                  : '',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              fontSize: 11, color: AppColors.darkTextSecondary),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  if (_groupLoading)
-                    const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.onDark70,
+                          const SizedBox(height: 2),
+                          Text(
+                            _groupLoading
+                                ? 'Carregando...'
+                                : _group != null
+                                    ? '${_activePlayers.length} mensalista${_activePlayers.length != 1 ? 's' : ''} · ${_guestPlayers.length} convidado${_guestPlayers.length != 1 ? 's' : ''}'
+                                    : '',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.darkTextSecondary),
+                          ),
+                        ],
                       ),
-                    )
-                  else if (_group?.logoUrl?.trim().isNotEmpty == true)
-                    AvatarWidget(
-                      name: groupName,
-                      photoUrl: _group!.logoUrl,
-                      size: 50,
-                      fit: BoxFit.cover,
-                      borderRadius: 16,
-                    )
-                  else
-                    _GroupAvatar(
-                      letter:
-                          groupName.isEmpty ? 'G' : groupName.characters.first,
-                      size: 50,
-                      radius: 16,
                     ),
-                ],
-              ),
-              if (!_groupLoading && _group != null) ...[
-                const SizedBox(height: 16),
-                _HeaderButtons(
-                  isAdminHere: isAdminHere,
-                  isCreator: isCreator,
-                  myPlayer: _myPlayerInExpanded,
-                  activePlayerId: _activePlayerId,
-                  onAddGuest: () => _showAddGuest(groupId),
-                  onInvite: () => _showInvite(groupId),
-                  onCreateGroup: _showCreateGroup,
-                  onLeave: _showLeaveConfirm,
+                    const SizedBox(width: 12),
+                    if (_groupLoading)
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.onDark70,
+                        ),
+                      )
+                    else if (_group?.logoUrl?.trim().isNotEmpty == true)
+                      AvatarWidget(
+                        name: groupName,
+                        photoUrl: _group!.logoUrl,
+                        size: 50,
+                        fit: BoxFit.cover,
+                        borderRadius: 16,
+                      )
+                    else
+                      _GroupAvatar(
+                        letter: groupName.isEmpty
+                            ? 'G'
+                            : groupName.characters.first,
+                        size: 50,
+                        radius: 16,
+                      ),
+                  ],
                 ),
+                if (!_groupLoading && _group != null) ...[
+                  const SizedBox(height: 16),
+                  _HeaderButtons(
+                    isAdminHere: isAdminHere,
+                    isCreator: isCreator,
+                    myPlayer: _myPlayerInExpanded,
+                    activePlayerId: _activePlayerId,
+                    onAddGuest: () => _showAddGuest(groupId),
+                    onInvite: () => _showInvite(groupId),
+                    onLeave: _showLeaveConfirm,
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
-        const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
             color: isDark ? AppColors.darkCard : AppColors.onDark,
@@ -1010,26 +1104,39 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
 class _GroupsHeader extends StatelessWidget {
   final String? groupName;
   final String? logoUrl;
+  final bool loading;
+  final int activePlayers;
+  final int guestPlayers;
   final VoidCallback? onSettings;
+  final VoidCallback? onInvite;
+  final VoidCallback? onLeave;
 
   const _GroupsHeader({
     required this.groupName,
     required this.logoUrl,
+    required this.loading,
+    required this.activePlayers,
+    required this.guestPlayers,
     required this.onSettings,
+    required this.onInvite,
+    required this.onLeave,
   });
 
   @override
   Widget build(BuildContext context) {
     return AppPageHeader.main(
       title: 'Minha patota',
-      subtitle: groupName?.isNotEmpty == true
-          ? groupName!
-          : 'Organize seus jogadores',
       icon: Icons.groups_outlined,
+      subtitle: loading
+          ? 'Carregando dados da patota...'
+          : groupName?.trim().isNotEmpty == true
+              ? '$groupName · $activePlayers mensalistas · $guestPlayers convidados'
+              : 'Organize seus jogadores',
       iconWidget: AvatarWidget(
         name: groupName ?? 'Patota',
         photoUrl: logoUrl,
         size: 42,
+        fit: BoxFit.cover,
         borderRadius: 13,
       ),
       actions: onSettings == null
@@ -1041,6 +1148,26 @@ class _GroupsHeader extends StatelessWidget {
                 icon: Icons.settings_outlined,
               ),
             ],
+      footer: onInvite == null && onLeave == null
+          ? null
+          : AppPageHeaderActionBar(
+              actions: [
+                if (onInvite != null)
+                  AppPageHeaderButton(
+                    label: 'Convidar',
+                    icon: Icons.person_add_alt_1_outlined,
+                    onPressed: onInvite,
+                    tone: AppPageHeaderButtonTone.primary,
+                  ),
+                if (onLeave != null)
+                  AppPageHeaderButton(
+                    label: 'Sair',
+                    icon: Icons.logout_rounded,
+                    onPressed: onLeave,
+                    tone: AppPageHeaderButtonTone.destructive,
+                  ),
+              ],
+            ),
     );
   }
 }
@@ -1056,7 +1183,6 @@ class _HeaderButtons extends StatelessWidget {
   final String activePlayerId;
   final VoidCallback onAddGuest;
   final VoidCallback onInvite;
-  final VoidCallback onCreateGroup;
   final VoidCallback onLeave;
 
   const _HeaderButtons({
@@ -1066,7 +1192,6 @@ class _HeaderButtons extends StatelessWidget {
     required this.activePlayerId,
     required this.onAddGuest,
     required this.onInvite,
-    required this.onCreateGroup,
     required this.onLeave,
   });
 
@@ -1096,15 +1221,6 @@ class _HeaderButtons extends StatelessWidget {
             style: _DarkBtnStyle.solid,
             onTap: onInvite,
           ),
-        // No protótipo "Convidar" e "Nova patota" têm o mesmo peso visual:
-        // fundo claro sobre o card escuro. O `ghost` deixava este quase
-        // invisível — só um contorno translúcido sobre fundo escuro.
-        _DarkBtn(
-          label: 'Nova patota',
-          icon: Icons.add,
-          style: _DarkBtnStyle.solid,
-          onTap: onCreateGroup,
-        ),
         if (showLeave || showCreatorLeave)
           _DarkBtn(
             label: 'Sair',
@@ -2169,7 +2285,6 @@ class _RatingListRow extends StatelessWidget {
                       name: player.name,
                       photoUrl: player.photoUrl,
                       size: PrototypeLayout.avatarSize,
-                      borderRadius: 8,
                     )
                   : Container(
                       width: PrototypeLayout.avatarSize,
@@ -2482,7 +2597,6 @@ class _PlayerCard extends StatelessWidget {
                           name: player.name,
                           photoUrl: player.photoUrl,
                           size: 40,
-                          borderRadius: 8,
                         )
                       : Container(
                           width: 40,
@@ -3628,7 +3742,9 @@ class _EditPlayerSheet extends StatefulWidget {
 
 class _EditPlayerSheetState extends State<_EditPlayerSheet> {
   late final TextEditingController _nameCtrl;
-  late bool _isGuest;
+  // Classificação estrutural: nasce como convidado ou é definida pelo fluxo
+  // de remoção do mensalista. A edição apenas preserva o valor no DTO.
+  late final bool _isGuest;
   late bool _isActive;
   late bool _isGoalkeeper;
   // mensalista ratings (1–10, null = not set)
@@ -3772,7 +3888,7 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (!isRatings) ...[
-                    _FieldLabel('Nome', isDark: isDark),
+                    _FieldLabel('Apelido', isDark: isDark),
                     const SizedBox(height: 6),
                     _AppInput(
                       controller: _nameCtrl,
@@ -3816,27 +3932,6 @@ class _EditPlayerSheetState extends State<_EditPlayerSheet> {
                           const SizedBox(width: 8),
                           Text(
                             'Ativo',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: isDark
-                                  ? AppColors.lightBorder
-                                  : AppColors.darkBorder,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          _Toggle(
-                            value: _isGuest,
-                            onChanged: _loading
-                                ? null
-                                : (v) => setState(() => _isGuest = v),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Convidado',
                             style: TextStyle(
                               fontSize: 14,
                               color: isDark

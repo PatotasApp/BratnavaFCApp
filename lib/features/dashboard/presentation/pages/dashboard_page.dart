@@ -12,6 +12,7 @@ import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/football_pitch.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
+import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../../shared/presentation/widgets/user_profile_link.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../calendar/domain/entities/calendar_event.dart';
@@ -461,8 +462,9 @@ class _PlayerIdentityCard extends ConsumerWidget {
                         AvatarWidget(
                           name: groupName,
                           photoUrl: groupLogoUrl,
-                          size: 28,
+                          size: 36,
                           fit: BoxFit.cover,
+                          borderRadius: 9,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -903,15 +905,27 @@ class _NextMatchBandState extends State<_NextMatchBand> {
                         //   [data-theme="white"] .proto-presence-decline{
                         //     background:var(--bg-card); color:var(--text-secondary) }
                         foregroundColor: response == InviteResponse.declined
-                            ? AppColors.dangerOf(Theme.of(context).brightness)
+                            ? AppColors.onDark
                             : (Theme.of(context).brightness == Brightness.dark
                                 ? AppColors.darkTextSecondary
                                 : AppColors.lightTextSecondary),
                         backgroundColor: response == InviteResponse.declined
-                            ? AppColors.dangerBgOf(Theme.of(context).brightness)
+                            ? AppColors.dangerOf(Theme.of(context).brightness)
                             : (Theme.of(context).brightness == Brightness.dark
                                 ? AppColors.darkSubtle
                                 : AppColors.lightCard),
+                        side: BorderSide(
+                          color: response == InviteResponse.declined
+                              ? AppColors.dangerOf(
+                                  Theme.of(context).brightness,
+                                )
+                              : Theme.of(context).colorScheme.outline,
+                        ),
+                        overlayColor: response == InviteResponse.declined
+                            ? AppColors.onDark.withValues(alpha: 0.12)
+                            : AppColors.dangerOf(
+                                Theme.of(context).brightness,
+                              ).withValues(alpha: 0.08),
                       ),
                       child: const Text('Não vou'),
                     ),
@@ -1818,26 +1832,10 @@ class _DashboardEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 80),
-      child: Column(
-        children: [
-          const PrototypeIconBox(
-            size: 52,
-            icon: Icon(Icons.groups_outlined, size: 26),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'Nenhuma patota ativa',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Crie uma patota ou aceite um convite para começar.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-        ],
+    return const SizedBox(
+      height: 360,
+      child: NoActiveGroupView(
+        message: 'Selecione uma patota para acessar o dashboard.',
       ),
     );
   }

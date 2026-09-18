@@ -124,6 +124,22 @@ class MatchHomeWidgetService {
     await _update();
   }
 
+  /// Remove do widget qualquer partida da patota que deixou de estar ativa.
+  /// Diferente de [clear], não afirma que a sessão foi encerrada.
+  static Future<void> clearActiveGroup() async {
+    await _saveAll({
+      'match_widget_state': 'empty',
+      'match_widget_group_name': 'PatotasApp',
+      'match_widget_title': 'Nenhuma patota ativa',
+      'match_widget_subtitle': 'Abra o app para selecionar uma patota.',
+      'match_widget_response': 'Nenhuma partida para acompanhar',
+      'match_widget_confirmed': '',
+      'match_widget_match_id': '',
+      'match_widget_group_id': '',
+    });
+    await _update();
+  }
+
   static String _teamName(TeamColorInfo? color, String fallback) {
     final name = color?.name.trim() ?? '';
     return name.isEmpty ? fallback : name;
@@ -147,7 +163,6 @@ class MatchHomeWidgetService {
 
   static Future<void> _update() => HomeWidget.updateWidget(
         androidName: _androidProvider,
-        qualifiedAndroidName:
-            'br.com.patotasapp.$_androidProvider',
+        qualifiedAndroidName: 'br.com.patotasapp.$_androidProvider',
       );
 }

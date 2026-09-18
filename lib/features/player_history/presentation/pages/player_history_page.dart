@@ -6,8 +6,11 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/domain/entities/my_player.dart';
+import '../../../dashboard/presentation/providers/dashboard_provider.dart'
+    as dashboard;
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../domain/entities/player_history_models.dart';
 import '../providers/player_history_provider.dart';
@@ -80,7 +83,8 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
   @override
   Widget build(BuildContext context) {
     final account = ref.watch(accountStoreProvider).activeAccount;
-    final groupId = account?.activeGroupId;
+    final activeGroupPlayer = ref.watch(dashboard.activePlayerProvider);
+    final groupId = account?.activeGroupId ?? activeGroupPlayer?.groupId;
 
     if (groupId == null || groupId.isEmpty) {
       return const Scaffold(
@@ -91,7 +95,11 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
               subtitle: 'Resultados e números por partida',
               icon: Icons.history_rounded,
             ),
-            Expanded(child: _NoGroupState()),
+            Expanded(
+              child: NoActiveGroupView(
+                message: 'Selecione uma patota para ver seu histórico.',
+              ),
+            ),
           ],
         ),
       );
@@ -1124,26 +1132,6 @@ class _ErrorState extends StatelessWidget {
             style:
                 const TextStyle(fontSize: 13, color: AppColors.prototypeDanger),
           ),
-        ),
-      );
-}
-
-class _NoGroupState extends StatelessWidget {
-  const _NoGroupState();
-
-  @override
-  Widget build(BuildContext context) => const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.history_rounded, size: 48, color: AppColors.slate500),
-            SizedBox(height: 12),
-            Text(
-              'Crie ou entre em um grupo',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.slate400, fontSize: 13),
-            ),
-          ],
         ),
       );
 }

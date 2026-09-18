@@ -279,8 +279,6 @@ class ApiConstants {
   // Match extras
   static String matchBulkGoals(String groupId, String id) =>
       '/api/Matches/group/$groupId/$id/goals/bulk';
-  static String matchReapplyMvp(String groupId, String id) =>
-      '/api/Matches/group/$groupId/$id/reapply-mvp';
   static String matchPublishEvent(String groupId, String id) =>
       '/api/Matches/group/$groupId/$id/events';
   static String matchReplays(String groupId, String id) =>

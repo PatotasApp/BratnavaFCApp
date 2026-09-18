@@ -142,7 +142,7 @@ class AuthRemoteDataSource {
   }
 
   /// Retorna os groupIds distintos dos jogadores do usuário logado.
-  Future<List<String>> fetchMyGroupIds() async {
+  Future<List<String>?> fetchMyGroupIds() async {
     try {
       final res = await _dio.get(ApiConstants.playersMe);
       return unwrapList(res.data)
@@ -151,7 +151,9 @@ class AuthRemoteDataSource {
           .toSet()
           .toList();
     } catch (_) {
-      return [];
+      // Falha de rede não significa que o usuário deixou todas as patotas.
+      // O chamador deve manter a seleção atual e tentar novamente depois.
+      return null;
     }
   }
 }

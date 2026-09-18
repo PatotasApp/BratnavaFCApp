@@ -445,7 +445,10 @@ class AppTheme {
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
-        showDragHandle: true,
+        // As folhas do app renderizam a própria alça dentro da superfície.
+        // Uma alça automática aqui cria uma segunda linha no contêiner modal
+        // transparente, visualmente fora do popup.
+        showDragHandle: false,
         dragHandleColor: inputBorder,
         dragHandleSize: const Size(38, 4),
       ),

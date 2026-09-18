@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../auth/presentation/providers/account_store.dart';
@@ -16,36 +15,6 @@ class Step7FinalPage extends ConsumerStatefulWidget {
 }
 
 class _Step7FinalPageState extends ConsumerState<Step7FinalPage> {
-  bool _reapplyingMvp = false;
-
-  Future<void> _reapplyMvp() async {
-    final s = ref.read(matchNotifierProvider);
-    final matchId = s.matchId;
-    if (matchId == null || matchId.isEmpty) return;
-    final ds = ref.read(matchDsProvider);
-    final notifier = ref.read(matchNotifierProvider.notifier);
-    setState(() => _reapplyingMvp = true);
-    try {
-      await ds.reapplyMvp(notifier.groupId, matchId);
-      await notifier.refresh();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('MVP recalculado com sucesso')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                  extractDioError(e, 'Não foi possível recalcular o MVP'))),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _reapplyingMvp = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(matchNotifierProvider);
@@ -225,32 +194,6 @@ class _Step7FinalPageState extends ConsumerState<Step7FinalPage> {
                             ),
                           ),
                       ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
-                // ── Recalcular MVP ────────────────────────────────────
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _reapplyingMvp ? null : _reapplyMvp,
-                    icon: _reapplyingMvp
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.refresh_rounded, size: 18),
-                    label: const Text('Recalcular MVP'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.amber500,
-                      side: const BorderSide(color: AppColors.warning),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
                     ),
                   ),
                 ),

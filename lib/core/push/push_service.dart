@@ -61,22 +61,30 @@ class PushService {
   PushService({
     required PushTokenApi tokenApi,
     required GoRouter router,
+    Future<void> Function(String groupId)? onSwitchGroup,
   })  : _tokenApi = tokenApi,
-        _router = router {
+        _router = router,
+        _onSwitchGroup = onSwitchGroup {
     // Callbacks de navegação para toque no corpo das notificações locais
     LocalNotifications.onMatchInviteTapped = (groupId, matchId) {
-      _router.push(notificationRoute('match_invite', {
-        'matchId': matchId,
-        'groupId': groupId,
-      }));
+      _go(
+        notificationRoute('match_invite', {
+          'matchId': matchId,
+          'groupId': groupId,
+        }),
+        groupId: groupId,
+      );
     };
 
     LocalNotifications.onEventPollTapped = (groupId, pollId) {
-      _router.push(notificationRoute('poll_reminder', {
-        'pollId': pollId,
-        'groupId': groupId,
-        'pollType': 'event',
-      }));
+      _go(
+        notificationRoute('poll_reminder', {
+          'pollId': pollId,
+          'groupId': groupId,
+          'pollType': 'event',
+        }),
+        groupId: groupId,
+      );
     };
 
     LocalNotifications.onNotificationTapped = _navigate;
@@ -84,6 +92,7 @@ class PushService {
 
   final PushTokenApi _tokenApi;
   final GoRouter _router;
+  final Future<void> Function(String groupId)? _onSwitchGroup;
   final _log = Logger();
   late final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   bool _initialized = false;
@@ -247,6 +256,19 @@ class PushService {
 
     final route = notificationRoute(type, data);
     _log.d('[Push] Navegando: type=$type → $route');
+    _go(route, groupId: data['groupId'] as String?);
+  }
+
+  /// Troca a patota ativa para a da notificação antes de navegar. Sem isso, a
+  /// tela abria no tenant da patota atual quando o usuário tem mais de uma.
+  Future<void> _go(String route, {String? groupId}) async {
+    if (groupId != null && groupId.isNotEmpty && _onSwitchGroup != null) {
+      try {
+        await _onSwitchGroup(groupId);
+      } catch (e) {
+        _log.w('[Push] Falha ao trocar patota antes de navegar: $e');
+      }
+    }
     _router.push(route);
   }
 

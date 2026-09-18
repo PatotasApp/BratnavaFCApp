@@ -40,6 +40,15 @@ final myExtraChargesProvider =
   (ref, groupId) => ref.watch(paymentsDsProvider).getMyExtraCharges(groupId),
 );
 
+final myPendingPaymentItemsProvider =
+    FutureProvider.autoDispose.family<List<PendingPaymentItem>, String>(
+  (ref, groupId) async {
+    final items =
+        await ref.watch(paymentsDsProvider).getMyPendingItems(groupId);
+    return items.where((item) => !item.isPaid).toList();
+  },
+);
+
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 // Computa o resumo a partir das mesmas fontes que a tela de Financeiro usa,
 // evitando dependência do endpoint /payments/my cujos campos variam por versão.

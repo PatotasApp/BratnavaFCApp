@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../domain/entities/history_match.dart';
@@ -89,7 +90,9 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
           if (historyAsync == null)
             const SliverFillRemaining(
               hasScrollBody: false,
-              child: _NoGroupState(),
+              child: NoActiveGroupView(
+                message: 'Selecione uma patota para ver o histórico.',
+              ),
             )
           else
             historyAsync.when(
@@ -514,19 +517,6 @@ class _HistorySkeletons extends StatelessWidget {
           child: const Center(child: CircularProgressIndicator()),
         ),
       ),
-    );
-  }
-}
-
-class _NoGroupState extends StatelessWidget {
-  const _NoGroupState();
-
-  @override
-  Widget build(BuildContext context) {
-    return const _CenteredHistoryState(
-      icon: Icons.groups_outlined,
-      title: 'Nenhuma patota ativa',
-      subtitle: 'Selecione uma patota para ver o histórico.',
     );
   }
 }

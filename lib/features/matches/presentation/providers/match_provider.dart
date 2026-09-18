@@ -139,6 +139,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       participants: _parsePlayers(d['participants'] ?? d['Participants']),
       canVote: d['canVote'] as bool? ?? d['CanVote'] as bool?,
       hasVoted: d['hasVoted'] as bool? ?? d['HasVoted'] as bool?,
+      myMatchPlayerId:
+          (d['myMatchPlayerId'] ?? d['MyMatchPlayerId'])?.toString(),
       myVotedForMatchPlayerId:
           (d['myVotedForMatchPlayerId'] ?? d['MyVotedForMatchPlayerId'])
               ?.toString(),

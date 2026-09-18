@@ -5,8 +5,10 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/user_profile_link.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../auth/presentation/providers/account_store.dart';
+import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../domain/entities/spotlight_report.dart';
 import '../providers/spotlight_provider.dart';
 
@@ -34,18 +36,23 @@ class _PlayerSpotlightPageState extends ConsumerState<PlayerSpotlightPage> {
   @override
   Widget build(BuildContext context) {
     final account = ref.watch(accountStoreProvider).activeAccount;
-    final groupId = account?.activeGroupId;
+    final activePlayer = ref.watch(activePlayerProvider);
+    final groupId = account?.activeGroupId ?? activePlayer?.groupId;
 
     if (groupId == null || groupId.isEmpty) {
-      return Scaffold(
-        body: const Column(
+      return const Scaffold(
+        body: Column(
           children: [
             AppPageHeader(
               title: 'Destaques',
               subtitle: 'Jogadores em evidência na patota',
               icon: Icons.star_rounded,
             ),
-            Expanded(child: _NoGroupState()),
+            Expanded(
+              child: NoActiveGroupView(
+                message: 'Selecione uma patota para ver os destaques.',
+              ),
+            ),
           ],
         ),
       );
@@ -776,27 +783,6 @@ class _ErrorState extends StatelessWidget {
             style:
                 const TextStyle(fontSize: 13, color: AppColors.prototypeDanger),
           ),
-        ),
-      );
-}
-
-class _NoGroupState extends StatelessWidget {
-  const _NoGroupState();
-
-  @override
-  Widget build(BuildContext context) => const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.star_outline_rounded,
-                size: 48, color: AppColors.slate500),
-            SizedBox(height: 12),
-            Text(
-              'Crie ou entre em um grupo',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.slate400, fontSize: 13),
-            ),
-          ],
         ),
       );
 }

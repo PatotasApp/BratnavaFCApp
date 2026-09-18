@@ -257,16 +257,14 @@ final activePlayerProvider = Provider<MyPlayer?>((ref) {
   // uma acabava com a identidade e as estatísticas de uma patota ao lado da
   // partida e dos pagamentos de outra — cada metade da tela vinda de um lugar.
   final activeGroupId = _normalizeId(accountActive?.activeGroupId);
-  final inGroup = activeGroupId.isEmpty
-      ? const <MyPlayer>[]
-      : players.where((p) => _normalizeId(p.groupId) == activeGroupId).toList();
+  if (activeGroupId.isEmpty) return null;
+  final scoped = players
+      .where((player) => _normalizeId(player.groupId) == activeGroupId)
+      .toList();
 
-  // Sem ninguém no grupo ativo, cai na lista inteira em vez de devolver `null`.
-  // A primeira versão desta correção retornava null aqui e derrubava o app
-  // todo para "Nenhuma patota ativa" — o `activeGroupId` da conta nem sempre
-  // corresponde a um jogador em `myPlayers`. Quem resolve a incoerência é o
-  // consumidor, tirando o grupo do próprio jogador.
-  final scoped = inGroup.isNotEmpty ? inGroup : players;
+  // Falha fechada: um id ausente ou removido nunca pode reaproveitar dados de
+  // outra patota. A reconciliação da conta selecionará uma patota válida.
+  if (scoped.isEmpty) return null;
 
   final explicitId = manualId ?? accountActive?.activePlayerId;
   if (explicitId != null) {
