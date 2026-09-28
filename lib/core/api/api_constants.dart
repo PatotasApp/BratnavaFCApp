@@ -35,8 +35,8 @@ class ApiConstants {
   static String playerById(String id) => '/api/Players/$id';
   static String birthdayStatus(String groupId) =>
       '/api/Players/group/$groupId/birthday-status';
-  static String visualStats(String groupId) =>
-      '/api/TeamGeneration/visual-stats/$groupId';
+  static String visualStats(String groupId, {bool includeGuests = true}) =>
+      '/api/TeamGeneration/visual-stats/$groupId?includeGuests=$includeGuests';
 
   // Players (group admin)
   static const String playersCreate = '/api/Players';
