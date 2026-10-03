@@ -7,7 +7,11 @@ final visualStatsDsProvider = Provider<VisualStatsDatasource>(
   (ref) => VisualStatsDatasource(ref.watch(dioProvider)),
 );
 
+typedef VisualStatsArgs = ({String groupId, bool includeGuests});
+
 final visualStatsProvider =
-    FutureProvider.autoDispose.family<PlayerVisualStatsReport, String>(
-  (ref, groupId) => ref.watch(visualStatsDsProvider).fetchVisualStats(groupId),
+    FutureProvider.autoDispose.family<PlayerVisualStatsReport, VisualStatsArgs>(
+  (ref, args) => ref
+      .watch(visualStatsDsProvider)
+      .fetchVisualStats(args.groupId, includeGuests: args.includeGuests),
 );

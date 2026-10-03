@@ -243,6 +243,8 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
   _StatsViewMode _viewMode = _StatsViewMode.general;
   String _search = '';
   _SortKey _sortKey = _SortKey.winRate;
+  // Regra de convidados é do backend: só informamos includeGuests e recarregamos.
+  bool _onlyMonthly = false;
 
   final _searchCtrl = TextEditingController();
 
@@ -342,7 +344,8 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
       );
     }
 
-    final async = ref.watch(visualStatsProvider(groupId));
+    final statsArgs = (groupId: groupId, includeGuests: !_onlyMonthly);
+    final async = ref.watch(visualStatsProvider(statsArgs));
     final settings = ref.watch(groupSettingsProvider(groupId)).valueOrNull;
     final icons = GroupIcons.from(settings);
     final showGeneral = settings?.showStatsGeneralTab ?? true;
@@ -369,7 +372,7 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
 
     return Scaffold(
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(visualStatsProvider(groupId)),
+        onRefresh: () async => ref.invalidate(visualStatsProvider(statsArgs)),
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
@@ -390,10 +393,17 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
                   child: _ErrorState(message: extractDioError(e))),
               data: (report) {
                 final sorted = _sorted(report.players);
+                final isDark =
+                    Theme.of(context).brightness == Brightness.dark;
                 return SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                    child: _viewMode != _StatsViewMode.perMatch
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildOnlyMonthlyToggle(isDark),
+                        const SizedBox(height: 12),
+                        _viewMode != _StatsViewMode.perMatch
                         ? _RankingsContent(
                             report: report,
                             sorted: sorted,
@@ -434,9 +444,46 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
                             onSort: (k) => setState(() => _sortKey = k),
                             onSearch: (v) => setState(() => _search = v),
                           ),
+                      ],
+                    ),
                   ),
                 );
               },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Toggle "Apenas mensalistas" (regra aplicada no backend) ───────────────
+  Widget _buildOnlyMonthlyToggle(bool isDark) {
+    return InkWell(
+      onTap: () => setState(() => _onlyMonthly = !_onlyMonthly),
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: Checkbox(
+                value: _onlyMonthly,
+                onChanged: (v) => setState(() => _onlyMonthly = v ?? false),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Apenas mensalistas',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: isDark ? AppColors.slate200 : AppColors.slate700,
+              ),
             ),
           ],
         ),
@@ -1127,6 +1174,29 @@ class _RankingListItem extends StatelessWidget {
                                   color: isDark
                                       ? AppColors.slate500
                                       : AppColors.slate400,
+                                ),
+                              ),
+                            ],
+                            if (player.isGuest) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? AppColors.amber500.withValues(alpha: .18)
+                                      : AppColors.amber50,
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                child: Text(
+                                  'Convidado',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark
+                                        ? AppColors.amber500
+                                        : AppColors.amber500,
+                                  ),
                                 ),
                               ),
                             ],

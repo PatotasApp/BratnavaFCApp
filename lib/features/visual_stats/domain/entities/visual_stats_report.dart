@@ -28,6 +28,7 @@ class PlayerVisualStatsItem {
   final String name;
   final int status; // 1 = active
   final bool isGoalkeeper;
+  final bool isGuest;
   final int gamesPlayed;
   final int wins;
   final int ties;
@@ -52,6 +53,7 @@ class PlayerVisualStatsItem {
     required this.name,
     required this.status,
     required this.isGoalkeeper,
+    this.isGuest = false,
     required this.gamesPlayed,
     required this.wins,
     required this.ties,
@@ -88,6 +90,7 @@ class PlayerVisualStatsItem {
       name: (j['name'] ?? '') as String,
       status: (j['status'] as num?)?.toInt() ?? 1,
       isGoalkeeper: (j['isGoalkeeper'] as bool?) ?? false,
+      isGuest: (j['isGuest'] as bool?) ?? false,
       gamesPlayed: (j['gamesPlayed'] as num?)?.toInt() ?? 0,
       wins: (j['wins'] as num?)?.toInt() ?? 0,
       ties: (j['ties'] as num?)?.toInt() ?? 0,
