@@ -95,6 +95,52 @@ class AuthRemoteDataSource {
     }
   }
 
+  /// `DELETE /api/Users/me` — exclusão da conta pela própria pessoa.
+  ///
+  /// O backend apaga os dados pessoais e converte o jogador em convidado nas
+  /// patotas, preservando o histórico. Recusa com 409 quando a pessoa é a única
+  /// administradora de alguma patota; nesse caso a lista vem no `data` do
+  /// envelope de erro e sobe dentro da exceção, porque a tela precisa dizer EM
+  /// QUAIS patotas promover outro administrador.
+  Future<void> deleteMyAccount() async {
+    try {
+      await _dio.delete(ApiConstants.usersMe);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) {
+        throw SoleAdminGroupsException(
+          extractDioError(
+            e,
+            'Promova outro administrador antes de excluir sua conta.',
+          ),
+          groups: parsePendingAdminGroups(e.response?.data),
+        );
+      }
+
+      throw ServerException(
+        extractDioError(e),
+        statusCode: e.response?.statusCode,
+      );
+    }
+  }
+
+  /// Lê as patotas pendentes do envelope de erro do 409.
+  ///
+  /// Tolera `data` ausente ou malformado de propósito: sem a lista a recusa
+  /// ainda aparece com a mensagem do servidor, o que é melhor que transformar
+  /// um formato inesperado em erro genérico.
+  static List<PendingAdminGroup> parsePendingAdminGroups(dynamic raw) {
+    return unwrapList(raw)
+        .whereType<Map>()
+        .map(
+          (e) => PendingAdminGroup(
+            groupId: (e['groupId'] ?? e['id'] ?? '').toString(),
+            groupName: (e['groupName'] ?? e['name'] ?? '').toString().trim(),
+          ),
+        )
+        .where((g) => g.groupName.isNotEmpty)
+        .toList();
+  }
+
   /// A role chega como inteiro do enum. Aceita string por robustez, caso o
   /// backend passe a usar `JsonStringEnumConverter`.
   static List<String> _parseRoles(Object? raw) {

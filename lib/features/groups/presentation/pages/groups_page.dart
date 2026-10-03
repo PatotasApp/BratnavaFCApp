@@ -725,10 +725,24 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     );
   }
 
+  /// Mesma regra do backend: conta é o que importa, convidado não administra nada.
+  /// Uma patota que fica só com convidados está tão abandonada quanto uma vazia.
+  bool get _souAUltimaConta {
+    final meuUserId = ref.read(accountStoreProvider).activeAccount?.userId;
+    if (meuUserId == null || _group == null) return false;
+
+    return !_group!.players.any(
+      (p) => p.userId != null && p.userId!.isNotEmpty && p.userId != meuUserId && !p.isGuest,
+    );
+  }
+
   void _showLeaveConfirm() {
     showDialog<void>(
       context: context,
-      builder: (_) => _LeaveConfirmDialog(onConfirm: _handleLeave),
+      builder: (_) => _LeaveConfirmDialog(
+        onConfirm: _handleLeave,
+        encerraAPatota: _souAUltimaConta,
+      ),
     );
   }
 
@@ -4961,8 +4975,14 @@ class _LinkGuestDialog extends StatelessWidget {
 class _LeaveConfirmDialog extends StatefulWidget {
   final Future<void> Function() onConfirm;
 
+  /// Sair sendo a última conta ENCERRA a patota — partidas, enquetes e lançamentos
+  /// vão junto, sem desfazer. O texto genérico de antes ("remove você da patota")
+  /// virava mentira nesse caso, e era o único aviso antes de uma ação irreversível.
+  final bool encerraAPatota;
+
   const _LeaveConfirmDialog({
     required this.onConfirm,
+    this.encerraAPatota = false,
   });
 
   @override
@@ -4989,13 +5009,17 @@ class _LeaveConfirmDialogState extends State<_LeaveConfirmDialog> {
     return AlertDialog(
       backgroundColor: isDark ? AppColors.darkCard : AppColors.onDark,
       title: Text(
-        'Sair da patota?',
+        widget.encerraAPatota ? 'Encerrar a patota?' : 'Sair da patota?',
         style: TextStyle(
           color: isDark ? AppColors.onDark : AppColors.lightText,
         ),
       ),
       content: Text(
-        'Essa ação remove você da patota atual.',
+        widget.encerraAPatota
+            ? 'Você é a última pessoa desta patota. Ao sair, ela será encerrada: '
+              'partidas, enquetes, mensalidades e lançamentos serão apagados. '
+              'Não há como desfazer.'
+            : 'Essa ação remove você da patota atual.',
         style: TextStyle(
           color: isDark
               ? AppColors.darkTextSecondary
@@ -5022,7 +5046,7 @@ class _LeaveConfirmDialogState extends State<_LeaveConfirmDialog> {
                     color: AppColors.onDark,
                   ),
                 )
-              : const Text('Sair'),
+              : Text(widget.encerraAPatota ? 'Sair e encerrar' : 'Sair'),
         ),
       ],
     );
