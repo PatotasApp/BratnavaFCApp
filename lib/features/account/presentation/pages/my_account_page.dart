@@ -6,6 +6,8 @@ import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../widgets/editable_profile_avatar.dart';
 import '../widgets/change_email_sheet.dart';
 import '../widgets/edit_account_profile_sheet.dart';
+import '../../../../core/errors/app_exception.dart';
+import '../../../../shared/presentation/widgets/confirm_dialog.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
@@ -365,8 +367,232 @@ class _SecurityTab extends StatelessWidget {
             icon: const Icon(Icons.logout_rounded),
             label: const Text('Sair da conta'),
           ),
+          const SizedBox(height: 24),
+          const _DeleteAccountSection(),
         ],
       ),
+    );
+  }
+}
+
+/// Exclusão definitiva da conta.
+///
+/// Fica no fim da aba e atrás de um divisor porque é irreversível: o que
+/// sobrevive à exclusão (o histórico nas patotas) precisa estar visível ANTES
+/// do clique, não só dentro do diálogo de confirmação.
+class _DeleteAccountSection extends ConsumerStatefulWidget {
+  const _DeleteAccountSection();
+
+  @override
+  ConsumerState<_DeleteAccountSection> createState() =>
+      _DeleteAccountSectionState();
+}
+
+class _DeleteAccountSectionState extends ConsumerState<_DeleteAccountSection> {
+  bool _deleting = false;
+
+  Future<void> _confirmAndDelete() async {
+    if (_deleting) return;
+
+    final confirmed = await showConfirmDialog(
+      context: context,
+      danger: true,
+      title: 'Excluir sua conta?',
+      confirmLabel: 'Excluir conta',
+      message: 'Esta ação é irreversível.\n\n'
+          'Sua conta e seus dados pessoais serão apagados e você perderá o '
+          'acesso ao aplicativo.\n\n'
+          'O histórico nas patotas permanece: seu jogador continua nas '
+          'estatísticas e nas partidas, convertido em convidado.',
+    );
+
+    if (!confirmed || !mounted) return;
+
+    setState(() => _deleting = true);
+
+    try {
+      await ref.read(authDataSourceProvider).deleteMyAccount();
+
+      // Mesmo caminho do "Sair da conta": o logout também remove o token de
+      // push, cancela notificações e limpa o widget da home — resíduos que não
+      // podem sobreviver a uma conta que deixou de existir.
+      await ref.read(authNotifierProvider.notifier).logout();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Conta excluída com sucesso.')),
+      );
+      context.go('/login');
+    } on SoleAdminGroupsException catch (error) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) => _SoleAdminGroupsDialog(error: error),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            extractDioError(error, 'Não foi possível excluir sua conta.'),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Divider(color: colors.outlineVariant),
+        const SizedBox(height: 12),
+        const PrototypeSectionTitle(title: 'Excluir conta'),
+        const SizedBox(height: 10),
+        PrototypeCard(
+          borderColor: colors.error,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              PrototypeIconBox(
+                icon: const Icon(Icons.delete_forever_outlined),
+                backgroundColor: colors.errorContainer,
+                foregroundColor: colors.onErrorContainer,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Sua conta e seus dados pessoais são apagados e não há '
+                      'como desfazer.',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'O histórico nas patotas permanece: seu jogador continua '
+                      'nas partidas e nas estatísticas, convertido em '
+                      'convidado.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _deleting ? null : _confirmAndDelete,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: colors.error,
+            side: BorderSide(color: colors.error),
+          ),
+          icon: _deleting
+              ? SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colors.error,
+                  ),
+                )
+              : const Icon(Icons.delete_forever_outlined),
+          label: Text(_deleting ? 'Excluindo...' : 'Excluir minha conta'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Recusa 409: a pessoa é a única administradora das patotas listadas.
+///
+/// A lista é o conteúdo principal do diálogo — a mensagem do servidor só diz
+/// quantas patotas bloqueiam, e sem os nomes a pessoa não saberia onde agir.
+class _SoleAdminGroupsDialog extends StatelessWidget {
+  final SoleAdminGroupsException error;
+
+  const _SoleAdminGroupsDialog({required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    return AlertDialog(
+      titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+      contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+      title: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          PrototypeIconBox(
+            icon: const Icon(Icons.admin_panel_settings_outlined),
+            size: 40,
+            backgroundColor: colors.errorContainer,
+            foregroundColor: colors.onErrorContainer,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Não foi possível excluir',
+              style: theme.textTheme.titleLarge,
+            ),
+          ),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(error.message, style: theme.textTheme.bodyMedium),
+            if (error.groups.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Text(
+                'Promova outro administrador em cada patota abaixo e tente '
+                'novamente:',
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 10),
+              for (final group in error.groups)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.shield_outlined,
+                        size: 16,
+                        color: colors.error,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          group.groupName,
+                          style: theme.textTheme.bodyLarge,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Entendi'),
+        ),
+      ],
     );
   }
 }
