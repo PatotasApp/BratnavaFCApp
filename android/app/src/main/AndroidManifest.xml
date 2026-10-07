@@ -1,5 +1,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+        Android 11 (API 30) passou a esconder os outros apps instalados: sem
+        declarar o que procuramos aqui, o url_launcher nao enxerga navegador
+        nenhum e abrir um link simplesmente nao acontece, sem erro visivel.
+
+        E o que sustenta o botao de Politica de Privacidade em Minha Conta, que
+        a Google Play exige estar acessivel de dentro do app.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"

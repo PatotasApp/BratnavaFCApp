@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../../../core/constants/app_constants.dart';
 
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../widgets/editable_profile_avatar.dart';
@@ -367,6 +370,16 @@ class _SecurityTab extends StatelessWidget {
             icon: const Icon(Icons.logout_rounded),
             label: const Text('Sair da conta'),
           ),
+          const SizedBox(height: 8),
+
+          // Exigência da Google Play: a política precisa estar na ficha da loja
+          // E acessível de dentro do app. Abrir no navegador satisfaz as duas —
+          // não é necessário renderizar o conteúdo aqui.
+          OutlinedButton.icon(
+            onPressed: () => _abrirPoliticaDePrivacidade(context),
+            icon: const Icon(Icons.privacy_tip_outlined),
+            label: const Text('Política de privacidade'),
+          ),
           const SizedBox(height: 24),
           const _DeleteAccountSection(),
         ],
@@ -380,6 +393,27 @@ class _SecurityTab extends StatelessWidget {
 /// Fica no fim da aba e atrás de um divisor porque é irreversível: o que
 /// sobrevive à exclusão (o histórico nas patotas) precisa estar visível ANTES
 /// do clique, não só dentro do diálogo de confirmação.
+/// Abre a política de privacidade no navegador do aparelho.
+///
+/// Em navegador externo e não numa WebView embutida: a Play quer que a pessoa
+/// consiga ler, salvar e compartilhar a política como qualquer página, e uma
+/// WebView sem barra de endereço esconde de onde o conteúdo veio.
+///
+/// Falhar aqui é raro (aparelho sem navegador), mas silenciar seria pior que o
+/// erro: a pessoa tocaria no botão e nada aconteceria.
+Future<void> _abrirPoliticaDePrivacidade(BuildContext context) async {
+  final url = Uri.parse(AppConstants.privacyPolicyUrl);
+  final abriu = await launchUrl(url, mode: LaunchMode.externalApplication);
+
+  if (!abriu && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Não foi possível abrir ${AppConstants.privacyPolicyUrl}'),
+      ),
+    );
+  }
+}
+
 class _DeleteAccountSection extends ConsumerStatefulWidget {
   const _DeleteAccountSection();
 
