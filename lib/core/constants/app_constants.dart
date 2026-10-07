@@ -56,6 +56,16 @@ class AppConstants {
   /// Site público, usado para montar links compartilháveis de replay.
   static String get webUrl => _require(_webUrl, 'WEB_URL');
 
+  /// Política de privacidade, hospedada no site.
+  ///
+  /// A Google Play exige que ela esteja na ficha da loja E acessível de dentro
+  /// do app; um link que abre o navegador satisfaz as duas exigências, não é
+  /// preciso renderizar o conteúdo aqui.
+  ///
+  /// Derivada de webUrl para seguir o ambiente: não faz sentido o app de
+  /// desenvolvimento apontar para um domínio diferente do que ele mesmo usa.
+  static String get privacyPolicyUrl => '$webUrl/privacidade.html';
+
   /// Falha explícita em vez de cair num padrão silencioso.
   ///
   /// Mesma postura do `api/http.ts` no front web: um build sem config quebraria
