@@ -35,9 +35,10 @@ class GoogleSignInButton extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _GoogleGlyph(),
-            SizedBox(width: 12),
+            SizedBox(width: 8),
             Text(
-              'Entrar com Google',
+              'Google',
+              semanticsLabel: 'Entrar com Google',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,

@@ -1,8 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/auth/auth_errors.dart';
 import '../../../../core/constants/app_constants.dart';
 
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
@@ -445,6 +447,10 @@ class _DeleteAccountSectionState extends ConsumerState<_DeleteAccountSection> {
     setState(() => _deleting = true);
 
     try {
+      // Conta com login Apple: a App Store exige revogar a autorização na
+      // Apple. Pede a tela da Apple de novo para obter um código fresco.
+      await ref.read(firebaseAuthServiceProvider).revokeAppleIfLinked();
+
       await ref.read(authDataSourceProvider).deleteMyAccount();
 
       // Mesmo caminho do "Sair da conta": o logout também remove o token de
@@ -464,13 +470,15 @@ class _DeleteAccountSectionState extends ConsumerState<_DeleteAccountSection> {
         builder: (_) => _SoleAdminGroupsDialog(error: error),
       );
     } catch (error) {
-      if (!mounted) return;
+      // Fechou a tela da Apple: desistiu da exclusão, nada a avisar.
+      if (!mounted || isUserCancelled(error)) return;
+
+      final message = error is FirebaseAuthException
+          ? authErrorMessage(error, 'Não foi possível confirmar com a Apple.')
+          : extractDioError(error, 'Não foi possível excluir sua conta.');
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            extractDioError(error, 'Não foi possível excluir sua conta.'),
-          ),
-        ),
+        SnackBar(content: Text(message)),
       );
     } finally {
       if (mounted) setState(() => _deleting = false);
