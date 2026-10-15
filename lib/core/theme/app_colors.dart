@@ -116,7 +116,7 @@ class AppColors {
   /// Azul de time, usado nos indicadores de escalação.
   static const teamBlue = Color(0xFF3B9FD4);
 
-  /// Fundo do botão "Entrar com Apple". Cor de marca de terceiro: as diretrizes
+  /// Logo do botão "Entrar com Apple". Cor de marca de terceiro: as diretrizes
   /// da Apple pedem preto puro, que não responde ao tema do app.
   static const appleBlack = Color(0xFF000000);
 
