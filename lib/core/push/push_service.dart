@@ -126,8 +126,27 @@ class PushService {
 
   // ── Token ────────────────────────────────────────────────────────────────
 
+  /// No iOS o token FCM é derivado do token de APNs, que a Apple entrega de
+  /// forma assíncrona depois da permissão — às vezes segundos depois. Chamar
+  /// `getToken()` antes disso lança `apns-token-not-set`, e o aparelho ficaria
+  /// sem push até a próxima abertura do app. Espera até ~10 s; se não chegar,
+  /// segue mesmo assim e o `onTokenRefresh` registra quando vier.
+  Future<void> _waitForApnsToken() async {
+    if (!Platform.isIOS) return;
+
+    for (var attempt = 0; attempt < 10; attempt++) {
+      if (await _fcm.getAPNSToken() != null) return;
+      await Future<void>.delayed(const Duration(seconds: 1));
+    }
+
+    _log.w('[Push] Token APNs não chegou em 10 s — notificações podem '
+        'não estar habilitadas neste aparelho.');
+  }
+
   Future<void> _registerToken() async {
     try {
+      await _waitForApnsToken();
+
       _log.i('[Push] Obtendo token FCM...');
       final token = await _fcm.getToken();
       if (token == null) {

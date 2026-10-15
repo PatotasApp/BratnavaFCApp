@@ -22,6 +22,37 @@
 		<string>$(FLUTTER_BUILD_NAME)</string>
 		<key>CFBundleSignature</key>
 		<string>????</string>
+		<!-- Retorno do login com Google: o SDK abre a conta Google e volta ao app
+		     pelo REVERSED_CLIENT_ID do GoogleService-Info.plist. Sem o esquema
+		     registrado aqui o app fecha ao tocar em "Google". Os dois ambientes
+		     ficam registrados porque o mesmo Info.plist serve dev e prod. -->
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLName</key>
+				<string>google-signin-prod</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>com.googleusercontent.apps.100539922332-s5lnr0ji1m2rkqirvh5b2qo6lief89r5</string>
+				</array>
+			</dict>
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLName</key>
+				<string>google-signin-dev</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>com.googleusercontent.apps.328593862894-imuqeth25kugma6je17cnugjtcr929gl</string>
+				</array>
+			</dict>
+		</array>
+		<!-- O app só usa a criptografia padrão do sistema (HTTPS). Declarar aqui
+		     dispensa o questionário de exportação a cada build enviado. -->
+		<key>ITSAppUsesNonExemptEncryption</key>
+		<false/>
 		<key>CFBundleVersion</key>
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
 		<key>LSRequiresIPhoneOS</key>
@@ -48,9 +79,13 @@
 			</dict>
 		</dict>
 		<key>NSCameraUsageDescription</key>
-		<string>O PatotasApp usa a câmera para você tirar sua foto de perfil.</string>
+		<string>O PatotasApp usa a câmera para você fotografar sua foto de perfil, comprovantes de pagamento e imagens de enquetes.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>O PatotasApp acessa suas fotos para você escolher uma foto de perfil.</string>
+		<string>O PatotasApp acessa suas fotos para você escolher sua foto de perfil, o logo da patota, comprovantes de pagamento e imagens de enquetes.</string>
+		<!-- A escalação é compartilhada pela folha de compartilhamento do iOS, que
+		     oferece "Salvar imagem". Sem esta chave, o app fecha nessa opção. -->
+		<key>NSPhotoLibraryAddUsageDescription</key>
+		<string>O PatotasApp salva na sua galeria as imagens que você escolher guardar, como a escalação da partida.</string>
 		<key>UIBackgroundModes</key>
 		<array>
 			<string>fetch</string>
@@ -65,13 +100,6 @@
 		<key>UISupportedInterfaceOrientations</key>
 		<array>
 			<string>UIInterfaceOrientationPortrait</string>
-			<string>UIInterfaceOrientationLandscapeLeft</string>
-			<string>UIInterfaceOrientationLandscapeRight</string>
-		</array>
-		<key>UISupportedInterfaceOrientations~ipad</key>
-		<array>
-			<string>UIInterfaceOrientationPortrait</string>
-			<string>UIInterfaceOrientationPortraitUpsideDown</string>
 			<string>UIInterfaceOrientationLandscapeLeft</string>
 			<string>UIInterfaceOrientationLandscapeRight</string>
 		</array>

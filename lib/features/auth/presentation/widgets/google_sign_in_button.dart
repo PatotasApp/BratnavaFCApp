@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-import '../../../../core/theme/app_colors.dart';
+import 'auth_option_button.dart';
 
-/// Botão de entrar com o Google.
+/// Botão "Continuar com Google".
 ///
 /// O glifo é o "G" oficial de quatro cores, em SVG — as diretrizes do Google
 /// pedem o logotipo nas cores originais e proíbem recolori-lo. O arquivo é o
@@ -19,51 +19,17 @@ class GoogleSignInButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 48,
-      child: OutlinedButton(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          backgroundColor: AppColors.onDark,
-          side: const BorderSide(color: AppColors.lightBorder),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _GoogleGlyph(),
-            SizedBox(width: 8),
-            Text(
-              'Google',
-              semanticsLabel: 'Entrar com Google',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: AppColors.lightText,
-              ),
-            ),
-          ],
-        ),
+    return AuthOptionButton(
+      onPressed: onPressed,
+      label: 'Continuar com Google',
+      icon: SvgPicture.asset(
+        'assets/images/google_g.svg',
+        width: 18,
+        height: 18,
+        // Sem semântica: o rótulo do botão ao lado já anuncia a ação, e um
+        // segundo texto faria o leitor de tela repetir "Google" duas vezes.
+        excludeFromSemantics: true,
       ),
-    );
-  }
-}
-
-class _GoogleGlyph extends StatelessWidget {
-  const _GoogleGlyph();
-
-  @override
-  Widget build(BuildContext context) {
-    return SvgPicture.asset(
-      'assets/images/google_g.svg',
-      width: 18,
-      height: 18,
-      // Sem semântica: o rótulo do botão ao lado já anuncia a ação, e um
-      // segundo texto faria o leitor de tela repetir "Google" duas vezes.
-      excludeFromSemantics: true,
     );
   }
 }
