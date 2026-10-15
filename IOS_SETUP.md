@@ -63,8 +63,9 @@ Xcode leva poucos minutos.
    `Release-prod`, `Profile-prod`. Mantenha as originais.
 2. Target **Runner → Build Settings → Product Bundle Identifier**: nas três
    `-dev`, use `br.com.patotasapp.dev`. As demais continuam `br.com.patotasapp`.
-3. Ainda em Build Settings, **Product Name** / nome exibido: se quiser
-   diferenciar no iPhone, defina `PatotasApp Dev` nas `-dev` (opcional).
+3. Ainda em Build Settings, **APP_DISPLAY_NAME** (em *User-Defined*): defina
+   `PatotasApp Dev` nas `-dev`. O `CFBundleDisplayName` do `Info.plist` lê esse
+   valor, então os dois apps não ficam com o mesmo nome no iPhone.
 4. **Product → Scheme → Manage Schemes**: duplique o `Runner` duas vezes,
    nomeando `dev` e `prod` e marcando **Shared**. Em cada scheme, aponte Run/Test/
    Analyze para `Debug-<flavor>`, Profile para `Profile-<flavor>` e Archive para
