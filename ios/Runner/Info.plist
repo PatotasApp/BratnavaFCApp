@@ -6,8 +6,11 @@
 		<true/>
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
+		<!-- Vem do build setting APP_DISPLAY_NAME: "PatotasApp" nas configurations
+		     de prod e "PatotasApp Dev" nas -dev, para os dois apps não terem o
+		     mesmo nome no iPhone. -->
 		<key>CFBundleDisplayName</key>
-		<string>PatotasApp</string>
+		<string>$(APP_DISPLAY_NAME)</string>
 		<key>CFBundleExecutable</key>
 		<string>$(EXECUTABLE_NAME)</string>
 		<key>CFBundleIdentifier</key>
