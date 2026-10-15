@@ -5,9 +5,9 @@ import '../../../../core/theme/app_colors.dart';
 
 /// Botão de entrar com a Apple.
 ///
-/// Segue as diretrizes da Apple para o estilo preto: fundo preto, logo e texto
-/// brancos, mesma altura e destaque do botão do Google. A tela de login força o
-/// tema claro, então a variante preta é a correta aqui.
+/// Estilo "white outline" das diretrizes da Apple: fundo branco, contorno e
+/// logo preto. Mesmas medidas e borda do botão do Google, para os dois lerem
+/// como um par na tela de login.
 class AppleSignInButton extends StatelessWidget {
   const AppleSignInButton({super.key, required this.onPressed});
 
@@ -18,13 +18,11 @@ class AppleSignInButton extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       height: 48,
-      child: FilledButton(
+      child: OutlinedButton(
         onPressed: onPressed,
-        style: FilledButton.styleFrom(
-          backgroundColor: AppColors.appleBlack,
-          foregroundColor: AppColors.onDark,
-          disabledBackgroundColor: AppColors.appleBlack.withValues(alpha: 0.5),
-          disabledForegroundColor: AppColors.onDark70,
+        style: OutlinedButton.styleFrom(
+          backgroundColor: AppColors.onDark,
+          side: const BorderSide(color: AppColors.lightBorder),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -37,7 +35,7 @@ class AppleSignInButton extends StatelessWidget {
               width: 18,
               height: 18,
               colorFilter:
-                  const ColorFilter.mode(AppColors.onDark, BlendMode.srcIn),
+                  const ColorFilter.mode(AppColors.appleBlack, BlendMode.srcIn),
               // O rótulo ao lado já anuncia a ação.
               excludeFromSemantics: true,
             ),
@@ -45,7 +43,11 @@ class AppleSignInButton extends StatelessWidget {
             const Text(
               'Apple',
               semanticsLabel: 'Entrar com Apple',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: AppColors.lightText,
+              ),
             ),
           ],
         ),
