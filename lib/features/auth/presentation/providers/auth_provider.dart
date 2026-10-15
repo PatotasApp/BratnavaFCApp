@@ -105,9 +105,93 @@ String? _resolveActiveGroupId({
 
 // ── AsyncNotifier para operações de login/registro ───────────────────────────
 
+/// Login com Apple recusado porque o e-mail já tem conta por outro método.
+///
+/// O erro do Firebase traz a credencial da Apple já validada. Ela fica guardada
+/// até a pessoa entrar pelo método antigo e então é vinculada ao MESMO usuário
+/// do Firebase — mesmo UID, logo mesma conta na API.
+class PendingAppleLink {
+  const PendingAppleLink({required this.credential, required this.email});
+
+  final AuthCredential credential;
+  final String? email;
+}
+
+/// Sobe para a tela quando o login com Apple esbarra numa conta existente.
+/// Não é erro para mostrar: a tela troca para o aviso de vínculo.
+class AppleLinkRequiredException implements Exception {
+  const AppleLinkRequiredException(this.email);
+
+  final String? email;
+}
+
+/// A pessoa entrou numa conta de OUTRO e-mail enquanto havia vínculo pendente.
+class AppleLinkWrongAccountException implements Exception {
+  const AppleLinkWrongAccountException({this.signedIn, this.expected});
+
+  final String? signedIn;
+  final String? expected;
+
+  String get message =>
+      'Você entrou com ${signedIn ?? 'outra conta'}. Para vincular a Apple, '
+      'entre com ${expected ?? 'o e-mail da sua conta'}.';
+}
+
 class AuthNotifier extends AsyncNotifier<void> {
   @override
   Future<void> build() async {}
+
+  PendingAppleLink? _pendingAppleLink;
+  String? _linkNotice;
+
+  PendingAppleLink? get pendingAppleLink => _pendingAppleLink;
+
+  void cancelAppleLink() => _pendingAppleLink = null;
+
+  /// Aviso do último vínculo (sucesso ou falha), consumido uma vez pela tela.
+  String? takeLinkNotice() {
+    final notice = _linkNotice;
+    _linkNotice = null;
+    return notice;
+  }
+
+  /// Vincula a Apple pendente à conta em que a pessoa acabou de entrar.
+  ///
+  /// Conta de outro e-mail não recebe o vínculo — daria a Apple de uma pessoa
+  /// à conta de outra. A sessão é encerrada e a pendência continua de pé.
+  /// Falha no vínculo em si não derruba o login que acabou de acontecer.
+  Future<void> _completePendingAppleLink() async {
+    final pending = _pendingAppleLink;
+    final user = ref.read(firebaseAuthServiceProvider).currentUser;
+    if (pending == null || user == null) return;
+
+    final expected = pending.email?.toLowerCase();
+    if (expected != null && user.email?.toLowerCase() != expected) {
+      final signedIn = user.email;
+
+      // Sem o logout() completo: ele invalida este notifier, e a pendência
+      // precisa sobreviver para a próxima tentativa.
+      await ref.read(accountStoreProvider.notifier).logout();
+      await ref.read(firebaseAuthServiceProvider).signOut();
+
+      throw AppleLinkWrongAccountException(
+        signedIn: signedIn,
+        expected: pending.email,
+      );
+    }
+
+    try {
+      await user.linkWithCredential(pending.credential);
+      _linkNotice = 'Apple vinculada. Agora você também pode entrar com ela.';
+    } on FirebaseAuthException catch (error) {
+      if (error.code != 'provider-already-linked') {
+        _linkNotice = 'Você entrou, mas não foi possível vincular a Apple. '
+            'Tente entrar com a Apple de novo.';
+      }
+    }
+
+    _pendingAppleLink = null;
+  }
 
   /// Autentica no Firebase. Nada mais acontece aqui de propósito.
   ///
@@ -126,6 +210,8 @@ class AuthNotifier extends AsyncNotifier<void> {
       // Um 401 anterior pode ter armado o guard do interceptor. A sessão nova é
       // válida e precisa poder fazer as consultas de inicialização.
       ref.read(authInterceptorProvider).resetUnauthorizedGuard();
+
+      await _completePendingAppleLink();
     });
   }
 
@@ -134,7 +220,94 @@ class AuthNotifier extends AsyncNotifier<void> {
     state = await AsyncValue.guard(() async {
       await ref.read(firebaseAuthServiceProvider).signInWithGoogle();
       ref.read(authInterceptorProvider).resetUnauthorizedGuard();
+
+      await _completePendingAppleLink();
     });
+  }
+
+  Future<void> loginWithApple() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final UserCredential credential;
+
+      try {
+        credential =
+            await ref.read(firebaseAuthServiceProvider).signInWithApple();
+      } on FirebaseAuthException catch (error) {
+        // E-mail já tem conta por Google ou senha: guarda a credencial da
+        // Apple para vincular depois que a pessoa entrar pelo método antigo.
+        if (error.code == 'account-exists-with-different-credential' &&
+            error.credential != null) {
+          _pendingAppleLink = PendingAppleLink(
+            credential: error.credential!,
+            email: error.email,
+          );
+          throw AppleLinkRequiredException(error.email);
+        }
+        rethrow;
+      }
+
+      ref.read(authInterceptorProvider).resetUnauthorizedGuard();
+
+      await _syncAppleName(credential);
+    });
+  }
+
+  /// A Apple só entrega o nome no PRIMEIRO login, e ele nunca vem no ID token.
+  /// O provisionamento lê o token, então a linha nasce com o nome derivado do
+  /// e-mail (que, com "Ocultar meu e-mail", é um relay aleatório). Mesma
+  /// correção em duas etapas do [register].
+  ///
+  /// Falhar aqui não derruba o login: o nome fica com o fallback e a pessoa
+  /// ajusta no perfil.
+  Future<void> _syncAppleName(UserCredential credential) async {
+    if (credential.additionalUserInfo?.isNewUser != true) return;
+
+    final name = _appleName(credential);
+    if (name == null) return;
+
+    try {
+      await ref.read(sessionProvider.notifier).loadProfile();
+      await ref.read(authDataSourceProvider).updateMe(
+            firstName: name.$1,
+            lastName: name.$2,
+          );
+      await ref.read(sessionProvider.notifier).loadProfile();
+    } catch (error) {
+      debugPrint('[Auth] Falha ao gravar o nome vindo da Apple: $error');
+    }
+  }
+
+  /// Nome que a Apple mandou, ou null.
+  ///
+  /// No iOS o plugin repassa o nome ao Firebase, que o grava no `displayName`.
+  /// No Android (fluxo web) o Firebase pode não gravá-lo — aí a fonte é o
+  /// `profile` cru do provedor.
+  static (String, String)? _appleName(UserCredential credential) {
+    final profile = credential.additionalUserInfo?.profile ?? const {};
+    final nested = profile['name'];
+
+    String? read(String key) {
+      final value = profile[key] ?? (nested is Map ? nested[key] : null);
+      return value is String && value.trim().isNotEmpty ? value.trim() : null;
+    }
+
+    final firstName = read('firstName');
+    if (firstName != null) return (firstName, read('lastName') ?? '-');
+
+    final parts = (credential.user?.displayName ?? '')
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
+
+    if (parts.isEmpty) {
+      debugPrint('[Auth] Apple não devolveu nome. profile keys: '
+          '${profile.keys.toList()}');
+      return null;
+    }
+
+    return (parts.first, parts.length > 1 ? parts.skip(1).join(' ') : '-');
   }
 
   /// Cria a conta no Firebase. A linha em `Users` nasce depois, no primeiro

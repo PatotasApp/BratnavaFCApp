@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "328593862894-uo1jei85pfqfjgcco3n263pgeqaq2jbn.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "br.com.patotasapp.dev",
+            "certificate_hash": "1392cc629754b37fc6258857c4fdfbaf70780eb8"
+          }
+        },
+        {
           "client_id": "328593862894-eavjk907d75p3isesk4519bnufd7p1qv.apps.googleusercontent.com",
           "client_type": 3
         }

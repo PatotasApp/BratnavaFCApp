@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "100539922332-aofi5ah5b7ke9ajdlrnqaubsq7ln73io.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "br.com.patotasapp",
+            "certificate_hash": "a406de9f186c05b241463e30e57a2bb0cd7323e3"
+          }
+        },
+        {
           "client_id": "100539922332-sb036dbqb0hv2t5pb8eurbco8uco407v.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

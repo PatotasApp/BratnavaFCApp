@@ -27,7 +27,9 @@ const Map<String, String> _messages = {
       'Sem conexão com o servidor. Verifique sua internet.',
   'account-exists-with-different-credential':
       'Já existe uma conta com este e-mail usando outro método de login. '
-          'Entre por ele e vincule depois.',
+          'Entre pelo método que você já usa.',
+  'credential-already-in-use':
+      'Esta conta Apple já está ligada a outro usuário.',
   'requires-recent-login':
       'Por segurança, entre novamente antes de fazer esta alteração.',
 };
@@ -63,5 +65,8 @@ bool isUserCancelled(Object error) {
     return error.code == GoogleSignInExceptionCode.canceled;
   }
 
-  return error is FirebaseAuthException && error.code == 'web-context-canceled';
+  // `canceled`: login nativo da Apple no iOS. `web-context-canceled`: Custom
+  // Tab fechada no Android (Apple e demais provedores pelo fluxo web).
+  return error is FirebaseAuthException &&
+      (error.code == 'canceled' || error.code == 'web-context-canceled');
 }

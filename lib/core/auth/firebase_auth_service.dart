@@ -78,6 +78,52 @@ class FirebaseAuthService {
     );
   }
 
+  /// Entra com a Apple.
+  ///
+  /// No iOS o plugin usa o login nativo (ASAuthorization) e repassa o nome ao
+  /// Firebase, que o grava no `displayName`. No Android a Apple não tem SDK: o
+  /// Firebase abre o login web da Apple numa Custom Tab, pelo Services ID
+  /// configurado no console. Sem os scopes, a Apple não devolve nem e-mail nem
+  /// nome.
+  Future<UserCredential> signInWithApple() => _auth.signInWithProvider(
+        AppleAuthProvider()
+          ..addScope('email')
+          ..addScope('name')
+          ..setCustomParameters({'locale': 'pt_BR'}),
+      );
+
+  /// Revoga a autorização do app na conta Apple, se a conta tiver login Apple.
+  ///
+  /// Exigência da App Store (5.1.1(v)) para exclusão de conta. Revogar precisa
+  /// de um authorization code FRESCO (vale 5 minutos), e ele só sai de um login
+  /// — por isso a reautenticação, que mostra a tela da Apple de novo.
+  ///
+  /// Roda ANTES do `DELETE /api/Users/me`: depois dele o usuário do Firebase
+  /// não existe mais e não há como revogar. O preço é que, se o DELETE falhar,
+  /// a autorização já foi revogada — o próximo login com Apple só pede o
+  /// consentimento de novo, sem perder nada.
+  Future<void> revokeAppleIfLinked() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final hasApple =
+        user.providerData.any((p) => p.providerId == 'apple.com');
+    if (!hasApple) return;
+
+    final credential =
+        await user.reauthenticateWithProvider(AppleAuthProvider());
+    final code = credential.additionalUserInfo?.authorizationCode;
+
+    if (code == null || code.isEmpty) {
+      throw FirebaseAuthException(
+        code: 'missing-apple-authorization-code',
+        message: 'A Apple não devolveu o código de autorização.',
+      );
+    }
+
+    await _auth.revokeTokenWithAuthorizationCode(code);
+  }
+
   Future<UserCredential> createAccount({
     required String email,
     required String password,
