@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:home_widget/home_widget.dart';
 import 'package:intl/intl.dart';
 
@@ -153,7 +155,14 @@ class MatchHomeWidgetService {
     return fallback;
   }
 
+  /// O widget só existe no Android. No iOS o home_widget exige um App Group e
+  /// uma extensão de widget que o projeto não tem, e cada chamada lança — o
+  /// que derrubaria o logout e a exclusão de conta, que limpam o widget.
+  static bool get _supported => Platform.isAndroid;
+
   static Future<void> _saveAll(Map<String, String> data) async {
+    if (!_supported) return;
+
     await Future.wait(
       data.entries.map(
         (entry) => HomeWidget.saveWidgetData<String>(entry.key, entry.value),
@@ -161,8 +170,12 @@ class MatchHomeWidgetService {
     );
   }
 
-  static Future<void> _update() => HomeWidget.updateWidget(
-        androidName: _androidProvider,
-        qualifiedAndroidName: 'br.com.patotasapp.$_androidProvider',
-      );
+  static Future<void> _update() async {
+    if (!_supported) return;
+
+    await HomeWidget.updateWidget(
+      androidName: _androidProvider,
+      qualifiedAndroidName: 'br.com.patotasapp.$_androidProvider',
+    );
+  }
 }

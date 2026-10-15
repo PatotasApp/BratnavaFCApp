@@ -19,7 +19,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(SvgPicture), findsOneWidget);
-    expect(find.text('Entrar com Google'), findsOneWidget);
+    expect(find.text('Continuar com Google'), findsOneWidget);
 
     // Um SVG malformado só falha em runtime, não na análise estática. Este teste
     // existe para o asset não quebrar em silêncio se alguém mexer no arquivo ou

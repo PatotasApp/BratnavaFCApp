@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../features/auth/presentation/pages/email_login_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/forgot_password_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
@@ -123,7 +124,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       // em isAuthRoute, que redireciona para /app quando há sessão.
       if (path == '/forgot-password') return null;
 
-      final isAuthRoute = path == '/login' || path == '/register';
+      final isAuthRoute =
+          path == '/login' || path == '/login/email' || path == '/register';
 
       // 1. O SDK ainda está lendo a sessão do disco. Tratar este instante como
       //    "deslogado" chutaria para o login quem estava autenticado — é o bug
@@ -162,6 +164,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         builder: (_, __) => const LoginPage(),
+      ),
+      GoRoute(
+        path: '/login/email',
+        builder: (_, __) => const EmailLoginPage(),
       ),
       GoRoute(
         path: '/register',
