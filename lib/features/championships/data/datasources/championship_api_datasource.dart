@@ -186,6 +186,10 @@ class ChampionshipApiDataSource implements ChampionshipDataSource {
           ));
 
   @override
+  Future<void> stepBack(String groupId, String id) =>
+      _send(() => _dio.post('${_base(groupId)}/$id/step-back'));
+
+  @override
   Future<void> start(String groupId, String id) =>
       _send(() => _dio.post('${_base(groupId)}/$id/start'));
 
@@ -255,6 +259,21 @@ class ChampionshipApiDataSource implements ChampionshipDataSource {
       _send(() => _dio.post(
             '${_base(groupId)}/$id/games/$gameId/end',
             data: {'externalWinnerTeamId': externalWinnerTeamId},
+          ));
+
+  @override
+  Future<void> publishGameEvent(
+    String groupId,
+    String id,
+    String gameId,
+    String type,
+  ) =>
+      _send(() => _dio.post(
+            '${_base(groupId)}/$id/games/$gameId/events',
+            data: {
+              'type': type,
+              'eventTime': DateTime.now().toUtc().toIso8601String(),
+            },
           ));
 
   @override

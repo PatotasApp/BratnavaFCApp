@@ -290,7 +290,7 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
         'colorId': definition.colorId,
         'colorHex': _hexOf(definition.colorId),
         'finalPosition': null,
-        'playerIds': definition.playerIds,
+        'playerIds': [...definition.playerIds],
       });
       for (final raw in item['players'] as List<dynamic>) {
         final player = raw as Map<String, dynamic>;
@@ -324,6 +324,46 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
       final ids = team['playerIds'] as List<dynamic>;
       ids.remove(playerId);
       if (team['id'] == teamId) ids.add(playerId);
+    }
+  }
+
+  @override
+  Future<void> stepBack(String groupId, String id) async {
+    final item = _require(id);
+    final status = item['status'] as int;
+    final players = item['players'] as List<dynamic>;
+    switch (enumByValue(ChampionshipStatus.values, status)) {
+      case ChampionshipStatus.acceptation:
+        players.clear();
+        item['status'] = ChampionshipStatus.created.value;
+      case ChampionshipStatus.teamDraw:
+        for (final raw in players) {
+          (raw as Map<String, dynamic>)
+            ..['teamId'] = null
+            ..['isGoalkeeper'] = false;
+        }
+        item
+          ..['teams'] = <Map<String, dynamic>>[]
+          ..['status'] = ChampionshipStatus.acceptation.value;
+      case ChampionshipStatus.inProgress:
+        if ((item['games'] as List<dynamic>).isNotEmpty) {
+          throw StateError('Só é possível voltar antes do 1º jogo.');
+        }
+        item
+          ..['status'] = ChampionshipStatus.teamDraw.value
+          ..['rulesLocked'] = false;
+      case ChampionshipStatus.postGame:
+        item
+          ..['status'] = ChampionshipStatus.inProgress.value
+          ..['myVotes'] = <Map<String, dynamic>>[]
+          ..['canVote'] = false;
+      case ChampionshipStatus.finalized:
+        item
+          ..['status'] = ChampionshipStatus.postGame.value
+          ..['mvpPlayerIds'] = <String>[];
+      case ChampionshipStatus.created:
+      case ChampionshipStatus.cancelled:
+        throw StateError('Não há etapa anterior.');
     }
   }
 
@@ -458,6 +498,16 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
   }
 
   @override
+  Future<void> publishGameEvent(
+    String groupId,
+    String id,
+    String gameId,
+    String type,
+  ) async {
+    _require(id);
+  }
+
+  @override
   Future<void> finish(String groupId, String id) async {
     final item = _require(id);
     item
@@ -519,10 +569,7 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
                   'colorId': _mockColors[teamIndex].$1,
                   'colorHex': _mockColors[teamIndex].$2,
                   'finalPosition': isFinalized ? teamIndex + 1 : null,
-                  'playerIds': playerIds
-                      .skip(teamIndex * 3)
-                      .take(3)
-                      .toList(growable: false),
+                  'playerIds': playerIds.skip(teamIndex * 3).take(3).toList(),
                 })
         : <Map<String, dynamic>>[];
     final games = hasGame

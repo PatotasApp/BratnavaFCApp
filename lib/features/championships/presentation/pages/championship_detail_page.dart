@@ -235,7 +235,8 @@ class _PresenceSection extends StatelessWidget {
               title: Text(player.name),
               subtitle: player.isGuest ? const Text('Convidado') : null,
               trailing: isAdmin &&
-                      details.status == ChampionshipStatus.acceptation
+                      (details.status == ChampionshipStatus.acceptation ||
+                          details.status == ChampionshipStatus.teamDraw)
                   ? PopupMenuButton<bool>(
                       tooltip: 'Alterar presença',
                       onSelected: (accepted) => notifier.setInvite(
@@ -255,7 +256,7 @@ class _PresenceSection extends StatelessWidget {
   }
 }
 
-class _TeamsSection extends ConsumerWidget {
+class _TeamsSection extends ConsumerStatefulWidget {
   const _TeamsSection({
     required this.details,
     required this.isAdmin,
@@ -266,80 +267,130 @@ class _TeamsSection extends ConsumerWidget {
   final bool isAdmin;
   final ChampionshipDetailsNotifier notifier;
 
+  @override
+  ConsumerState<_TeamsSection> createState() => _TeamsSectionState();
+}
+
+/// Troca como na partida: toca em 2 jogadores e eles trocam de lugar,
+/// levando junto o papel de goleiro.
+class _TeamsSectionState extends ConsumerState<_TeamsSection> {
+  String? _selected;
+
+  ChampionshipDetails get details => widget.details;
+
   bool get _canEditTeams =>
-      isAdmin &&
+      widget.isAdmin &&
       details.status != ChampionshipStatus.finalized &&
       details.status != ChampionshipStatus.cancelled;
 
+  bool get _canSwap =>
+      widget.isAdmin &&
+      (details.status == ChampionshipStatus.teamDraw ||
+          details.status == ChampionshipStatus.inProgress);
+
+  Future<void> _tap(String playerId) async {
+    final first = _selected;
+    if (first == null) {
+      setState(() => _selected = playerId);
+      return;
+    }
+    setState(() => _selected = null);
+    if (first == playerId) return;
+    final ok = await widget.notifier.swapPlayers(first, playerId);
+    if (ok && mounted) {
+      _showMessage(
+        context,
+        '${_playerName(details, first)} ⇄ ${_playerName(details, playerId)}',
+      );
+    }
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) => PrototypeCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _SectionTitle(
-              icon: Icons.groups_outlined,
-              title: 'Times',
-              trailing: _canEditTeams
-                  ? TextButton.icon(
-                      onPressed: () async {
-                        final message = await notifier.drawTeamColors();
-                        if (message != null && context.mounted) {
-                          _showMessage(context, message);
-                        }
-                      },
-                      icon: const Icon(Icons.palette_outlined, size: 18),
-                      label: const Text('Sortear cores'),
-                    )
-                  : null,
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return PrototypeCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SectionTitle(
+            icon: Icons.groups_outlined,
+            title: 'Times',
+            trailing: _canEditTeams
+                ? TextButton.icon(
+                    onPressed: () async {
+                      final message = await widget.notifier.drawTeamColors();
+                      if (message != null && context.mounted) {
+                        _showMessage(context, message);
+                      }
+                    },
+                    icon: const Icon(Icons.palette_outlined, size: 18),
+                    label: const Text('Sortear cores'),
+                  )
+                : null,
+          ),
+          if (_canSwap) ...[
+            const SizedBox(height: 4),
+            Text(
+              _selected == null
+                  ? 'Toque em 2 jogadores para trocar de lugar (vale também '
+                      'para o goleiro). No jogo em andamento, vale para os '
+                      'próximos jogos.'
+                  : 'Agora toque no jogador para trocar com '
+                      '${_playerName(details, _selected!)}.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
-            const SizedBox(height: 8),
-            for (final team in details.teams)
-              ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                childrenPadding: const EdgeInsets.only(bottom: 8),
-                leading: _TeamColor(hex: team.colorHex),
-                title: Text(team.name),
-                subtitle: Text('${team.playerIds.length} jogadores'
-                    '${team.colorHex == null ? ' · sem cor' : ''}'),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (team.finalPosition != null)
-                      Text('${team.finalPosition}º'),
-                    if (_canEditTeams)
-                      IconButton(
-                        tooltip: 'Editar nome e cor',
-                        onPressed: () => _editTeam(context, team, notifier),
-                        icon: const Icon(Icons.edit_outlined),
-                      ),
-                  ],
-                ),
+          ],
+          const SizedBox(height: 8),
+          for (final team in details.teams)
+            ExpansionTile(
+              initiallyExpanded: _canSwap,
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 8),
+              leading: _TeamColor(hex: team.colorHex),
+              title: Text(team.name),
+              subtitle: Text('${team.playerIds.length} jogadores'
+                  '${team.colorHex == null ? ' · sem cor' : ''}'
+                  '${team.playerIds.any((id) => details.playerById(id)?.isGoalkeeper == true) ? '' : ' · sem goleiro'}'),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  for (final playerId in team.playerIds)
-                    ListTile(
-                      dense: true,
-                      title: Text(_playerName(details, playerId)),
-                      leading: Icon(
-                        details.playerById(playerId)?.isGoalkeeper == true
-                            ? Icons.sports_handball
-                            : Icons.person_outline,
-                      ),
-                      trailing: isAdmin &&
-                              details.status == ChampionshipStatus.inProgress
-                          ? TextButton(
-                              onPressed: () => notifier.setGoalkeeper(
-                                team.id,
-                                playerId,
-                              ),
-                              child: const Text('Goleiro'),
-                            )
-                          : null,
+                  if (team.finalPosition != null)
+                    Text('${team.finalPosition}º'),
+                  if (_canEditTeams)
+                    IconButton(
+                      tooltip: 'Editar nome e cor',
+                      onPressed: () =>
+                          _editTeam(context, team, widget.notifier),
+                      icon: const Icon(Icons.edit_outlined),
                     ),
                 ],
               ),
-          ],
-        ),
-      );
+              children: [
+                for (final playerId in team.playerIds)
+                  ListTile(
+                    dense: true,
+                    selected: _selected == playerId,
+                    selectedTileColor: scheme.primaryContainer,
+                    onTap: _canSwap ? () => _tap(playerId) : null,
+                    title: Text(_playerName(details, playerId)),
+                    subtitle: details.playerById(playerId)?.isGoalkeeper == true
+                        ? const Text('Goleiro')
+                        : null,
+                    leading: Icon(
+                      details.playerById(playerId)?.isGoalkeeper == true
+                          ? Icons.sports_handball
+                          : Icons.person_outline,
+                    ),
+                    trailing: _selected == playerId
+                        ? const Icon(Icons.swap_horiz_rounded)
+                        : null,
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class _LiveSection extends StatelessWidget {
@@ -401,6 +452,34 @@ class _LiveSection extends StatelessWidget {
                 ),
             ],
             if (isAdmin) ...[
+              const SizedBox(height: 10),
+              Text('Marcar lance para as câmeras',
+                  style: Theme.of(context).textTheme.labelMedium),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final (type, label) in [
+                    ('GolTimeA', 'Gol ${_teamName(details, current.teamAId)}'),
+                    ('GolTimeB', 'Gol ${_teamName(details, current.teamBId)}'),
+                    ('Jogada', 'Jogada'),
+                  ])
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final ok =
+                            await notifier.publishGameEvent(current.id, type);
+                        if (ok && context.mounted) {
+                          _showMessage(context, 'Lance marcado: $label.');
+                        }
+                      },
+                      icon: Icon(type == 'Jogada'
+                          ? Icons.videocam_outlined
+                          : Icons.sports_soccer),
+                      label: Text(label),
+                    ),
+                ],
+              ),
               const SizedBox(height: 10),
               Wrap(
                 spacing: 8,
@@ -649,7 +728,7 @@ class _AdminActions extends StatelessWidget {
         ));
       case ChampionshipStatus.acceptation:
         actions.add(FilledButton(
-          onPressed: () => _drawTeams(context, notifier),
+          onPressed: () => _drawTeams(context, details, notifier),
           child: const Text('Sortear e definir times'),
         ));
         actions.add(OutlinedButton(
@@ -661,6 +740,14 @@ class _AdminActions extends StatelessWidget {
           onPressed: notifier.start,
           icon: const Icon(Icons.play_arrow_rounded),
           label: const Text('Iniciar campeonato'),
+        ));
+        actions.add(OutlinedButton(
+          onPressed: () => _drawTeams(context, details, notifier),
+          child: const Text('Refazer o sorteio dos times'),
+        ));
+        actions.add(OutlinedButton(
+          onPressed: () => _addGuest(context, details, notifier),
+          child: const Text('Adicionar convidado'),
         ));
       case ChampionshipStatus.inProgress:
         if (details.currentGame == null) {
@@ -681,6 +768,16 @@ class _AdminActions extends StatelessWidget {
       case ChampionshipStatus.finalized:
       case ChampionshipStatus.cancelled:
         break;
+    }
+    final previous = _previousStepLabel(details.status);
+    if (previous != null &&
+        !(details.status == ChampionshipStatus.inProgress &&
+            details.games.isNotEmpty)) {
+      actions.add(TextButton.icon(
+        onPressed: () => _stepBack(context, details, notifier),
+        icon: const Icon(Icons.undo_rounded),
+        label: Text(previous),
+      ));
     }
     if (actions.isEmpty) return const SizedBox.shrink();
     return PrototypeCard(
@@ -878,6 +975,7 @@ class _MessageCard extends StatelessWidget {
 
 Future<void> _drawTeams(
   BuildContext context,
+  ChampionshipDetails details,
   ChampionshipDetailsNotifier notifier,
 ) async {
   var teamCount = 3;
@@ -911,40 +1009,187 @@ Future<void> _drawTeams(
   if (count == null || !context.mounted) return;
   final draw = await notifier.drawTeams(count);
   if (draw == null || !context.mounted) return;
-  final suggestion = draw.teams;
+  final teams = [
+    for (final team in draw.teams.teams)
+      (
+        name: team.name,
+        colorId: team.colorId,
+        playerIds: [...team.playerIds],
+        goalkeeper: team.goalkeeperPlayerId,
+      ),
+  ];
+  final everyone = [for (final team in teams) ...team.playerIds];
+
+  // Escolher como goleiro alguém de outro time traz o jogador para este time.
+  void setGoalkeeper(int index, String? playerId) {
+    if (playerId != null && !teams[index].playerIds.contains(playerId)) {
+      for (var other = 0; other < teams.length; other++) {
+        if (!teams[other].playerIds.remove(playerId)) continue;
+        if (teams[other].goalkeeper == playerId) {
+          teams[other] = (
+            name: teams[other].name,
+            colorId: teams[other].colorId,
+            playerIds: teams[other].playerIds,
+            goalkeeper: null,
+          );
+        }
+      }
+      teams[index].playerIds.add(playerId);
+    }
+    teams[index] = (
+      name: teams[index].name,
+      colorId: teams[index].colorId,
+      playerIds: teams[index].playerIds,
+      goalkeeper: playerId,
+    );
+  }
+
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) {
+        final withoutGoalkeeper =
+            teams.where((team) => team.goalkeeper == null).toList();
+        final error = Theme.of(context).colorScheme.error;
+        return AlertDialog(
+          title: const Text('Confirmar times'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (draw.message != null) ...[
+                  Text(draw.message!, style: TextStyle(color: error)),
+                  const SizedBox(height: 10),
+                ],
+                for (var index = 0; index < teams.length; index++) ...[
+                  Text(
+                    '${teams[index].name} · '
+                    '${teams[index].playerIds.length} jogadores',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  Text(
+                    teams[index]
+                        .playerIds
+                        .map((id) => _playerName(details, id))
+                        .join(', '),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String?>(
+                    key: ValueKey('gk-$index-${teams[index].goalkeeper}'),
+                    initialValue: teams[index].goalkeeper,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Goleiro'),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Sem goleiro'),
+                      ),
+                      for (final playerId in everyone)
+                        DropdownMenuItem<String?>(
+                          value: playerId,
+                          child: Text(
+                            teams[index].playerIds.contains(playerId)
+                                ? _playerName(details, playerId)
+                                : '${_playerName(details, playerId)} '
+                                    '(vem de outro time)',
+                          ),
+                        ),
+                    ],
+                    onChanged: (value) =>
+                        setDialogState(() => setGoalkeeper(index, value)),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+                if (withoutGoalkeeper.isNotEmpty)
+                  Text(
+                    'Sem goleiro: '
+                    '${withoutGoalkeeper.map((team) => team.name).join(', ')}.',
+                    style: TextStyle(color: error),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Voltar'),
+            ),
+            FilledButton(
+              onPressed: teams.any((team) => team.playerIds.isEmpty)
+                  ? null
+                  : () => Navigator.pop(context, true),
+              child: const Text('Salvar times'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+  if (confirmed != true) return;
+  await notifier.defineTeams(DefineChampionshipTeams(
+    teams: [
+      for (final team in teams)
+        DefineChampionshipTeam(
+          name: team.name,
+          colorId: team.colorId,
+          playerIds: team.playerIds,
+          goalkeeperPlayerId: team.goalkeeper,
+        ),
+    ],
+  ));
+}
+
+/// Etapa anterior de cada status para o `POST /{id}/step-back`.
+String? _previousStepLabel(ChampionshipStatus status) => switch (status) {
+      ChampionshipStatus.acceptation => 'Voltar para Criado',
+      ChampionshipStatus.teamDraw => 'Voltar para a presença',
+      ChampionshipStatus.inProgress => 'Voltar para os times',
+      ChampionshipStatus.postGame => 'Voltar para os jogos',
+      ChampionshipStatus.finalized => 'Reabrir (voltar para o MVP)',
+      ChampionshipStatus.created || ChampionshipStatus.cancelled => null,
+    };
+
+String _previousStepWarning(ChampionshipStatus status) => switch (status) {
+      ChampionshipStatus.acceptation =>
+        'A lista de presença é apagada. Você pode abri-la de novo depois.',
+      ChampionshipStatus.teamDraw =>
+        'Os times são desfeitos. As presenças continuam.',
+      ChampionshipStatus.inProgress =>
+        'Só é possível antes do 1º jogo. As regras voltam a poder ser editadas.',
+      ChampionshipStatus.postGame =>
+        'Os votos de MVP são descartados e dá para criar mais jogos.',
+      ChampionshipStatus.finalized =>
+        'O campeão e as estatísticas deixam de contar até finalizar de novo.',
+      _ => '',
+    };
+
+Future<void> _stepBack(
+  BuildContext context,
+  ChampionshipDetails details,
+  ChampionshipDetailsNotifier notifier,
+) async {
+  final label = _previousStepLabel(details.status);
+  if (label == null) return;
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Confirmar times'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (draw.message != null) ...[
-            Text(
-              draw.message!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-            const SizedBox(height: 10),
-          ],
-          for (final team in suggestion.teams)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text('${team.name}: ${team.playerIds.length} jogadores'),
-            ),
-        ],
-      ),
+      title: Text('$label?'),
+      content: Text(_previousStepWarning(details.status)),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Voltar')),
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancelar'),
+        ),
         FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Salvar times')),
+          onPressed: () => Navigator.pop(context, true),
+          child: Text(label),
+        ),
       ],
     ),
   );
-  if (confirmed == true) await notifier.defineTeams(suggestion);
+  if (confirmed == true) await notifier.stepBack();
 }
 
 Future<void> _addGuest(

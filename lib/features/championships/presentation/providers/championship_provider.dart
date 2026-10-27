@@ -323,6 +323,10 @@ class ChampionshipDetailsNotifier
         ),
         'Falha ao atualizar time.',
       );
+  Future<bool> stepBack() => _mutate(
+        () => _dataSource.stepBack(groupId, championshipId),
+        'Falha ao voltar etapa.',
+      );
   Future<bool> start() => _mutate(
         () => _dataSource.start(groupId, championshipId),
         'Falha ao iniciar campeonato.',
@@ -391,6 +395,75 @@ class ChampionshipDetailsNotifier
           externalWinnerTeamId: externalWinnerTeamId,
         ),
         'Falha ao encerrar jogo.',
+      );
+
+  /// Troca 2 jogadores de lugar. Em times diferentes, cada um vai para o time
+  /// do outro e quem chega assume o papel de goleiro de quem saiu. No mesmo
+  /// time, o goleiro passa para o outro.
+  Future<bool> swapPlayers(String firstId, String secondId) {
+    final details = state.details;
+    if (details == null) return Future.value(false);
+    final first = details.playerById(firstId);
+    final second = details.playerById(secondId);
+    final firstTeam = first?.teamId;
+    final secondTeam = second?.teamId;
+    if (first == null || second == null) return Future.value(false);
+    return _mutate(() async {
+      if (firstTeam != null && firstTeam == secondTeam) {
+        if (first.isGoalkeeper != second.isGoalkeeper) {
+          await _dataSource.setGoalkeeper(
+            groupId,
+            championshipId,
+            firstTeam,
+            first.isGoalkeeper ? secondId : firstId,
+          );
+        }
+        return;
+      }
+      if (secondTeam != null) {
+        await _dataSource.assignPlayerTeam(
+            groupId, championshipId, firstId, secondTeam);
+      }
+      if (firstTeam != null) {
+        await _dataSource.assignPlayerTeam(
+            groupId, championshipId, secondId, firstTeam);
+      }
+      // Reafirma o goleiro dos dois times para quem saiu não continuar
+      // marcado como goleiro no time novo.
+      String? goalkeeperOf(String teamId) {
+        for (final player in details.players) {
+          if (player.teamId == teamId && player.isGoalkeeper) {
+            return player.playerId;
+          }
+        }
+        return null;
+      }
+
+      if (firstTeam != null) {
+        final keeper = first.isGoalkeeper ? secondId : goalkeeperOf(firstTeam);
+        if (keeper != null) {
+          await _dataSource.setGoalkeeper(
+              groupId, championshipId, firstTeam, keeper);
+        }
+      }
+      if (secondTeam != null) {
+        final keeper = second.isGoalkeeper ? firstId : goalkeeperOf(secondTeam);
+        if (keeper != null) {
+          await _dataSource.setGoalkeeper(
+              groupId, championshipId, secondTeam, keeper);
+        }
+      }
+    }, 'Falha ao trocar jogadores.');
+  }
+
+  Future<bool> publishGameEvent(String gameId, String type) => _mutate(
+        () => _dataSource.publishGameEvent(
+          groupId,
+          championshipId,
+          gameId,
+          type,
+        ),
+        'Falha ao marcar o lance.',
       );
   Future<bool> finish() => _mutate(
         () => _dataSource.finish(groupId, championshipId),

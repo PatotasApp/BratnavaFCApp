@@ -39,6 +39,9 @@ abstract interface class ChampionshipDataSource {
     required String name,
     String? colorId,
   });
+
+  /// Volta o campeonato para a etapa anterior (`POST /{id}/step-back`).
+  Future<void> stepBack(String groupId, String id);
   Future<void> start(String groupId, String id);
   Future<String> createGame(
     String groupId,
@@ -73,6 +76,15 @@ abstract interface class ChampionshipDataSource {
     String gameId, {
     String? externalWinnerTeamId,
   });
+
+  /// Marca um lance para as câmeras ("GolTimeA", "GolTimeB" ou "Jogada"),
+  /// gravando campeonato, jogo e horário (`POST /{id}/games/{gameId}/events`).
+  Future<void> publishGameEvent(
+    String groupId,
+    String id,
+    String gameId,
+    String type,
+  );
   Future<void> finish(String groupId, String id);
   Future<void> vote(
     String groupId,

@@ -83,3 +83,13 @@ O que mudou:
 - `flutter analyze` focal de todos os arquivos novos/modificados: nenhum erro novo; somente 2 warnings preexistentes de placeholders sem uso no roteador.
 - A tentativa de `flutter analyze` completo foi interrompida pelo próprio analisador com falta de memória. A análise focal da feature completa passou limpa, e a suíte compila o app inteiro.
 - `git diff --check`: limpo.
+
+## Pedidos do Luis no teste local (27/10/2026)
+
+- **Goleiro antes de salvar os times:** na confirmação do sorteio, cada time tem o campo "Goleiro" e aparece em vermelho quais times estão sem goleiro. Dá para escolher alguém de outro time: o jogador vem para este time.
+- **Troca simplificada, como na partida:** com os times definidos ou o campeonato em andamento, o admin toca em 2 jogadores e eles trocam de lugar. O papel de goleiro vai junto: quem entra no lugar do goleiro vira goleiro. No mesmo time, o goleiro passa para o outro jogador. Usa `PATCH players/{id}/team` + `PATCH goalkeeper`. O botão "Goleiro" por jogador saiu.
+- Com os times definidos, também dá para refazer o sorteio, mudar a presença e adicionar convidado.
+- **Voltar etapa:** botão "Voltar para …" chamando `POST /{id}/step-back`. ⚠️ A rota **ainda não existe na API**: o prompt para o backend está em `side-session-notes/.../prompt-backend-voltar-etapa-e-lances.md`. Até lá, o botão mostra o erro do servidor.
+- **Lances para as câmeras:** botões "Gol <time A>", "Gol <time B>" e "Jogada" no jogo ao vivo, chamando `POST /{id}/games/{gameId}/events` com `{ type, eventTime }`. ⚠️ A rota também **ainda não existe na API** (mesmo prompt).
+- Corrigido no mock: as listas de jogadores dos times não aceitavam troca.
+- Testes novos: `test/features/championships/presentation/championship_details_notifier_test.dart` (troca e voltar etapa).
