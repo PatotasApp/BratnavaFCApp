@@ -30,7 +30,7 @@ class RecentMatchCard extends ConsumerWidget {
 
     final myHex = match.myTeamColor?.hexValue;
     final myName = match.myTeamColor?.name;
-    const hasScore = true; // sempre mostra
+    final hasScore = !match.isConsolidatedChampionship;
 
     final (outcomeLabel, outcomeFg, outcomeBg, outcomeBorder) =
         switch (match.outcome) {
@@ -52,6 +52,12 @@ class RecentMatchCard extends ConsumerWidget {
           AppColors.rose50,
           AppColors.rose200
         ),
+      MatchOutcome.presence => (
+          'Presença',
+          AppColors.slate600,
+          AppColors.slate100,
+          AppColors.slate200
+        ),
     };
 
     final borderColor = isDark ? AppColors.slate700 : AppColors.slate200;
@@ -65,7 +71,17 @@ class RecentMatchCard extends ConsumerWidget {
     final canSeeStats = isGroupAdm || (settings?.showPlayerStats ?? false);
 
     return GestureDetector(
-      onTap: () => context.push('/app/history/$groupId/${match.matchId}'),
+      onTap: () {
+        if (match.isChampionshipItem) {
+          final championshipId = match.championshipId ??
+              (match.isConsolidatedChampionship ? match.matchId : null);
+          if (championshipId != null && championshipId.isNotEmpty) {
+            context.push('/app/championships/$championshipId');
+          }
+          return;
+        }
+        context.push('/app/history/$groupId/${match.matchId}');
+      },
       child: Container(
         decoration: BoxDecoration(
           color: isDark ? AppColors.slate900 : AppColors.onDark,
@@ -144,6 +160,29 @@ class RecentMatchCard extends ConsumerWidget {
                           runSpacing: 4,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
+                            if (match.isChampionshipItem)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.amber50,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: AppColors.amber200),
+                                ),
+                                child: Text(
+                                  '🏆 ${match.championshipName ?? 'Campeonato'}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: AppColors.amber500,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+
                             // Cor do time do jogador
                             if (myHex != null || myName != null)
                               Row(

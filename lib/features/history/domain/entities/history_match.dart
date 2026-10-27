@@ -14,6 +14,12 @@ class HistoryMatch {
   final String? placeName;
   final String? linkedPollTitle;
   final String? linkedPollType;
+  final String? kind;
+  final String? championshipId;
+  final String? championshipName;
+  final String? championTeamName;
+  final String? championTeamColorHex;
+  final List<String> ruleBadges;
 
   const HistoryMatch({
     required this.id,
@@ -29,9 +35,20 @@ class HistoryMatch {
     this.placeName,
     this.linkedPollTitle,
     this.linkedPollType,
+    this.kind,
+    this.championshipId,
+    this.championshipName,
+    this.championTeamName,
+    this.championTeamColorHex,
+    this.ruleBadges = const [],
   });
 
-  bool get hasScore => teamAGoals != null && teamBGoals != null;
+  bool get isConsolidatedChampionship => kind == 'championship';
+  bool get isChampionshipGame => kind == 'championshipGame';
+  bool get isChampionshipItem =>
+      isConsolidatedChampionship || isChampionshipGame;
+  bool get hasScore =>
+      !isConsolidatedChampionship && teamAGoals != null && teamBGoals != null;
 
   factory HistoryMatch.fromJson(Map<String, dynamic> json,
       {String groupId = ''}) {
@@ -61,6 +78,15 @@ class HistoryMatch {
       placeName: json['placeName'] as String?,
       linkedPollTitle: json['linkedPollTitle'] as String?,
       linkedPollType: json['linkedPollType'] as String?,
+      kind: json['kind'] as String?,
+      championshipId: json['championshipId']?.toString(),
+      championshipName: json['championshipName'] as String?,
+      championTeamName: json['championTeamName'] as String?,
+      championTeamColorHex: _hex(json['championTeamColorHex']),
+      ruleBadges: (json['ruleBadges'] as List?)
+              ?.whereType<String>()
+              .toList(growable: false) ??
+          const [],
     );
   }
 

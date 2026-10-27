@@ -2,7 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'current_match.dart';
 import '../../../../core/utils/date_utils.dart';
 
-enum MatchOutcome { win, draw, loss }
+enum MatchOutcome { win, draw, loss, presence }
 
 class RecentMatch extends Equatable {
   final String matchId;
@@ -16,6 +16,9 @@ class RecentMatch extends Equatable {
   final TeamColor? opponentColor;
   final int myTeamGoals;
   final int opponentGoals;
+  final String? kind;
+  final String? championshipId;
+  final String? championshipName;
 
   const RecentMatch({
     required this.matchId,
@@ -29,7 +32,15 @@ class RecentMatch extends Equatable {
     this.opponentColor,
     required this.myTeamGoals,
     required this.opponentGoals,
+    this.kind,
+    this.championshipId,
+    this.championshipName,
   });
+
+  bool get isConsolidatedChampionship => kind == 'championship';
+  bool get isChampionshipGame => kind == 'championshipGame';
+  bool get isChampionshipItem =>
+      isConsolidatedChampionship || isChampionshipGame;
 
   factory RecentMatch.fromJson(Map<String, dynamic> j) {
     // Tenta objeto aninhado; cai para campos flat (teamAColorHex / teamAColorName)
@@ -49,11 +60,12 @@ class RecentMatch extends Equatable {
     final myGoals = myTeam == 1 ? teamAGoals : teamBGoals;
     final oppGoals = myTeam == 1 ? teamBGoals : teamAGoals;
 
-    final outcome = myGoals > oppGoals
-        ? MatchOutcome.win
-        : myGoals < oppGoals
-            ? MatchOutcome.loss
-            : MatchOutcome.draw;
+    final outcome = _outcomeFromApi(j['playerResult'] as String?) ??
+        (myGoals > oppGoals
+            ? MatchOutcome.win
+            : myGoals < oppGoals
+                ? MatchOutcome.loss
+                : MatchOutcome.draw);
 
     return RecentMatch(
       matchId: j['matchId'] as String? ?? '',
@@ -76,11 +88,22 @@ class RecentMatch extends Equatable {
       ),
       myTeamGoals: myGoals,
       opponentGoals: oppGoals,
+      kind: j['kind'] as String?,
+      championshipId: j['championshipId']?.toString(),
+      championshipName: j['championshipName'] as String?,
     );
   }
 
   @override
   List<Object?> get props => [matchId, playedAt, outcome];
 }
+
+MatchOutcome? _outcomeFromApi(String? value) => switch (value?.toUpperCase()) {
+      'W' => MatchOutcome.win,
+      'D' => MatchOutcome.draw,
+      'L' => MatchOutcome.loss,
+      'N' => MatchOutcome.presence,
+      _ => null,
+    };
 
 DateTime _parseDate(String? s) => parseApiDate(s);

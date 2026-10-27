@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../../../core/api/api_response.dart';
+import '../../../../core/constants/app_constants.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../domain/entities/current_match.dart';
 import '../../domain/entities/my_player.dart';
@@ -70,7 +71,11 @@ class DashboardRemoteDataSource {
     try {
       final res = await _dio.get(
         ApiConstants.playerRecentMatches(groupId),
-        queryParameters: {'playerId': playerId, 'take': take},
+        queryParameters: {
+          'playerId': playerId,
+          'take': take,
+          if (AppConstants.championshipsEnabled) 'includeChampionships': true,
+        },
       );
       return unwrapList(res.data)
           .map((e) => RecentMatch.fromJson(e as Map<String, dynamic>))

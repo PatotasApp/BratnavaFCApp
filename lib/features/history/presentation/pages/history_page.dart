@@ -136,9 +136,24 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                       for (final match in finalized) ...[
                         _HistoryMatchCard(
                           match: match,
-                          onTap: () => context.go(
-                            '/app/history/${match.groupId}/${match.id}',
-                          ),
+                          onTap: () {
+                            if (match.isChampionshipItem) {
+                              final championshipId = match.championshipId ??
+                                  (match.isConsolidatedChampionship
+                                      ? match.id
+                                      : null);
+                              if (championshipId != null &&
+                                  championshipId.isNotEmpty) {
+                                context.push(
+                                  '/app/championships/$championshipId',
+                                );
+                              }
+                              return;
+                            }
+                            context.go(
+                              '/app/history/${match.groupId}/${match.id}',
+                            );
+                          },
                         ),
                         const SizedBox(height: 8),
                       ],
@@ -278,19 +293,22 @@ class _HistoryMatchCard extends StatelessWidget {
     final theme = Theme.of(context);
     final teamA = _colorFromHex(match.teamAColorHex);
     final teamB = _colorFromHex(match.teamBColorHex);
+    final championColor = _colorFromHex(match.championTeamColorHex);
     final date = match.playedAt;
     final month =
         date == null ? '---' : DateFormat('MMM', 'pt_BR').format(date);
     final day = date == null ? '--' : DateFormat('dd').format(date);
     final time = date == null ? '--:--' : DateFormat('HH:mm').format(date);
     final draw = match.hasScore && match.teamAGoals == match.teamBGoals;
-    final winnerColor = match.hasScore
-        ? match.teamAGoals! > match.teamBGoals!
-            ? teamA
-            : match.teamBGoals! > match.teamAGoals!
-                ? teamB
-                : null
-        : null;
+    final winnerColor = match.isConsolidatedChampionship
+        ? championColor
+        : match.hasScore
+            ? match.teamAGoals! > match.teamBGoals!
+                ? teamA
+                : match.teamBGoals! > match.teamAGoals!
+                    ? teamB
+                    : null
+            : null;
 
     return Material(
       color: theme.colorScheme.surface,
@@ -367,20 +385,74 @@ class _HistoryMatchCard extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          _TeamDot(color: teamA),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 5),
-                            child: Text(
-                              'VS',
-                              style: theme.textTheme.labelSmall,
+                      if (match.isConsolidatedChampionship) ...[
+                        Row(
+                          children: [
+                            const Text('🏆', style: TextStyle(fontSize: 16)),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                match.championshipName ?? 'Campeonato',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
                             ),
+                          ],
+                        ),
+                        if (match.championTeamName != null) ...[
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              _TeamDot(color: championColor),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  'Campeão: ${match.championTeamName}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ),
+                            ],
                           ),
-                          _TeamDot(color: teamB),
                         ],
-                      ),
-                      const SizedBox(height: 7),
+                        if (match.ruleBadges.isNotEmpty) ...[
+                          const SizedBox(height: 7),
+                          Wrap(
+                            spacing: 4,
+                            runSpacing: 4,
+                            children: [
+                              for (final badge in match.ruleBadges)
+                                _HistoryRuleBadge(label: badge),
+                            ],
+                          ),
+                        ],
+                      ] else ...[
+                        Row(
+                          children: [
+                            _TeamDot(color: teamA),
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 5),
+                              child: Text(
+                                'VS',
+                                style: theme.textTheme.labelSmall,
+                              ),
+                            ),
+                            _TeamDot(color: teamB),
+                          ],
+                        ),
+                        if (match.isChampionshipGame) ...[
+                          const SizedBox(height: 6),
+                          _HistoryChampionshipBadge(
+                            name: match.championshipName,
+                          ),
+                        ],
+                        const SizedBox(height: 7),
+                      ],
                       Row(
                         children: [
                           Icon(
@@ -494,6 +566,47 @@ class _TeamDot extends StatelessWidget {
       ),
     );
   }
+}
+
+class _HistoryChampionshipBadge extends StatelessWidget {
+  final String? name;
+
+  const _HistoryChampionshipBadge({required this.name});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.secondaryContainer,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          '🏆 ${name ?? 'Campeonato'}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+      );
+}
+
+class _HistoryRuleBadge extends StatelessWidget {
+  final String label;
+
+  const _HistoryRuleBadge({required this.label});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(20),
+          border:
+              Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        ),
+        child: Text(label, style: Theme.of(context).textTheme.labelSmall),
+      );
 }
 
 class _HistorySkeletons extends StatelessWidget {

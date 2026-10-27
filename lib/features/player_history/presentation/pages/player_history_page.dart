@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -769,18 +770,21 @@ class _MatchRow extends StatelessWidget {
   Color get _resultColor {
     if (item.isWin) return AppColors.primaryPressed;
     if (item.isLoss) return AppColors.prototypeDanger;
+    if (item.isPresence) return AppColors.info;
     return isDark ? AppColors.slate500 : AppColors.slate400;
   }
 
   String get _resultLabel {
     if (item.isWin) return 'V';
     if (item.isLoss) return 'D';
+    if (item.isPresence) return 'P';
     return 'E';
   }
 
   Color get _resultBg {
     if (item.isWin) return AppColors.green100;
     if (item.isLoss) return AppColors.rose50;
+    if (item.isPresence) return AppColors.slate100;
     return isDark ? AppColors.slate700 : AppColors.slate100;
   }
 
@@ -795,7 +799,7 @@ class _MatchRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final row = Container(
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(
@@ -841,6 +845,55 @@ class _MatchRow extends StatelessWidget {
                     color: isDark ? AppColors.onDark : AppColors.slate900,
                   ),
                 ),
+                if (item.isChampionshipItem)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Text(
+                      '🏆 ${item.championshipName ?? 'Campeonato'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? AppColors.amber200 : AppColors.amber500,
+                      ),
+                    ),
+                  ),
+                if (item.isConsolidatedChampionship &&
+                    (item.teamAColor != null || item.teamAColorName != null))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Row(
+                      children: [
+                        if (item.teamAColor != null)
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: _hexColor(item.teamAColor) ??
+                                  AppColors.slate400,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppColors.slate300),
+                            ),
+                          ),
+                        if (item.teamAColor != null) const SizedBox(width: 4),
+                        if (item.teamAColorName != null)
+                          Flexible(
+                            child: Text(
+                              item.teamAColorName!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isDark
+                                    ? AppColors.slate400
+                                    : AppColors.slate500,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 if (item.place != null && item.place!.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
@@ -900,30 +953,43 @@ class _MatchRow extends StatelessWidget {
           ),
 
           // Score
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _scoreBox(item.teamAScore, _hexColor(item.teamAColor)),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 5),
-                    child: Text(
-                      '×',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: isDark ? AppColors.slate400 : AppColors.slate500,
+          if (!item.isConsolidatedChampionship)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _scoreBox(item.teamAScore, _hexColor(item.teamAColor)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 5),
+                      child: Text(
+                        '×',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color:
+                              isDark ? AppColors.slate400 : AppColors.slate500,
+                        ),
                       ),
                     ),
-                  ),
-                  _scoreBox(item.teamBScore, _hexColor(item.teamBColor)),
-                ],
-              ),
-            ],
-          ),
+                    _scoreBox(item.teamBScore, _hexColor(item.teamBColor)),
+                  ],
+                ),
+              ],
+            ),
         ],
+      ),
+    );
+
+    final championshipId = item.championshipId ??
+        (item.isConsolidatedChampionship ? item.matchId : null);
+    if (!item.isChampionshipItem || championshipId == null) return row;
+    return Material(
+      color: AppColors.transparent,
+      child: InkWell(
+        onTap: () => context.push('/app/championships/$championshipId'),
+        child: row,
       ),
     );
   }

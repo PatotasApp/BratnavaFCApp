@@ -8,7 +8,7 @@ class MatchHistoryItem extends Equatable {
   final String matchId;
   final String date;
   final String? place;
-  final String result; // "win" | "loss" | "draw"
+  final String result; // "win" | "loss" | "draw" | "none"
   final int teamAScore;
   final int teamBScore;
   final String? teamAColor;
@@ -18,6 +18,12 @@ class MatchHistoryItem extends Equatable {
   final bool isMvp;
   final bool isOwnGoal;
   final int team; // 1 = team A, 2 = team B
+  final String? teamAColorName;
+  final String? teamBColorName;
+  final String? kind;
+  final String? championshipId;
+  final String? championshipName;
+  final String? playerResult;
 
   const MatchHistoryItem({
     required this.matchId,
@@ -33,6 +39,12 @@ class MatchHistoryItem extends Equatable {
     required this.isMvp,
     required this.isOwnGoal,
     required this.team,
+    this.teamAColorName,
+    this.teamBColorName,
+    this.kind,
+    this.championshipId,
+    this.championshipName,
+    this.playerResult,
   });
 
   /// Nomes do payload de `/player-history`, conferidos contra o site.
@@ -50,24 +62,41 @@ class MatchHistoryItem extends Equatable {
     final teamA = asInt(j['teamAGoals'] ?? j['teamAScore']);
     final teamB = asInt(j['teamBGoals'] ?? j['teamBScore']);
     final team = asInt(j['playerTeam'] ?? j['team']);
+    final playerResult = j['playerResult'] as String?;
 
     return MatchHistoryItem(
       matchId: (j['matchId'] ?? '').toString(),
       date: (j['playedAt'] ?? j['date'] ?? '').toString(),
       place: (j['placeName'] ?? j['place']) as String?,
-      result: _resultOf(teamA: teamA, teamB: teamB, team: team),
+      result: _resultFromApi(playerResult) ??
+          _resultOf(teamA: teamA, teamB: teamB, team: team),
       teamAScore: teamA,
       teamBScore: teamB,
       teamAColor: (j['teamAColorHex'] ?? j['teamAColor']) as String?,
       teamBColor: (j['teamBColorHex'] ?? j['teamBColor']) as String?,
+      teamAColorName: j['teamAColorName'] as String?,
+      teamBColorName: j['teamBColorName'] as String?,
       goals: asInt(j['playerGoals'] ?? j['goals']),
       assists: asInt(j['playerAssists'] ?? j['assists']),
       isMvp: (j['isPlayerMvp'] ?? j['isMvp']) as bool? ?? false,
       isOwnGoal:
           asInt(j['playerOwnGoals']) > 0 || (j['isOwnGoal'] as bool? ?? false),
       team: team,
+      kind: j['kind'] as String?,
+      championshipId: j['championshipId']?.toString(),
+      championshipName: j['championshipName'] as String?,
+      playerResult: playerResult,
     );
   }
+
+  static String? _resultFromApi(String? value) =>
+      switch (value?.toUpperCase()) {
+        'W' => 'win',
+        'D' => 'draw',
+        'L' => 'loss',
+        'N' => 'none',
+        _ => null,
+      };
 
   /// O payload não traz o resultado pronto: sai do placar e do time do
   /// jogador, como o `getResult` do site. Antes o campo `result` era lido
@@ -86,7 +115,12 @@ class MatchHistoryItem extends Equatable {
 
   bool get isWin => result.toLowerCase() == 'win';
   bool get isLoss => result.toLowerCase() == 'loss';
-  bool get isDraw => !isWin && !isLoss;
+  bool get isDraw => result.toLowerCase() == 'draw';
+  bool get isPresence => result.toLowerCase() == 'none';
+  bool get isConsolidatedChampionship => kind == 'championship';
+  bool get isChampionshipGame => kind == 'championshipGame';
+  bool get isChampionshipItem =>
+      isConsolidatedChampionship || isChampionshipGame;
 
   @override
   List<Object?> get props => [
@@ -103,6 +137,12 @@ class MatchHistoryItem extends Equatable {
         isMvp,
         isOwnGoal,
         team,
+        teamAColorName,
+        teamBColorName,
+        kind,
+        championshipId,
+        championshipName,
+        playerResult,
       ];
 }
 
@@ -148,12 +188,13 @@ class PlayerHistorySummary {
     int? firstYear;
 
     for (final m in items) {
-      if (m.isWin)
+      if (m.isWin) {
         wins++;
-      else if (m.isLoss)
+      } else if (m.isLoss) {
         losses++;
-      else
+      } else if (m.isDraw) {
         draws++;
+      }
       goals += m.goals;
       assists += m.assists;
       if (m.isMvp) mvps++;
