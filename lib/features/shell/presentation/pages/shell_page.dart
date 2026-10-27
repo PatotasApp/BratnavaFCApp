@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/constants/app_constants.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -293,6 +294,12 @@ class _MoreSheet extends ConsumerWidget {
     _MoreGroup(
       label: 'Organização',
       items: [
+        if (AppConstants.championshipsEnabled)
+          _MoreItem(
+            icon: Icons.emoji_events_outlined,
+            label: 'Campeonatos',
+            path: '/app/championships',
+          ),
         _MoreItem(
           icon: Icons.calendar_month_outlined,
           label: 'Calendário',

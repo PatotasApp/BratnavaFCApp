@@ -30,6 +30,10 @@ import '../../features/groups/presentation/pages/group_invites_page.dart';
 import '../../features/team_builder/presentation/pages/team_builder_page.dart';
 import '../../features/conquistas/presentation/pages/conquistas_page.dart';
 import '../../features/conquistas/presentation/pages/public_profile_page.dart';
+import '../../features/championships/presentation/pages/championships_page.dart';
+import '../../features/championships/presentation/pages/championship_wizard_page.dart';
+import '../../features/championships/presentation/pages/championship_detail_page.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/push/local_notifications.dart';
 
 // ── Placeholder para rotas ainda não implementadas ────────────────────────────
@@ -288,6 +292,23 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/app/conquistas',
             builder: (_, __) => const ConquistasPage(),
           ),
+          if (AppConstants.championshipsEnabled)
+            GoRoute(
+              path: '/app/championships',
+              builder: (_, __) => const ChampionshipsPage(),
+            ),
+          if (AppConstants.championshipsEnabled)
+            GoRoute(
+              path: '/app/championships/new',
+              builder: (_, __) => const ChampionshipWizardPage(),
+            ),
+          if (AppConstants.championshipsEnabled)
+            GoRoute(
+              path: '/app/championships/:championshipId',
+              builder: (_, state) => ChampionshipDetailPage(
+                championshipId: state.pathParameters['championshipId']!,
+              ),
+            ),
           GoRoute(
             path: '/app/profile/:userId',
             builder: (_, state) => PublicProfilePage(

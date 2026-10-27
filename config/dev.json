@@ -1,5 +1,7 @@
 {
   "ENV": "development",
   "API_URL": "https://development-env.fly.dev",
-  "WEB_URL": "https://patotasapp.com.br"
+  "WEB_URL": "https://patotasapp.com.br",
+  "CHAMPIONSHIPS_ENABLED": true,
+  "CHAMPIONSHIPS_USE_MOCK": true
 }
