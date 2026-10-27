@@ -52,7 +52,6 @@ enum ChampionshipMvpMode {
 enum ChampionshipFormat {
   roundRobin(1),
   winnerStays(2),
-  knockout(3),
   roundRobinWithFinal(4);
 
   const ChampionshipFormat(this.value);
@@ -87,12 +86,11 @@ enum ChampionshipTiebreakerCriteria {
   final int value;
 }
 
-enum ChampionshipEndMode {
-  totalTime(1),
-  numberOfGames(2),
-  equalGamesForAllTeams(3);
+enum WinnerStaysLimitRule {
+  winnerLeaves(1),
+  bothLeave(2);
 
-  const ChampionshipEndMode(this.value);
+  const WinnerStaysLimitRule(this.value);
   final int value;
 }
 

@@ -4,7 +4,7 @@ Branch: `feature/campeonato-telas`
 
 Último commit de implementação: `515a2bd` (`Implementa telas do modo campeonato com mock`)
 
-Contrato da API: v3 de 27/10/2026.
+Contrato da API: **v6** de 27/10/2026 (antes: v3).
 
 | # | Etapa | Status |
 |---|---|---|
@@ -41,9 +41,36 @@ Contrato da API: v3 de 27/10/2026.
 
 - O contrato de convidado recebe apenas `playerId` e não oferece endpoint de busca nesta feature; no mock, a tela pede o ID do jogador já cadastrado. Quando houver um seletor oficial de jogadores, ele pode substituir apenas esse campo sem alterar o contrato.
 
+## Atualização para o contrato v6 (27/10/2026)
+
+| # | Etapa | Status |
+|---|---|---|
+| 10 | Contrato v6 no wizard/modelos/mock | ✅ |
+| 11 | Cores dos times (v5): sortear cores e editar nome/cor | ✅ |
+| 12 | Histórico com campeonatos (v4) | ⏳ outra IA (prompt entregue ao Luis) |
+| 13 | `ChampionshipApiDataSource` completo + testes com JSON do contrato | ✅ |
+| 14 | Seletor de jogadores da patota para convidado | ✅ |
+
+O que mudou:
+- Removidos o formato mata-mata (3), `ChampionshipEndMode` e `championshipEnd` (modelos, wizard e mock). O wizard explica que o campeonato termina em "Encerrar campeonato".
+- Novo `WinnerStaysLimitRule` (`winnerStays.limitRule`): "Ao atingir o limite" aparece quando o limite de vitórias é maior que 0, com o aviso "Com 3 times não dá para saírem os dois; sai só o vencedor." Os presets usam `limitRule` 1. Se o JSON não trouxer `limitRule`, o app assume 1.
+- Desempate: "Pontos" fica travado em 1º (cadeado; os outros só se reordenam entre si). A validação exige `tiebreakers[0] == 1`.
+- `minGamesForPlacementResult` aparece no wizard com o texto "Quem jogou menos que isso conta só presença" (padrão 1; aceita >= 0, como o servidor).
+- `placementResults` nulo vira lista vazia (o servidor declara o campo como anulável).
+- `ChampionshipTeam.colorHex` passou a ser anulável (time sem cor, v5); a tela mostra o ícone "sem cor".
+- "Encerrar campeonato" (`POST /{id}/finish`) pede confirmação e avisa "Votação do MVP aberta." quando o campeonato tem MVP.
+- Times: botão "Sortear cores" (`POST /{id}/teams/colors/draw`) e editar nome/cor (`PATCH /{id}/teams/{teamId}`), com as cores de `teamColorsProvider` (as mesmas da tela Cores dos times; só as ativas). O `message` de `teams/draw` aparece em vermelho na confirmação dos times; o de `colors/draw` aparece num SnackBar.
+- Convidado: um seletor lista os jogadores da patota via `GET /api/Groups/{id}` (o mesmo do team builder), sem os inativos nem quem já está no campeonato. No mock, a lista é fixa.
+- `ChampionshipApiDataSource`: todas as rotas da v6, envelope `ApiResponse` pelos helpers `unwrapMap`/`unwrapList` do core. Erros 4xx `{ error }` e `success: false` viram `ServerException` com a mensagem do servidor. Testes em `test/features/championships/data/championship_api_datasource_test.dart` com um adapter Dio falso e JSONs do contrato.
+
+## Divergências encontradas no backend (avisadas ao Luis)
+
+- `POST /{id}/teams/colors/draw`: o serviço gera o `message` (aviso de poucas cores), mas o controller usa o `ToResponse(Result)` do `GroupAuthorizedController`, que responde **204 sem corpo**. O aviso nunca chega. O app lê `message` se vier e, sem ele, mostra "Cores sorteadas.". Nota em `side-session-notes/.../app-flutter-para-backend.md`.
+
 ## O que falta
 
-- Nada. Trabalho concluído e mantido sem push na branch `feature/campeonato-telas`.
+- Etapa 12 (histórico com `includeChampionships=true`, cards 🏆 e `playerResult`) foi passada para outra IA, nos arquivos de `history/`, `player_history/` e `dashboard/`.
+- Testar contra a API real (`CHAMPIONSHIPS_USE_MOCK=false`), ainda não rodado.
 
 ## Baseline
 

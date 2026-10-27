@@ -4,20 +4,29 @@ class WinnerStaysRules {
   const WinnerStaysRules({
     required this.consecutiveWinsLimit,
     required this.tieRule,
+    this.limitRule = WinnerStaysLimitRule.winnerLeaves,
   });
 
   final int consecutiveWinsLimit;
   final WinnerStaysTieRule tieRule;
+  final WinnerStaysLimitRule limitRule;
 
   factory WinnerStaysRules.fromJson(Map<String, dynamic> json) =>
       WinnerStaysRules(
         consecutiveWinsLimit: json['consecutiveWinsLimit'] as int,
         tieRule: enumByValue(WinnerStaysTieRule.values, json['tieRule'] as int),
+        limitRule: json['limitRule'] == null
+            ? WinnerStaysLimitRule.winnerLeaves
+            : enumByValue(
+                WinnerStaysLimitRule.values,
+                json['limitRule'] as int,
+              ),
       );
 
   Map<String, dynamic> toJson() => {
         'consecutiveWinsLimit': consecutiveWinsLimit,
         'tieRule': tieRule.value,
+        'limitRule': limitRule.value,
       };
 }
 
@@ -39,31 +48,6 @@ class ChampionshipGameEndRules {
   Map<String, dynamic> toJson() => {
         'timeLimitMinutes': timeLimitMinutes,
         'goalLimit': goalLimit,
-      };
-}
-
-class ChampionshipEndRules {
-  const ChampionshipEndRules({
-    required this.mode,
-    this.totalTimeMinutes,
-    this.numberOfGames,
-  });
-
-  final ChampionshipEndMode mode;
-  final int? totalTimeMinutes;
-  final int? numberOfGames;
-
-  factory ChampionshipEndRules.fromJson(Map<String, dynamic> json) =>
-      ChampionshipEndRules(
-        mode: enumByValue(ChampionshipEndMode.values, json['mode'] as int),
-        totalTimeMinutes: json['totalTimeMinutes'] as int?,
-        numberOfGames: json['numberOfGames'] as int?,
-      );
-
-  Map<String, dynamic> toJson() => {
-        'mode': mode.value,
-        'totalTimeMinutes': totalTimeMinutes,
-        'numberOfGames': numberOfGames,
       };
 }
 
@@ -118,7 +102,6 @@ class ChampionshipRules {
     required this.roundRobinTurns,
     required this.winnerStays,
     required this.gameEnd,
-    required this.championshipEnd,
     required this.standings,
   });
 
@@ -134,7 +117,6 @@ class ChampionshipRules {
   final int roundRobinTurns;
   final WinnerStaysRules? winnerStays;
   final ChampionshipGameEndRules gameEnd;
-  final ChampionshipEndRules championshipEnd;
   final ChampionshipStandingsRules standings;
 
   factory ChampionshipRules.defaults() => const ChampionshipRules(
@@ -160,10 +142,6 @@ class ChampionshipRules {
           timeLimitMinutes: 10,
           goalLimit: 2,
         ),
-        championshipEnd: ChampionshipEndRules(
-          mode: ChampionshipEndMode.totalTime,
-          totalTimeMinutes: 120,
-        ),
         standings: ChampionshipStandingsRules(
           mode: ChampionshipStandingMode.pointsPerGame,
           winPoints: 3,
@@ -188,7 +166,7 @@ class ChampionshipRules {
           ChampionshipResultMode.values,
           json['resultMode'] as int,
         ),
-        placementResults: (json['placementResults'] as List<dynamic>)
+        placementResults: (json['placementResults'] as List<dynamic>? ?? [])
             .map((value) => enumByValue(
                   PlacementResult.values,
                   value as int,
@@ -215,9 +193,6 @@ class ChampionshipRules {
         gameEnd: ChampionshipGameEndRules.fromJson(
           json['gameEnd'] as Map<String, dynamic>,
         ),
-        championshipEnd: ChampionshipEndRules.fromJson(
-          json['championshipEnd'] as Map<String, dynamic>,
-        ),
         standings: ChampionshipStandingsRules.fromJson(
           json['standings'] as Map<String, dynamic>,
         ),
@@ -236,7 +211,6 @@ class ChampionshipRules {
         'roundRobinTurns': roundRobinTurns,
         'winnerStays': winnerStays?.toJson(),
         'gameEnd': gameEnd.toJson(),
-        'championshipEnd': championshipEnd.toJson(),
         'standings': standings.toJson(),
       };
 
@@ -253,7 +227,6 @@ class ChampionshipRules {
     int? roundRobinTurns,
     WinnerStaysRules? winnerStays,
     ChampionshipGameEndRules? gameEnd,
-    ChampionshipEndRules? championshipEnd,
     ChampionshipStandingsRules? standings,
   }) =>
       ChampionshipRules(
@@ -272,7 +245,6 @@ class ChampionshipRules {
         roundRobinTurns: roundRobinTurns ?? this.roundRobinTurns,
         winnerStays: winnerStays ?? this.winnerStays,
         gameEnd: gameEnd ?? this.gameEnd,
-        championshipEnd: championshipEnd ?? this.championshipEnd,
         standings: standings ?? this.standings,
       );
 
@@ -307,17 +279,9 @@ class ChampionshipRules {
     if ((gameEnd.timeLimitMinutes ?? 1) <= 0 || (gameEnd.goalLimit ?? 1) <= 0) {
       errors.add('Tempo e limite de gols devem ser maiores que zero.');
     }
-    if (championshipEnd.mode == ChampionshipEndMode.totalTime &&
-        (championshipEnd.totalTimeMinutes ?? 0) <= 0) {
-      errors.add('Informe o tempo total do campeonato.');
-    }
-    if (championshipEnd.mode == ChampionshipEndMode.numberOfGames &&
-        (championshipEnd.numberOfGames ?? 0) <= 0) {
-      errors.add('Informe o número de jogos do campeonato.');
-    }
-    if (!standings.tiebreakers
-        .contains(ChampionshipTiebreakerCriteria.points)) {
-      errors.add('Os desempates precisam incluir pontos.');
+    if (standings.tiebreakers.isEmpty ||
+        standings.tiebreakers.first != ChampionshipTiebreakerCriteria.points) {
+      errors.add('Pontos tem de ser o 1º critério de desempate.');
     }
     if (standings.tiebreakers.toSet().length != standings.tiebreakers.length) {
       errors.add('Os critérios de desempate não podem se repetir.');

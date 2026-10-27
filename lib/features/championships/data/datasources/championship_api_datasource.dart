@@ -1,20 +1,58 @@
 import 'package:dio/dio.dart';
+import '../../../../core/api/api_response.dart';
+import '../../../../core/errors/app_exception.dart';
 import '../../domain/entities/championship_models.dart';
 import 'championship_datasource.dart';
 
+/// Rotas de `docs/campeonato/CONTRATO-API.md` (v6) da API.
+///
+/// As respostas vêm no envelope `ApiResponse` ({ success, data, message,
+/// error, errors }). Ações sem retorno respondem 204 sem corpo; recusas
+/// chegam como 4xx com `{ error }` e viram [ServerException] com a mensagem.
 class ChampionshipApiDataSource implements ChampionshipDataSource {
   const ChampionshipApiDataSource(this._dio);
   final Dio _dio;
 
   String _base(String groupId) => '/api/championships/group/$groupId';
-  dynamic _unwrap(dynamic value) =>
-      value is Map && value.containsKey('data') ? value['data'] : value;
+
+  Future<dynamic> _send(Future<Response<dynamic>> Function() request) async {
+    try {
+      final response = await request();
+      final body = response.data;
+      if (body is Map && body['success'] == false) {
+        final error = (body['error'] ?? body['message']) as String?;
+        throw ServerException(
+          error == null || error.isEmpty ? 'Operação recusada.' : error,
+          statusCode: response.statusCode,
+        );
+      }
+      return body;
+    } on DioException catch (error) {
+      throw ServerException(
+        extractDioError(error),
+        statusCode: error.response?.statusCode,
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> _map(
+    Future<Response<dynamic>> Function() request,
+  ) async {
+    final data = unwrapMap(await _send(request));
+    if (data == null) throw const ServerException('Resposta vazia da API.');
+    return data;
+  }
+
+  static String? _message(dynamic body) {
+    if (body is! Map) return null;
+    final message = body['message'] as String?;
+    return message == null || message.trim().isEmpty ? null : message;
+  }
 
   @override
   Future<List<ChampionshipSummary>> fetchAll(String groupId) async {
-    final response = await _dio.get(_base(groupId));
-    final data = _unwrap(response.data) as List<dynamic>;
-    return data
+    final body = await _send(() => _dio.get(_base(groupId)));
+    return unwrapList(body)
         .map((item) => ChampionshipSummary.fromJson(
               item as Map<String, dynamic>,
             ))
@@ -22,26 +60,25 @@ class ChampionshipApiDataSource implements ChampionshipDataSource {
   }
 
   @override
-  Future<ChampionshipDetails> fetchById(String groupId, String id) async {
-    final response = await _dio.get('${_base(groupId)}/$id');
-    return ChampionshipDetails.fromJson(
-      _unwrap(response.data) as Map<String, dynamic>,
-    );
-  }
+  Future<ChampionshipDetails> fetchById(String groupId, String id) async =>
+      ChampionshipDetails.fromJson(
+        await _map(() => _dio.get('${_base(groupId)}/$id')),
+      );
 
   @override
   Future<NextGameSuggestion?> fetchNextGame(String groupId, String id) async {
-    final response = await _dio.get('${_base(groupId)}/$id/next-game');
-    final data = _unwrap(response.data);
-    return data == null
-        ? null
-        : NextGameSuggestion.fromJson(data as Map<String, dynamic>);
+    final body = await _send(() => _dio.get('${_base(groupId)}/$id/next-game'));
+    final data = body is Map ? body['data'] : body;
+    return data is Map<String, dynamic>
+        ? NextGameSuggestion.fromJson(data)
+        : null;
   }
 
   @override
   Future<String> create(String groupId, ChampionshipUpsert input) async {
-    final response = await _dio.post(_base(groupId), data: input.toJson());
-    final data = _unwrap(response.data) as Map<String, dynamic>;
+    final data = await _map(
+      () => _dio.post(_base(groupId), data: input.toJson()),
+    );
     return data['id'] as String;
   }
 
@@ -50,66 +87,61 @@ class ChampionshipApiDataSource implements ChampionshipDataSource {
     String groupId,
     String id,
     ChampionshipUpsert input,
-  ) async =>
-      _dio.put('${_base(groupId)}/$id', data: input.toJson());
+  ) =>
+      _send(() => _dio.put('${_base(groupId)}/$id', data: input.toJson()));
 
   @override
-  Future<void> cancel(String groupId, String id) async =>
-      _dio.post('${_base(groupId)}/$id/cancel');
+  Future<void> cancel(String groupId, String id) =>
+      _send(() => _dio.post('${_base(groupId)}/$id/cancel'));
 
   @override
-  Future<void> openAcceptation(String groupId, String id) async =>
-      _dio.post('${_base(groupId)}/$id/acceptation/open');
+  Future<void> openAcceptation(String groupId, String id) =>
+      _send(() => _dio.post('${_base(groupId)}/$id/acceptation/open'));
 
   @override
-  Future<void> acceptMyInvite(String groupId, String id) async =>
-      _dio.patch('${_base(groupId)}/$id/my-invite/accept');
+  Future<void> acceptMyInvite(String groupId, String id) =>
+      _send(() => _dio.patch('${_base(groupId)}/$id/my-invite/accept'));
 
   @override
-  Future<void> rejectMyInvite(String groupId, String id) async =>
-      _dio.patch('${_base(groupId)}/$id/my-invite/reject');
+  Future<void> rejectMyInvite(String groupId, String id) =>
+      _send(() => _dio.patch('${_base(groupId)}/$id/my-invite/reject'));
 
   @override
-  Future<void> acceptInvite(
-    String groupId,
-    String id,
-    String playerId,
-  ) async =>
-      _dio.patch(
-        '${_base(groupId)}/$id/invite/accept',
-        data: {'playerId': playerId},
-      );
+  Future<void> acceptInvite(String groupId, String id, String playerId) =>
+      _send(() => _dio.patch(
+            '${_base(groupId)}/$id/invite/accept',
+            data: {'playerId': playerId},
+          ));
 
   @override
-  Future<void> rejectInvite(
-    String groupId,
-    String id,
-    String playerId,
-  ) async =>
-      _dio.patch(
-        '${_base(groupId)}/$id/invite/reject',
-        data: {'playerId': playerId},
-      );
+  Future<void> rejectInvite(String groupId, String id, String playerId) =>
+      _send(() => _dio.patch(
+            '${_base(groupId)}/$id/invite/reject',
+            data: {'playerId': playerId},
+          ));
 
   @override
-  Future<void> addGuest(String groupId, String id, String playerId) async =>
-      _dio.post(
-        '${_base(groupId)}/$id/players/guest',
-        data: {'playerId': playerId},
-      );
+  Future<void> addGuest(String groupId, String id, String playerId) =>
+      _send(() => _dio.post(
+            '${_base(groupId)}/$id/players/guest',
+            data: {'playerId': playerId},
+          ));
 
   @override
-  Future<DefineChampionshipTeams> drawTeams(
+  Future<ChampionshipTeamsDraw> drawTeams(
     String groupId,
     String id,
     int teamCount,
   ) async {
-    final response = await _dio.post(
-      '${_base(groupId)}/$id/teams/draw',
-      data: {'teamCount': teamCount},
-    );
-    return DefineChampionshipTeams.fromJson(
-      _unwrap(response.data) as Map<String, dynamic>,
+    final body = await _send(() => _dio.post(
+          '${_base(groupId)}/$id/teams/draw',
+          data: {'teamCount': teamCount},
+        ));
+    final data = unwrapMap(body);
+    if (data == null) throw const ServerException('Resposta vazia da API.');
+    return ChampionshipTeamsDraw(
+      teams: DefineChampionshipTeams.fromJson(data),
+      message: _message(body),
     );
   }
 
@@ -118,8 +150,9 @@ class ChampionshipApiDataSource implements ChampionshipDataSource {
     String groupId,
     String id,
     DefineChampionshipTeams input,
-  ) async =>
-      _dio.put('${_base(groupId)}/$id/teams', data: input.toJson());
+  ) =>
+      _send(
+          () => _dio.put('${_base(groupId)}/$id/teams', data: input.toJson()));
 
   @override
   Future<void> assignPlayerTeam(
@@ -127,15 +160,34 @@ class ChampionshipApiDataSource implements ChampionshipDataSource {
     String id,
     String playerId,
     String teamId,
-  ) async =>
-      _dio.patch(
-        '${_base(groupId)}/$id/players/$playerId/team',
-        data: {'teamId': teamId},
-      );
+  ) =>
+      _send(() => _dio.patch(
+            '${_base(groupId)}/$id/players/$playerId/team',
+            data: {'teamId': teamId},
+          ));
 
   @override
-  Future<void> start(String groupId, String id) async =>
-      _dio.post('${_base(groupId)}/$id/start');
+  Future<String?> drawTeamColors(String groupId, String id) async =>
+      _message(await _send(
+        () => _dio.post('${_base(groupId)}/$id/teams/colors/draw'),
+      ));
+
+  @override
+  Future<void> updateTeam(
+    String groupId,
+    String id,
+    String teamId, {
+    required String name,
+    String? colorId,
+  }) =>
+      _send(() => _dio.patch(
+            '${_base(groupId)}/$id/teams/$teamId',
+            data: {'name': name, 'colorId': colorId},
+          ));
+
+  @override
+  Future<void> start(String groupId, String id) =>
+      _send(() => _dio.post('${_base(groupId)}/$id/start'));
 
   @override
   Future<String> createGame(
@@ -144,11 +196,10 @@ class ChampionshipApiDataSource implements ChampionshipDataSource {
     String teamAId,
     String teamBId,
   ) async {
-    final response = await _dio.post(
-      '${_base(groupId)}/$id/games',
-      data: {'teamAId': teamAId, 'teamBId': teamBId},
-    );
-    final data = _unwrap(response.data) as Map<String, dynamic>;
+    final data = await _map(() => _dio.post(
+          '${_base(groupId)}/$id/games',
+          data: {'teamAId': teamAId, 'teamBId': teamBId},
+        ));
     return data['gameId'] as String;
   }
 
@@ -161,16 +212,16 @@ class ChampionshipApiDataSource implements ChampionshipDataSource {
     String? assistPlayerId,
     required bool isOwnGoal,
     int? timeSeconds,
-  }) async =>
-      _dio.post(
-        '${_base(groupId)}/$id/games/$gameId/goals',
-        data: {
-          'scorerPlayerId': scorerPlayerId,
-          'assistPlayerId': assistPlayerId,
-          'isOwnGoal': isOwnGoal,
-          'timeSeconds': timeSeconds,
-        },
-      );
+  }) =>
+      _send(() => _dio.post(
+            '${_base(groupId)}/$id/games/$gameId/goals',
+            data: {
+              'scorerPlayerId': scorerPlayerId,
+              'assistPlayerId': assistPlayerId,
+              'isOwnGoal': isOwnGoal,
+              'timeSeconds': timeSeconds,
+            },
+          ));
 
   @override
   Future<void> deleteGoal(
@@ -178,8 +229,9 @@ class ChampionshipApiDataSource implements ChampionshipDataSource {
     String id,
     String gameId,
     String goalId,
-  ) async =>
-      _dio.delete('${_base(groupId)}/$id/games/$gameId/goals/$goalId');
+  ) =>
+      _send(() =>
+          _dio.delete('${_base(groupId)}/$id/games/$gameId/goals/$goalId'));
 
   @override
   Future<void> setGoalkeeper(
@@ -187,11 +239,11 @@ class ChampionshipApiDataSource implements ChampionshipDataSource {
     String id,
     String teamId,
     String playerId,
-  ) async =>
-      _dio.patch(
-        '${_base(groupId)}/$id/goalkeeper',
-        data: {'teamId': teamId, 'playerId': playerId},
-      );
+  ) =>
+      _send(() => _dio.patch(
+            '${_base(groupId)}/$id/goalkeeper',
+            data: {'teamId': teamId, 'playerId': playerId},
+          ));
 
   @override
   Future<void> endGame(
@@ -199,15 +251,15 @@ class ChampionshipApiDataSource implements ChampionshipDataSource {
     String id,
     String gameId, {
     String? externalWinnerTeamId,
-  }) async =>
-      _dio.post(
-        '${_base(groupId)}/$id/games/$gameId/end',
-        data: {'externalWinnerTeamId': externalWinnerTeamId},
-      );
+  }) =>
+      _send(() => _dio.post(
+            '${_base(groupId)}/$id/games/$gameId/end',
+            data: {'externalWinnerTeamId': externalWinnerTeamId},
+          ));
 
   @override
-  Future<void> finish(String groupId, String id) async =>
-      _dio.post('${_base(groupId)}/$id/finish');
+  Future<void> finish(String groupId, String id) =>
+      _send(() => _dio.post('${_base(groupId)}/$id/finish'));
 
   @override
   Future<void> vote(
@@ -215,20 +267,20 @@ class ChampionshipApiDataSource implements ChampionshipDataSource {
     String id,
     String votedPlayerId, {
     String? gameId,
-  }) async =>
-      _dio.post(
-        '${_base(groupId)}/$id/vote',
-        data: {'votedPlayerId': votedPlayerId, 'gameId': gameId},
-      );
+  }) =>
+      _send(() => _dio.post(
+            '${_base(groupId)}/$id/vote',
+            data: {'votedPlayerId': votedPlayerId, 'gameId': gameId},
+          ));
 
   @override
   Future<void> finalize(
     String groupId,
     String id, {
     List<String>? externalDecisionTeamOrder,
-  }) async =>
-      _dio.post(
-        '${_base(groupId)}/$id/finalize',
-        data: {'externalDecisionTeamOrder': externalDecisionTeamOrder},
-      );
+  }) =>
+      _send(() => _dio.post(
+            '${_base(groupId)}/$id/finalize',
+            data: {'externalDecisionTeamOrder': externalDecisionTeamOrder},
+          ));
 }

@@ -13,7 +13,7 @@ abstract interface class ChampionshipDataSource {
   Future<void> acceptInvite(String groupId, String id, String playerId);
   Future<void> rejectInvite(String groupId, String id, String playerId);
   Future<void> addGuest(String groupId, String id, String playerId);
-  Future<DefineChampionshipTeams> drawTeams(
+  Future<ChampionshipTeamsDraw> drawTeams(
     String groupId,
     String id,
     int teamCount,
@@ -29,6 +29,16 @@ abstract interface class ChampionshipDataSource {
     String playerId,
     String teamId,
   );
+
+  /// Devolve o `message` do servidor (aviso de poucas cores), se houver.
+  Future<String?> drawTeamColors(String groupId, String id);
+  Future<void> updateTeam(
+    String groupId,
+    String id,
+    String teamId, {
+    required String name,
+    String? colorId,
+  });
   Future<void> start(String groupId, String id);
   Future<String> createGame(
     String groupId,

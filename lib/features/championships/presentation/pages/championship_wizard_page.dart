@@ -66,6 +66,7 @@ class _ChampionshipWizardPageState
         winnerStays: WinnerStaysRules(
           consecutiveWinsLimit: consecutiveWinsLimit,
           tieRule: WinnerStaysTieRule.longestOnFieldLeaves,
+          limitRule: WinnerStaysLimitRule.winnerLeaves,
         ),
         standings: ChampionshipStandingsRules(
           mode: ChampionshipStandingMode.pointsPerGame,
@@ -265,6 +266,25 @@ class _ChampionshipWizardPageState
               text: _tieRuleLabel,
               onChanged: (value) => _setWinnerStays(tieRule: value),
             ),
+            if (_rules.winnerStays!.consecutiveWinsLimit > 0) ...[
+              const SizedBox(height: 12),
+              _dropdown(
+                label: 'Ao atingir o limite',
+                value: _rules.winnerStays!.limitRule,
+                values: WinnerStaysLimitRule.values,
+                text: _limitRuleLabel,
+                onChanged: (value) => _setWinnerStays(limitRule: value),
+              ),
+              if (_rules.winnerStays!.limitRule ==
+                  WinnerStaysLimitRule.bothLeave)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    'Com 3 times não dá para saírem os dois; '
+                    'sai só o vencedor.',
+                  ),
+                ),
+            ],
           ],
           const SizedBox(height: 16),
           Text('Fim de cada jogo',
@@ -289,43 +309,11 @@ class _ChampionshipWizardPageState
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          _dropdown(
-            label: 'Fim do campeonato',
-            value: _rules.championshipEnd.mode,
-            values: ChampionshipEndMode.values,
-            text: _championshipEndLabel,
-            onChanged: (value) => setState(() {
-              _rules = _rules.copyWith(
-                championshipEnd: ChampionshipEndRules(
-                  mode: value,
-                  totalTimeMinutes: value == ChampionshipEndMode.totalTime
-                      ? (_rules.championshipEnd.totalTimeMinutes ?? 120)
-                      : null,
-                  numberOfGames: value == ChampionshipEndMode.numberOfGames
-                      ? (_rules.championshipEnd.numberOfGames ?? 10)
-                      : null,
-                ),
-              );
-            }),
+          const SizedBox(height: 12),
+          const Text(
+            'O campeonato termina quando o admin tocar em '
+            '"Encerrar campeonato".',
           ),
-          if (_rules.championshipEnd.mode == ChampionshipEndMode.totalTime) ...[
-            const SizedBox(height: 12),
-            _number(
-              label: 'Tempo total (minutos)',
-              value: _rules.championshipEnd.totalTimeMinutes ?? 120,
-              onChanged: (value) => _setChampionshipEnd(totalTime: value),
-            ),
-          ],
-          if (_rules.championshipEnd.mode ==
-              ChampionshipEndMode.numberOfGames) ...[
-            const SizedBox(height: 12),
-            _number(
-              label: 'Quantidade de jogos',
-              value: _rules.championshipEnd.numberOfGames ?? 10,
-              onChanged: (value) => _setChampionshipEnd(games: value),
-            ),
-          ],
         ],
       );
 
@@ -370,11 +358,18 @@ class _ChampionshipWizardPageState
               ),
               const SizedBox(height: 8),
             ],
-            _number(
-              label: 'Mínimo de jogos para receber resultado',
-              value: _rules.minGamesForPlacementResult,
-              onChanged: (value) => setState(() => _rules = _rules.copyWith(
-                    minGamesForPlacementResult: value,
+            TextFormField(
+              key: ValueKey(
+                'min-games-${_rules.minGamesForPlacementResult}',
+              ),
+              initialValue: '${_rules.minGamesForPlacementResult}',
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Mínimo de jogos para receber o resultado',
+                helperText: 'Quem jogou menos que isso conta só presença.',
+              ),
+              onChanged: (text) => setState(() => _rules = _rules.copyWith(
+                    minGamesForPlacementResult: int.tryParse(text) ?? 0,
                   )),
             ),
           ],
@@ -454,23 +449,28 @@ class _ChampionshipWizardPageState
               ),
               title:
                   Text(_tiebreakerLabel(_rules.standings.tiebreakers[index])),
-              trailing: Wrap(
-                children: [
-                  IconButton(
-                    tooltip: 'Subir',
-                    onPressed:
-                        index == 0 ? null : () => _moveTiebreaker(index, -1),
-                    icon: const Icon(Icons.arrow_upward_rounded),
-                  ),
-                  IconButton(
-                    tooltip: 'Descer',
-                    onPressed: index == _rules.standings.tiebreakers.length - 1
-                        ? null
-                        : () => _moveTiebreaker(index, 1),
-                    icon: const Icon(Icons.arrow_downward_rounded),
-                  ),
-                ],
-              ),
+              subtitle: index == 0 ? const Text('Sempre o 1º critério') : null,
+              trailing: index == 0
+                  ? const Icon(Icons.lock_outline_rounded)
+                  : Wrap(
+                      children: [
+                        IconButton(
+                          tooltip: 'Subir',
+                          onPressed: index <= 1
+                              ? null
+                              : () => _moveTiebreaker(index, -1),
+                          icon: const Icon(Icons.arrow_upward_rounded),
+                        ),
+                        IconButton(
+                          tooltip: 'Descer',
+                          onPressed:
+                              index == _rules.standings.tiebreakers.length - 1
+                                  ? null
+                                  : () => _moveTiebreaker(index, 1),
+                          icon: const Icon(Icons.arrow_downward_rounded),
+                        ),
+                      ],
+                    ),
             ),
         ],
       );
@@ -490,7 +490,7 @@ class _ChampionshipWizardPageState
         Text(championshipRulesSummary(_rules)),
         const SizedBox(height: 10),
         Text('${championshipFormatLabel(_rules.format)} · '
-            '${_championshipEndLabel(_rules.championshipEnd.mode)}'),
+            'termina em "Encerrar campeonato"'),
         if (errors.isNotEmpty) ...[
           const SizedBox(height: 16),
           for (final error in errors)
@@ -555,12 +555,17 @@ class _ChampionshipWizardPageState
         },
       );
 
-  void _setWinnerStays({int? limit, WinnerStaysTieRule? tieRule}) {
+  void _setWinnerStays({
+    int? limit,
+    WinnerStaysTieRule? tieRule,
+    WinnerStaysLimitRule? limitRule,
+  }) {
     final current = _rules.winnerStays!;
     setState(() => _rules = _rules.copyWith(
           winnerStays: WinnerStaysRules(
             consecutiveWinsLimit: limit ?? current.consecutiveWinsLimit,
             tieRule: tieRule ?? current.tieRule,
+            limitRule: limitRule ?? current.limitRule,
           ),
         ));
   }
@@ -579,17 +584,6 @@ class _ChampionshipWizardPageState
           gameEnd: ChampionshipGameEndRules(
             timeLimitMinutes: _rules.gameEnd.timeLimitMinutes,
             goalLimit: value,
-          ),
-        ));
-  }
-
-  void _setChampionshipEnd({int? totalTime, int? games}) {
-    final current = _rules.championshipEnd;
-    setState(() => _rules = _rules.copyWith(
-          championshipEnd: ChampionshipEndRules(
-            mode: current.mode,
-            totalTimeMinutes: totalTime ?? current.totalTimeMinutes,
-            numberOfGames: games ?? current.numberOfGames,
           ),
         ));
   }
@@ -618,6 +612,8 @@ class _ChampionshipWizardPageState
   }
 
   void _moveTiebreaker(int index, int offset) {
+    // Pontos fica travado na 1ª posição (contrato v6).
+    if (index == 0 || index + offset < 1) return;
     final items = [..._rules.standings.tiebreakers];
     final item = items.removeAt(index);
     items.insert(index + offset, item);
@@ -650,11 +646,9 @@ String _tieRuleLabel(WinnerStaysTieRule value) => switch (value) {
       WinnerStaysTieRule.penaltyShootout => 'Decisão por pênaltis',
     };
 
-String _championshipEndLabel(ChampionshipEndMode value) => switch (value) {
-      ChampionshipEndMode.totalTime => 'Tempo total',
-      ChampionshipEndMode.numberOfGames => 'Número de jogos',
-      ChampionshipEndMode.equalGamesForAllTeams =>
-        'Todos jogaram a mesma quantidade',
+String _limitRuleLabel(WinnerStaysLimitRule value) => switch (value) {
+      WinnerStaysLimitRule.winnerLeaves => 'Sai só o vencedor',
+      WinnerStaysLimitRule.bothLeave => 'Saem os dois',
     };
 
 String _tiebreakerLabel(ChampionshipTiebreakerCriteria value) =>

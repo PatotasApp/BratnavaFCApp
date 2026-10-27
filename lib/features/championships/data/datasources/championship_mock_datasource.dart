@@ -185,8 +185,28 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
     });
   }
 
+  /// Cores "ativas da patota" no mock: só 3, para exercitar o aviso da v5.
+  static const _mockColors = [
+    ('mock-color-blue', '#2563EB'),
+    ('mock-color-green', '#16A34A'),
+    ('mock-color-orange', '#F97316'),
+  ];
+
+  static String? _colorWarning(int teamCount) => teamCount <= _mockColors.length
+      ? null
+      : 'Ha so ${_mockColors.length} cor(es) ativa(s) para $teamCount times: '
+          '${teamCount - _mockColors.length} time(s) ficaram sem cor. '
+          'Cadastre mais cores em Cores dos times.';
+
+  static String? _hexOf(String? colorId) {
+    for (final (id, hex) in _mockColors) {
+      if (id == colorId) return hex;
+    }
+    return null;
+  }
+
   @override
-  Future<DefineChampionshipTeams> drawTeams(
+  Future<ChampionshipTeamsDraw> drawTeams(
     String groupId,
     String id,
     int teamCount,
@@ -198,7 +218,7 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
             ChampionshipInviteResponse.accepted.value)
         .toList();
     const names = ['Azul', 'Verde', 'Laranja', 'Roxo', 'Branco'];
-    return DefineChampionshipTeams(
+    final teams = DefineChampionshipTeams(
       teams: List.generate(teamCount, (teamIndex) {
         final ids = <String>[];
         for (var playerIndex = teamIndex;
@@ -208,12 +228,49 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
         }
         return DefineChampionshipTeam(
           name: names[teamIndex % names.length],
-          colorId: null,
+          colorId:
+              teamIndex < _mockColors.length ? _mockColors[teamIndex].$1 : null,
           playerIds: ids,
           goalkeeperPlayerId: ids.isEmpty ? null : ids.first,
         );
       }),
     );
+    return ChampionshipTeamsDraw(
+      teams: teams,
+      message: _colorWarning(teamCount),
+    );
+  }
+
+  @override
+  Future<String?> drawTeamColors(String groupId, String id) async {
+    final teams =
+        (_require(id)['teams'] as List<dynamic>).cast<Map<String, dynamic>>();
+    for (var index = 0; index < teams.length; index++) {
+      final color = index < _mockColors.length ? _mockColors[index] : null;
+      teams[index]
+        ..['colorId'] = color?.$1
+        ..['colorHex'] = color?.$2;
+    }
+    return _colorWarning(teams.length) ?? 'Cores sorteadas.';
+  }
+
+  @override
+  Future<void> updateTeam(
+    String groupId,
+    String id,
+    String teamId, {
+    required String name,
+    String? colorId,
+  }) async {
+    for (final raw in _require(id)['teams'] as List<dynamic>) {
+      final team = raw as Map<String, dynamic>;
+      if (team['id'] != teamId) continue;
+      team
+        ..['name'] = name
+        ..['colorId'] = colorId
+        ..['colorHex'] =
+            _hexOf(colorId) ?? (colorId == null ? null : team['colorHex']);
+    }
   }
 
   @override
@@ -222,7 +279,6 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
     String id,
     DefineChampionshipTeams input,
   ) async {
-    const colors = ['#2563EB', '#16A34A', '#F97316', '#7C3AED', '#E5E7EB'];
     final item = _require(id);
     final teams = <Map<String, dynamic>>[];
     for (var index = 0; index < input.teams.length; index++) {
@@ -232,7 +288,7 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
         'id': teamId,
         'name': definition.name,
         'colorId': definition.colorId,
-        'colorHex': colors[index % colors.length],
+        'colorHex': _hexOf(definition.colorId),
         'finalPosition': null,
         'playerIds': definition.playerIds,
       });
@@ -460,8 +516,8 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
             (teamIndex) => {
                   'id': teamIds[teamIndex],
                   'name': ['Azul', 'Verde', 'Laranja'][teamIndex],
-                  'colorId': null,
-                  'colorHex': ['#2563EB', '#16A34A', '#F97316'][teamIndex],
+                  'colorId': _mockColors[teamIndex].$1,
+                  'colorHex': _mockColors[teamIndex].$2,
                   'finalPosition': isFinalized ? teamIndex + 1 : null,
                   'playerIds': playerIds
                       .skip(teamIndex * 3)

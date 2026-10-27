@@ -134,7 +134,7 @@ class ChampionshipTeam {
   final String id;
   final String name;
   final String? colorId;
-  final String colorHex;
+  final String? colorHex;
   final int? finalPosition;
   final List<String> playerIds;
 
@@ -143,7 +143,7 @@ class ChampionshipTeam {
         id: json['id'] as String,
         name: json['name'] as String,
         colorId: json['colorId'] as String?,
-        colorHex: json['colorHex'] as String,
+        colorHex: json['colorHex'] as String?,
         finalPosition: json['finalPosition'] as int?,
         playerIds: List<String>.from(json['playerIds'] as List<dynamic>),
       );
@@ -588,6 +588,15 @@ class DefineChampionshipTeams {
   Map<String, dynamic> toJson() => {
         'teams': teams.map((item) => item.toJson()).toList(),
       };
+}
+
+/// Sugestão de `POST /{id}/teams/draw`: os times (não salvos) e o aviso do
+/// servidor em `message` quando há menos cores ativas que times (v5).
+class ChampionshipTeamsDraw {
+  const ChampionshipTeamsDraw({required this.teams, this.message});
+
+  final DefineChampionshipTeams teams;
+  final String? message;
 }
 
 class NextGameSuggestion {

@@ -14,7 +14,6 @@ String championshipStatusLabel(ChampionshipStatus status) => switch (status) {
 String championshipFormatLabel(ChampionshipFormat format) => switch (format) {
       ChampionshipFormat.roundRobin => 'Todos contra todos',
       ChampionshipFormat.winnerStays => 'Fica quem ganha',
-      ChampionshipFormat.knockout => 'Mata-mata',
       ChampionshipFormat.roundRobinWithFinal => 'Todos contra todos + final',
     };
 

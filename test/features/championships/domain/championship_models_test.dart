@@ -89,14 +89,23 @@ void main() {
     );
   });
 
-  test('validação aceita fim quando todos jogarem a mesma quantidade', () {
-    final rules = ChampionshipRules.defaults().copyWith(
-      championshipEnd: const ChampionshipEndRules(
-        mode: ChampionshipEndMode.equalGamesForAllTeams,
+  test('validação exige Pontos como 1º desempate (v6)', () {
+    final defaults = ChampionshipRules.defaults();
+    final rules = defaults.copyWith(
+      standings: ChampionshipStandingsRules(
+        mode: defaults.standings.mode,
+        winPoints: 3,
+        drawPoints: 1,
+        tiebreakers: const [
+          ChampionshipTiebreakerCriteria.goalDifference,
+          ChampionshipTiebreakerCriteria.points,
+        ],
       ),
     );
 
-    expect(rules.validate(), isEmpty);
+    expect(rules.validate(),
+        contains('Pontos tem de ser o 1º critério de desempate.'));
+    expect(defaults.validate(), isEmpty);
   });
 
   test('resumo traduz regras em linguagem simples', () {

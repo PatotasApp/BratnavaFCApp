@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/api/api_constants.dart';
+import '../../../../core/api/api_response.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../auth/presentation/providers/account_store.dart';
@@ -27,6 +29,36 @@ final championshipIsAdminProvider = Provider<bool>((ref) {
   final account = ref.watch(accountStoreProvider).activeAccount;
   final groupId = ref.watch(championshipGroupIdProvider);
   return groupId.isNotEmpty && (account?.isGroupAdmin(groupId) ?? false);
+});
+
+/// Jogador da patota para o seletor de convidado.
+typedef ChampionshipGroupPlayer = ({String id, String name, bool isGuest});
+
+/// Jogadores da patota pelo mesmo `GET /api/Groups/{id}` que o team builder
+/// usa. O convidado do campeonato tem de ser jogador já cadastrado.
+final championshipGroupPlayersProvider = FutureProvider.autoDispose
+    .family<List<ChampionshipGroupPlayer>, String>((ref, groupId) async {
+  if (AppConstants.championshipsUseMock) {
+    return [
+      for (var index = 1; index <= 4; index++)
+        (id: 'mock-guest-$index', name: 'Convidado $index', isGuest: true),
+    ];
+  }
+  final response =
+      await ref.watch(dioProvider).get(ApiConstants.groupById(groupId));
+  final body = unwrapMap(response.data);
+  final players = (body?['players'] as List<dynamic>? ?? [])
+      .whereType<Map<String, dynamic>>()
+      .where((player) => player['status'] != 'Inactive')
+      .map((player) => (
+            id: (player['id'] ?? player['playerId'] ?? '').toString(),
+            name: (player['name'] ?? player['playerName'] ?? '').toString(),
+            isGuest: player['isGuest'] == true,
+          ))
+      .where((player) => player.id.isNotEmpty)
+      .toList()
+    ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  return players;
 });
 
 class ChampionshipListState {
@@ -227,7 +259,7 @@ class ChampionshipDetailsNotifier
         () => _dataSource.addGuest(groupId, championshipId, playerId),
         'Falha ao adicionar convidado.',
       );
-  Future<DefineChampionshipTeams?> drawTeams(int teamCount) async {
+  Future<ChampionshipTeamsDraw?> drawTeams(int teamCount) async {
     state = state.copyWith(mutating: true, clearError: true);
     try {
       return await _dataSource.drawTeams(
@@ -261,6 +293,35 @@ class ChampionshipDetailsNotifier
           teamId,
         ),
         'Falha ao trocar jogador de time.',
+      );
+
+  /// Devolve a mensagem para mostrar ao admin, ou null se falhou.
+  Future<String?> drawTeamColors() async {
+    String? message;
+    final ok = await _mutate(
+      () async => message = await _dataSource.drawTeamColors(
+        groupId,
+        championshipId,
+      ),
+      'Falha ao sortear cores.',
+    );
+    return ok ? (message ?? 'Cores sorteadas.') : null;
+  }
+
+  Future<bool> updateTeam(
+    String teamId, {
+    required String name,
+    String? colorId,
+  }) =>
+      _mutate(
+        () => _dataSource.updateTeam(
+          groupId,
+          championshipId,
+          teamId,
+          name: name,
+          colorId: colorId,
+        ),
+        'Falha ao atualizar time.',
       );
   Future<bool> start() => _mutate(
         () => _dataSource.start(groupId, championshipId),

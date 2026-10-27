@@ -2,8 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/errors/app_exception.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
+import '../../../team_colors/domain/entities/team_color.dart';
+import '../../../team_colors/presentation/providers/team_colors_provider.dart';
 import '../../domain/entities/championship_enums.dart';
 import '../../domain/entities/championship_models.dart';
 import '../championship_ui_text.dart';
@@ -252,7 +255,7 @@ class _PresenceSection extends StatelessWidget {
   }
 }
 
-class _TeamsSection extends StatelessWidget {
+class _TeamsSection extends ConsumerWidget {
   const _TeamsSection({
     required this.details,
     required this.isAdmin,
@@ -263,12 +266,32 @@ class _TeamsSection extends StatelessWidget {
   final bool isAdmin;
   final ChampionshipDetailsNotifier notifier;
 
+  bool get _canEditTeams =>
+      isAdmin &&
+      details.status != ChampionshipStatus.finalized &&
+      details.status != ChampionshipStatus.cancelled;
+
   @override
-  Widget build(BuildContext context) => PrototypeCard(
+  Widget build(BuildContext context, WidgetRef ref) => PrototypeCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const _SectionTitle(icon: Icons.groups_outlined, title: 'Times'),
+            _SectionTitle(
+              icon: Icons.groups_outlined,
+              title: 'Times',
+              trailing: _canEditTeams
+                  ? TextButton.icon(
+                      onPressed: () async {
+                        final message = await notifier.drawTeamColors();
+                        if (message != null && context.mounted) {
+                          _showMessage(context, message);
+                        }
+                      },
+                      icon: const Icon(Icons.palette_outlined, size: 18),
+                      label: const Text('Sortear cores'),
+                    )
+                  : null,
+            ),
             const SizedBox(height: 8),
             for (final team in details.teams)
               ExpansionTile(
@@ -276,10 +299,21 @@ class _TeamsSection extends StatelessWidget {
                 childrenPadding: const EdgeInsets.only(bottom: 8),
                 leading: _TeamColor(hex: team.colorHex),
                 title: Text(team.name),
-                subtitle: Text('${team.playerIds.length} jogadores'),
-                trailing: team.finalPosition == null
-                    ? null
-                    : Text('${team.finalPosition}º'),
+                subtitle: Text('${team.playerIds.length} jogadores'
+                    '${team.colorHex == null ? ' · sem cor' : ''}'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (team.finalPosition != null)
+                      Text('${team.finalPosition}º'),
+                    if (_canEditTeams)
+                      IconButton(
+                        tooltip: 'Editar nome e cor',
+                        onPressed: () => _editTeam(context, team, notifier),
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                  ],
+                ),
                 children: [
                   for (final playerId in team.playerIds)
                     ListTile(
@@ -619,8 +653,8 @@ class _AdminActions extends StatelessWidget {
           child: const Text('Sortear e definir times'),
         ));
         actions.add(OutlinedButton(
-          onPressed: () => _addGuest(context, notifier),
-          child: const Text('Adicionar convidado cadastrado'),
+          onPressed: () => _addGuest(context, details, notifier),
+          child: const Text('Adicionar convidado'),
         ));
       case ChampionshipStatus.teamDraw:
         actions.add(FilledButton.icon(
@@ -630,9 +664,10 @@ class _AdminActions extends StatelessWidget {
         ));
       case ChampionshipStatus.inProgress:
         if (details.currentGame == null) {
-          actions.add(OutlinedButton(
-            onPressed: notifier.finish,
-            child: const Text('Encerrar campeonato'),
+          actions.add(FilledButton.icon(
+            onPressed: () => _finish(context, details, notifier),
+            icon: const Icon(Icons.flag_outlined),
+            label: const Text('Encerrar campeonato'),
           ));
         }
       case ChampionshipStatus.postGame:
@@ -688,19 +723,128 @@ class _SectionTitle extends StatelessWidget {
 }
 
 class _TeamColor extends StatelessWidget {
-  const _TeamColor({required this.hex});
-  final String hex;
+  const _TeamColor({required this.hex, this.size = 28});
+  final String? hex;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
-    final normalized = hex.replaceFirst('#', '');
-    final color = Color(int.tryParse('FF$normalized', radix: 16) ?? 0xFF777777);
+    final normalized = hex?.replaceFirst('#', '');
+    final value =
+        normalized == null ? null : int.tryParse('FF$normalized', radix: 16);
+    final outline = Theme.of(context).colorScheme.outline;
     return Container(
-      width: 28,
-      height: 28,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: value == null ? null : Color(value),
+        shape: BoxShape.circle,
+        border: Border.all(color: outline.withValues(alpha: .5)),
+      ),
+      child: value == null
+          ? Icon(
+              Icons.format_color_reset_outlined,
+              size: size * .55,
+              color: outline,
+            )
+          : null,
     );
   }
+}
+
+void _showMessage(BuildContext context, String message) =>
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 6)),
+    );
+
+/// `PATCH /{id}/teams/{teamId}` com as cores ativas da patota (v5).
+Future<void> _editTeam(
+  BuildContext context,
+  ChampionshipTeam team,
+  ChampionshipDetailsNotifier notifier,
+) async {
+  final controller = TextEditingController(text: team.name);
+  String? colorId = team.colorId;
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (context) => Consumer(
+      builder: (context, ref, _) {
+        final colorsAsync = ref.watch(teamColorsProvider(notifier.groupId));
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final colors = (colorsAsync.valueOrNull ?? const <TeamColor>[])
+                .where((color) => color.isActive || color.id == colorId)
+                .toList();
+            final known =
+                colorId == null || colors.any((color) => color.id == colorId);
+            return AlertDialog(
+              title: const Text('Editar time'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: controller,
+                    decoration: const InputDecoration(labelText: 'Nome'),
+                  ),
+                  const SizedBox(height: 12),
+                  if (colorsAsync.isLoading)
+                    const LinearProgressIndicator()
+                  else
+                    DropdownButtonFormField<String?>(
+                      initialValue: known ? colorId : null,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Cor',
+                        helperText: 'Cores ativas da patota.',
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Sem cor'),
+                        ),
+                        for (final color in colors)
+                          DropdownMenuItem<String?>(
+                            value: color.id,
+                            child: Row(
+                              children: [
+                                _TeamColor(hex: color.hexValue, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text(color.name)),
+                              ],
+                            ),
+                          ),
+                      ],
+                      onChanged: (value) =>
+                          setDialogState(() => colorId = value),
+                    ),
+                  if (colorsAsync.hasError)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text('Não foi possível carregar as cores.'),
+                    ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Salvar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ),
+  );
+  final name = controller.text.trim();
+  controller.dispose();
+  if (saved != true || name.isEmpty) return;
+  final ok = await notifier.updateTeam(team.id, name: name, colorId: colorId);
+  if (ok && context.mounted) _showMessage(context, 'Time atualizado.');
 }
 
 class _ErrorView extends StatelessWidget {
@@ -765,8 +909,9 @@ Future<void> _drawTeams(
     ),
   );
   if (count == null || !context.mounted) return;
-  final suggestion = await notifier.drawTeams(count);
-  if (suggestion == null || !context.mounted) return;
+  final draw = await notifier.drawTeams(count);
+  if (draw == null || !context.mounted) return;
+  final suggestion = draw.teams;
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
@@ -775,6 +920,13 @@ Future<void> _drawTeams(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (draw.message != null) ...[
+            Text(
+              draw.message!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+            const SizedBox(height: 10),
+          ],
           for (final team in suggestion.teams)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
@@ -797,32 +949,107 @@ Future<void> _drawTeams(
 
 Future<void> _addGuest(
   BuildContext context,
+  ChampionshipDetails details,
   ChampionshipDetailsNotifier notifier,
 ) async {
-  final controller = TextEditingController();
+  final already = {for (final player in details.players) player.playerId};
   final id = await showDialog<String>(
     context: context,
+    builder: (context) => Consumer(
+      builder: (context, ref, _) {
+        final playersAsync =
+            ref.watch(championshipGroupPlayersProvider(notifier.groupId));
+        return AlertDialog(
+          title: const Text('Adicionar convidado'),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 360,
+            child: playersAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, _) => Center(
+                child: Text(
+                  extractDioError(error, 'Falha ao carregar os jogadores.'),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              data: (players) {
+                final available = players
+                    .where((player) => !already.contains(player.id))
+                    .toList();
+                if (available.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      'Todos os jogadores da patota já estão no campeonato.',
+                      textAlign: TextAlign.center,
+                    ),
+                  );
+                }
+                return ListView(
+                  children: [
+                    for (final player in available)
+                      ListTile(
+                        leading: Icon(
+                          player.isGuest
+                              ? Icons.person_add_alt_outlined
+                              : Icons.person_outline,
+                        ),
+                        title: Text(player.name),
+                        subtitle:
+                            player.isGuest ? const Text('Convidado') : null,
+                        onTap: () => Navigator.pop(context, player.id),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+  if (id != null && id.isNotEmpty) await notifier.addGuest(id);
+}
+
+/// `POST /{id}/finish`. Depois dele vem a votação do MVP (se houver) e o
+/// admin finaliza.
+Future<void> _finish(
+  BuildContext context,
+  ChampionshipDetails details,
+  ChampionshipDetailsNotifier notifier,
+) async {
+  final hasMvp = details.rules.mvpMode != ChampionshipMvpMode.none;
+  final confirmed = await showDialog<bool>(
+    context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Adicionar convidado'),
-      content: TextField(
-        controller: controller,
-        decoration: const InputDecoration(
-          labelText: 'ID do jogador cadastrado',
-          helperText: 'O contrato aceita somente jogador já cadastrado.',
-        ),
-      ),
+      title: const Text('Encerrar campeonato?'),
+      content: Text(hasMvp
+          ? 'Não dá para criar novos jogos depois. Em seguida abre a votação '
+              'do MVP e, por fim, você finaliza o campeonato.'
+          : 'Não dá para criar novos jogos depois. Em seguida você finaliza '
+              'o campeonato.'),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar')),
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Voltar'),
+        ),
         FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Adicionar')),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Encerrar campeonato'),
+        ),
       ],
     ),
   );
-  controller.dispose();
-  if (id?.isNotEmpty == true) await notifier.addGuest(id!);
+  if (confirmed != true) return;
+  final ok = await notifier.finish();
+  if (ok && hasMvp && context.mounted) {
+    _showMessage(context, 'Votação do MVP aberta.');
+  }
 }
 
 Future<void> _showGoalDialog(
