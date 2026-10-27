@@ -65,7 +65,7 @@ O que mudou:
 
 ## Divergências encontradas no backend (avisadas ao Luis)
 
-- `POST /{id}/teams/colors/draw`: o serviço gera o `message` (aviso de poucas cores), mas o controller usa o `ToResponse(Result)` do `GroupAuthorizedController`, que responde **204 sem corpo**. O aviso nunca chega. O app lê `message` se vier e, sem ele, mostra "Cores sorteadas.". Nota em `side-session-notes/.../app-flutter-para-backend.md`.
+- `POST /{id}/teams/colors/draw` respondia 204 sem corpo e perdia o aviso de poucas cores. **Corrigido no backend** (commit `1864f1b` e anteriores da API): agora responde 200 com `data: null` e `message`, formato que o app já lê (coberto em `championship_api_datasource_test.dart`). `teams/draw` passou a usar o sorteio equilibrado, com o mesmo formato de resposta.
 
 ## O que falta
 
