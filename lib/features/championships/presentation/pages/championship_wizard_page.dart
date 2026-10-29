@@ -268,7 +268,7 @@ class _ChampionshipWizardPageState
               Expanded(
                 child: _optionalNumber(
                   label: 'Minutos',
-                  helper: 'Em branco se o jogo não acaba por tempo.',
+                  helper: 'Deixe vazio para não ter limite',
                   value: _rules.gameEnd.timeLimitMinutes,
                   onChanged: _setGameEndTime,
                 ),
@@ -277,7 +277,7 @@ class _ChampionshipWizardPageState
               Expanded(
                 child: _optionalNumber(
                   label: 'Gols',
-                  helper: 'Em branco se o jogo não acaba por gols.',
+                  helper: 'Deixe vazio para não ter limite',
                   value: _rules.gameEnd.goalLimit,
                   onChanged: _setGameEndGoals,
                 ),
@@ -305,21 +305,49 @@ class _ChampionshipWizardPageState
                 setState(() => _rules = _rules.copyWith(historyMode: value)),
           ),
           const SizedBox(height: 12),
-          _dropdown(
-            label: 'Resultado nas estatísticas',
-            value: _rules.resultMode,
-            values: ChampionshipResultMode.values,
-            text: _resultLabel,
-            onChanged: (value) =>
-                setState(() => _rules = _rules.copyWith(resultMode: value)),
-          ),
-          if (_rules.resultMode == ChampionshipResultMode.winForAll)
-            const Padding(
-              padding: EdgeInsets.only(top: 6),
-              child: Text(
-                'Cada participante ganha 1 vitória nas estatísticas.',
-              ),
+          // Cada opção com a sua legenda, no menu e embaixo da escolhida.
+          DropdownButtonFormField<ChampionshipResultMode>(
+            key: const ValueKey('result-mode'),
+            initialValue: _rules.resultMode,
+            isExpanded: true,
+            itemHeight: null,
+            decoration: InputDecoration(
+              labelText: 'Resultado nas estatísticas',
+              helperText: resultModeCaption(_rules.resultMode, _rules),
+              helperMaxLines: 2,
             ),
+            selectedItemBuilder: (context) => [
+              for (final mode in ChampionshipResultMode.values)
+                Text(_resultLabel(mode), overflow: TextOverflow.ellipsis),
+            ],
+            items: [
+              for (final mode in ChampionshipResultMode.values)
+                DropdownMenuItem(
+                  value: mode,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_resultLabel(mode)),
+                        Text(
+                          resultModeCaption(mode, _rules),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                setState(() => _rules = _rules.copyWith(resultMode: value));
+              }
+            },
+          ),
           if (_rules.resultMode == ChampionshipResultMode.placement) ...[
             const SizedBox(height: 12),
             for (var index = 0;
@@ -557,7 +585,7 @@ class _ChampionshipWizardPageState
   void _setGameEndTime(int? value) {
     setState(() => _rules = _rules.copyWith(
           gameEnd: ChampionshipGameEndRules(
-            timeLimitMinutes: value,
+            timeLimitMinutes: value == 0 ? null : value,
             goalLimit: _rules.gameEnd.goalLimit,
           ),
         ));
@@ -567,7 +595,7 @@ class _ChampionshipWizardPageState
     setState(() => _rules = _rules.copyWith(
           gameEnd: ChampionshipGameEndRules(
             timeLimitMinutes: _rules.gameEnd.timeLimitMinutes,
-            goalLimit: value,
+            goalLimit: value == 0 ? null : value,
           ),
         ));
   }
@@ -619,6 +647,46 @@ String _resultLabel(ChampionshipResultMode value) => switch (value) {
       ChampionshipResultMode.winForAll => 'Vitória para todos',
       ChampionshipResultMode.presenceOnly => 'Somente presença',
     };
+
+/// Legenda de cada resultado. A de colocação sai das regras de colocação.
+String resultModeCaption(
+  ChampionshipResultMode mode,
+  ChampionshipRules rules,
+) =>
+    switch (mode) {
+      ChampionshipResultMode.perGame => 'Cada jogo conta pelo placar',
+      ChampionshipResultMode.placement =>
+        placementSentence(rules.placementResults),
+      ChampionshipResultMode.winForAll =>
+        'Todo mundo que jogou ganha uma vitória',
+      ChampionshipResultMode.presenceOnly =>
+        'Conta que você jogou, sem vitória nem derrota',
+    };
+
+/// "O time campeão ganha, o 2º empata e os demais perdem": a última colocação
+/// configurada vale para os demais.
+String placementSentence(List<PlacementResult> results) {
+  if (results.isEmpty) return 'Defina o resultado de cada colocação';
+  String verb(PlacementResult result, {required bool plural}) =>
+      switch (result) {
+        PlacementResult.win => plural ? 'ganham' : 'ganha',
+        PlacementResult.draw => plural ? 'empatam' : 'empata',
+        PlacementResult.loss => plural ? 'perdem' : 'perde',
+        PlacementResult.none =>
+          plural ? 'só contam presença' : 'só conta presença',
+      };
+  final parts = <String>[
+    for (var i = 0; i < results.length; i++)
+      if (i == 0)
+        'O time campeão ${results.length == 1 ? 'e os demais ${verb(results[0], plural: true)}' : verb(results[0], plural: false)}'
+      else if (i == results.length - 1)
+        'os demais ${verb(results[i], plural: true)}'
+      else
+        'o ${i + 1}º ${verb(results[i], plural: false)}',
+  ];
+  if (parts.length == 1) return parts.first;
+  return '${parts.sublist(0, parts.length - 1).join(', ')} e ${parts.last}';
+}
 
 String _mvpLabel(ChampionshipMvpMode value) => switch (value) {
       ChampionshipMvpMode.perGame => 'Um MVP por jogo',

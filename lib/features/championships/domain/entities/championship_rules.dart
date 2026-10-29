@@ -45,9 +45,10 @@ class ChampionshipGameEndRules {
         goalLimit: json['goalLimit'] as int?,
       );
 
+  /// 0 vira null: sem limite (a API recusa 0).
   Map<String, dynamic> toJson() => {
-        'timeLimitMinutes': timeLimitMinutes,
-        'goalLimit': goalLimit,
+        'timeLimitMinutes': timeLimitMinutes == 0 ? null : timeLimitMinutes,
+        'goalLimit': goalLimit == 0 ? null : goalLimit,
       };
 }
 
@@ -276,11 +277,14 @@ class ChampionshipRules {
         roundRobinTurns != 2) {
       errors.add('O número de turnos deve ser 1 ou 2.');
     }
-    if (gameEnd.timeLimitMinutes == null && gameEnd.goalLimit == null) {
-      errors.add('Informe tempo ou limite de gols para cada jogo.');
+    // Vazio ou 0 = sem limite (vai null para a API, que recusa 0).
+    final time = gameEnd.timeLimitMinutes;
+    final goals = gameEnd.goalLimit;
+    if ((time == null || time == 0) && (goals == null || goals == 0)) {
+      errors.add('Informe o tempo, os gols ou os dois.');
     }
-    if ((gameEnd.timeLimitMinutes ?? 1) <= 0 || (gameEnd.goalLimit ?? 1) <= 0) {
-      errors.add('Tempo e limite de gols devem ser maiores que zero.');
+    if ((time ?? 0) < 0 || (goals ?? 0) < 0) {
+      errors.add('Tempo e gols não podem ser negativos.');
     }
     if (standings.tiebreakers.isEmpty ||
         standings.tiebreakers.first != ChampionshipTiebreakerCriteria.points) {

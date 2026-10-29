@@ -4,6 +4,7 @@ import 'package:patotas_app/features/championships/domain/entities/championship_
 import 'package:patotas_app/features/championships/domain/entities/championship_models.dart';
 import 'package:patotas_app/features/championships/domain/entities/championship_rules.dart';
 import 'package:patotas_app/features/championships/presentation/championship_ui_text.dart';
+import 'package:patotas_app/features/championships/presentation/pages/championship_wizard_page.dart';
 
 void main() {
   test('regras preservam enums numéricos no round-trip JSON', () {
@@ -114,5 +115,50 @@ void main() {
       'Conta como uma única partida · 1º vitória, 2º empate, 3º derrota · '
       '1 MVP do campeonato',
     );
+  });
+
+  test('fim do jogo: vazio ou 0 é sem limite; precisa de tempo ou gols', () {
+    ChampionshipRules withEnd(int? time, int? goals) =>
+        ChampionshipRules.defaults().copyWith(
+          gameEnd: ChampionshipGameEndRules(
+              timeLimitMinutes: time, goalLimit: goals),
+        );
+    const missing = 'Informe o tempo, os gols ou os dois.';
+
+    expect(withEnd(null, null).validate(), contains(missing));
+    expect(withEnd(0, null).validate(), contains(missing));
+    expect(withEnd(0, 0).validate(), contains(missing));
+    expect(withEnd(10, null).validate(), isNot(contains(missing)));
+    expect(withEnd(0, 3).validate(), isEmpty);
+    expect(withEnd(-1, 3).validate(),
+        contains('Tempo e gols não podem ser negativos.'));
+    expect(
+        withEnd(0, 3).validate().join(), isNot(contains('maiores que zero')));
+    // 0 vai como null para a API, que recusa 0.
+    expect(withEnd(0, 3).gameEnd.toJson(),
+        {'timeLimitMinutes': null, 'goalLimit': 3});
+  });
+
+  test('legenda de cada resultado; a de colocação sai das regras', () {
+    final rules = ChampionshipRules.defaults();
+    expect(resultModeCaption(ChampionshipResultMode.perGame, rules),
+        'Cada jogo conta pelo placar');
+    expect(resultModeCaption(ChampionshipResultMode.placement, rules),
+        'O time campeão ganha, o 2º empata e os demais perdem');
+    expect(resultModeCaption(ChampionshipResultMode.winForAll, rules),
+        'Todo mundo que jogou ganha uma vitória');
+    expect(resultModeCaption(ChampionshipResultMode.presenceOnly, rules),
+        'Conta que você jogou, sem vitória nem derrota');
+    expect(
+      placementSentence([
+        PlacementResult.win,
+        PlacementResult.win,
+        PlacementResult.draw,
+        PlacementResult.loss
+      ]),
+      'O time campeão ganha, o 2º ganha, o 3º empata e os demais perdem',
+    );
+    expect(placementSentence([PlacementResult.win, PlacementResult.loss]),
+        'O time campeão ganha e os demais perdem');
   });
 }
