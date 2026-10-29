@@ -164,4 +164,39 @@ void main() {
       expect(body['monthlyFee'], 100.0);
     });
   });
+
+  group('Campeonatos no histórico', () {
+    test('lê a opção e assume desligada quando não vem', () {
+      expect(
+        GroupSettings.fromJson({'showChampionshipsInHistory': true})
+            .showChampionshipsInHistory,
+        isTrue,
+      );
+      expect(GroupSettings.fromJson({}).showChampionshipsInHistory, isFalse);
+    });
+
+    test('envia a opção ao salvar', () {
+      final body = const GroupSettings().toJson(
+        minPlayers: 5,
+        maxPlayers: 10,
+        defaultPlaceName: null,
+        defaultDayOfWeek: null,
+        defaultKickoffTime: null,
+        paymentMode: 1,
+        monthlyFee: null,
+        goalkeeperMonthlyFee: null,
+        goalIcon: null,
+        goalkeeperIcon: null,
+        assistIcon: null,
+        ownGoalIcon: null,
+        mvpIcon: null,
+        playerIcon: null,
+        mvpTieRule: 1,
+        showPlayerStats: false,
+        showChampionshipsInHistory: true,
+      );
+
+      expect(body['showChampionshipsInHistory'], isTrue);
+    });
+  });
 }

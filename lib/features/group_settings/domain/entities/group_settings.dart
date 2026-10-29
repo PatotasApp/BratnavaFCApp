@@ -195,6 +195,8 @@ class GroupSettings {
   // Meta
   final bool isPersisted; // false = using defaults, prompt user to save
   final bool showPlayerStats; // true = regular players can see goals/assists
+  /// Campeonatos nas listas de histórico (histórico e últimas partidas).
+  final bool showChampionshipsInHistory;
   final bool showStatsGeneralTab;
   final bool showStatsPerMatchTab;
   final bool showStatsClassificationTab;
@@ -232,6 +234,7 @@ class GroupSettings {
     this.mvpTieMaxPlayers = 2,
     this.isPersisted = false,
     this.showPlayerStats = false,
+    this.showChampionshipsInHistory = false,
     this.showStatsGeneralTab = true,
     this.showStatsPerMatchTab = true,
     this.showStatsClassificationTab = true,
@@ -273,6 +276,8 @@ class GroupSettings {
       mvpTieMaxPlayers: (j['mvpTieMaxPlayers'] as int?) ?? 2,
       isPersisted: (j['isPersisted'] as bool?) ?? false,
       showPlayerStats: (j['showPlayerStats'] as bool?) ?? false,
+      showChampionshipsInHistory:
+          (j['showChampionshipsInHistory'] as bool?) ?? false,
       showStatsGeneralTab: (j['showStatsGeneralTab'] as bool?) ?? true,
       showStatsPerMatchTab: (j['showStatsPerMatchTab'] as bool?) ?? true,
       showStatsClassificationTab:
@@ -312,6 +317,7 @@ class GroupSettings {
     required int mvpTieRule,
     int? mvpTieMaxPlayers,
     required bool showPlayerStats,
+    bool showChampionshipsInHistory = false,
     bool showStatsGeneralTab = true,
     bool showStatsPerMatchTab = true,
     bool showStatsClassificationTab = true,
@@ -346,6 +352,7 @@ class GroupSettings {
         // mvpTieMaxPlayers only sent when rule == 2 (mirrors site behaviour)
         'mvpTieMaxPlayers': mvpTieRule == 2 ? mvpTieMaxPlayers : null,
         'showPlayerStats': showPlayerStats,
+        'showChampionshipsInHistory': showChampionshipsInHistory,
         'showStatsGeneralTab': showStatsGeneralTab,
         'showStatsPerMatchTab': showStatsPerMatchTab,
         'showStatsClassificationTab': showStatsClassificationTab,

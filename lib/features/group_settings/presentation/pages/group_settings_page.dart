@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/errors/app_exception.dart';
+import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/entities/account.dart';
 import '../../../auth/presentation/providers/account_store.dart';
@@ -364,6 +365,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   // ── Show player stats toggle ──────────────────────────────────────────────
   bool _showPlayerStats = false;
+  bool _showChampionshipsInHistory = false;
   bool _showStatsGeneralTab = true;
   bool _showStatsPerMatchTab = true;
   bool _showStatsClassificationTab = true;
@@ -436,6 +438,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     _mvpTieMaxPlayers = s.mvpTieMaxPlayers;
     _mvpMaxCtrl = TextEditingController(text: s.mvpTieMaxPlayers.toString());
     _showPlayerStats = s.showPlayerStats;
+    _showChampionshipsInHistory = s.showChampionshipsInHistory;
     _showStatsGeneralTab = s.showStatsGeneralTab;
     _showStatsPerMatchTab = s.showStatsPerMatchTab;
     _showStatsClassificationTab = s.showStatsClassificationTab;
@@ -612,6 +615,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
         mvpTieRule: _mvpTieRule,
         mvpTieMaxPlayers: _mvpTieRule == 2 ? _mvpTieMaxPlayers : null,
         showPlayerStats: _showPlayerStats,
+        showChampionshipsInHistory: _showChampionshipsInHistory,
         showStatsGeneralTab: _showStatsGeneralTab,
         showStatsPerMatchTab: _showStatsPerMatchTab,
         showStatsClassificationTab: _showStatsClassificationTab,
@@ -1756,6 +1760,68 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
             ),
           ),
           const SizedBox(height: 12),
+          if (AppConstants.championshipsEnabled) ...[
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.slate800 : AppColors.onDark,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: isDark ? AppColors.slate700 : AppColors.slate200),
+              ),
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.slate700 : AppColors.amber50,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.emoji_events_outlined,
+                        size: 18,
+                        color:
+                            isDark ? AppColors.slate300 : AppColors.amber500),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Mostrar campeonatos no histórico',
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? AppColors.slate100
+                                    : AppColors.slate900)),
+                        const SizedBox(height: 2),
+                        Text(
+                            'Os campeonatos aparecem no histórico e nas últimas '
+                            'partidas do dashboard. As estatísticas seguem as '
+                            'regras de cada campeonato de qualquer forma.',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: isDark
+                                    ? AppColors.slate400
+                                    : AppColors.slate500)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Switch(
+                    value: _showChampionshipsInHistory,
+                    onChanged: (v) =>
+                        setState(() => _showChampionshipsInHistory = v),
+                    activeThumbColor:
+                        isDark ? AppColors.slate100 : AppColors.slate900,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
