@@ -9,6 +9,7 @@ import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
+import '../../../championships/presentation/widgets/championship_podium_box.dart';
 import '../../domain/entities/history_match.dart';
 import '../providers/history_provider.dart';
 
@@ -386,10 +387,13 @@ class _HistoryMatchCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (match.isConsolidatedChampionship) ...[
+                        // Mesma altura do card da partida: nome no lugar das
+                        // cores dos times e o local embaixo. Campeão e regras
+                        // ficam no pódio e na tela do campeonato.
                         Row(
                           children: [
-                            const Text('🏆', style: TextStyle(fontSize: 16)),
-                            const SizedBox(width: 6),
+                            const Text('🏆', style: TextStyle(fontSize: 13)),
+                            const SizedBox(width: 5),
                             Expanded(
                               child: Text(
                                 match.championshipName ?? 'Campeonato',
@@ -397,39 +401,13 @@ class _HistoryMatchCard extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: theme.textTheme.titleSmall?.copyWith(
                                   fontWeight: FontWeight.w800,
+                                  height: 1,
                                 ),
                               ),
                             ),
                           ],
                         ),
-                        if (match.championTeamName != null) ...[
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              _TeamDot(color: championColor),
-                              const SizedBox(width: 5),
-                              Expanded(
-                                child: Text(
-                                  'Campeão: ${match.championTeamName}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodySmall,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                        if (match.ruleBadges.isNotEmpty) ...[
-                          const SizedBox(height: 7),
-                          Wrap(
-                            spacing: 4,
-                            runSpacing: 4,
-                            children: [
-                              for (final badge in match.ruleBadges)
-                                _HistoryRuleBadge(label: badge),
-                            ],
-                          ),
-                        ],
+                        const SizedBox(height: 7),
                       ] else ...[
                         Row(
                           children: [
@@ -479,7 +457,20 @@ class _HistoryMatchCard extends StatelessWidget {
               // (`.proto-history-score`: 60×46, raio 13, fundo #0b1326). Aqui
               // era texto solto, e o placar — que é a informação principal da
               // linha — se perdia no meio do card.
-              if (match.hasScore)
+              if (match.isConsolidatedChampionship)
+                Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: Center(
+                    child: ChampionshipPodiumBox(
+                      podium: podiumOrChampion(
+                        podium: match.podium,
+                        championTeamName: match.championTeamName,
+                        championTeamColorHex: match.championTeamColorHex,
+                      ),
+                    ),
+                  ),
+                )
+              else if (match.hasScore)
                 Padding(
                   padding: const EdgeInsets.only(right: 10),
                   child: Center(
@@ -588,24 +579,6 @@ class _HistoryChampionshipBadge extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
         ),
-      );
-}
-
-class _HistoryRuleBadge extends StatelessWidget {
-  final String label;
-
-  const _HistoryRuleBadge({required this.label});
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(20),
-          border:
-              Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-        ),
-        child: Text(label, style: Theme.of(context).textTheme.labelSmall),
       );
 }
 

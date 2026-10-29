@@ -1,5 +1,17 @@
 import '../../../../core/utils/date_utils.dart';
 
+class HistoryPodiumTeam {
+  final int position;
+  final String teamName;
+  final String? colorHex;
+
+  const HistoryPodiumTeam({
+    required this.position,
+    required this.teamName,
+    this.colorHex,
+  });
+}
+
 class HistoryMatch {
   final String id;
   final String groupId;
@@ -21,6 +33,9 @@ class HistoryMatch {
   final String? championTeamColorHex;
   final List<String> ruleBadges;
 
+  /// Pódio do campeonato consolidado (1º a 3º), mostrado no lugar do placar.
+  final List<HistoryPodiumTeam> podium;
+
   const HistoryMatch({
     required this.id,
     required this.groupId,
@@ -41,6 +56,7 @@ class HistoryMatch {
     this.championTeamName,
     this.championTeamColorHex,
     this.ruleBadges = const [],
+    this.podium = const [],
   });
 
   bool get isConsolidatedChampionship => kind == 'championship';
@@ -83,6 +99,16 @@ class HistoryMatch {
       championshipName: json['championshipName'] as String?,
       championTeamName: json['championTeamName'] as String?,
       championTeamColorHex: _hex(json['championTeamColorHex']),
+      podium: (json['podium'] as List?)
+              ?.whereType<Map>()
+              .map((item) => HistoryPodiumTeam(
+                    position: (item['position'] as num?)?.toInt() ?? 0,
+                    teamName: (item['teamName'] as String?) ?? 'Time',
+                    colorHex: _hex(item['colorHex']),
+                  ))
+              .where((item) => item.position > 0)
+              .toList(growable: false) ??
+          const [],
       ruleBadges: (json['ruleBadges'] as List?)
               ?.whereType<String>()
               .toList(growable: false) ??

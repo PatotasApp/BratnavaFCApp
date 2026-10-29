@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
+import '../../../championships/presentation/widgets/championship_podium_box.dart';
 import '../../domain/entities/recent_match.dart';
 
 class RecentMatchCard extends ConsumerWidget {
@@ -333,8 +334,11 @@ class RecentMatchCard extends ConsumerWidget {
 
                       const SizedBox(width: 8),
 
-                      // ── Placar ────────────────────────────────────────────
-                      if (hasScore)
+                      // ── Placar (no campeonato, o pódio) ───────────────────
+                      if (match.isConsolidatedChampionship)
+                        ChampionshipPodiumBox(
+                            podium: match.podium, compact: true)
+                      else if (hasScore)
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 6),

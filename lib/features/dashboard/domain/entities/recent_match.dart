@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'current_match.dart';
+import '../../../history/domain/entities/history_match.dart';
 import '../../../../core/utils/date_utils.dart';
 
 enum MatchOutcome { win, draw, loss, presence }
@@ -20,6 +21,9 @@ class RecentMatch extends Equatable {
   final String? championshipId;
   final String? championshipName;
 
+  /// Pódio do campeonato consolidado (1º a 3º), no lugar do placar.
+  final List<HistoryPodiumTeam> podium;
+
   const RecentMatch({
     required this.matchId,
     required this.playedAt,
@@ -35,6 +39,7 @@ class RecentMatch extends Equatable {
     this.kind,
     this.championshipId,
     this.championshipName,
+    this.podium = const [],
   });
 
   bool get isConsolidatedChampionship => kind == 'championship';
@@ -91,6 +96,16 @@ class RecentMatch extends Equatable {
       kind: j['kind'] as String?,
       championshipId: j['championshipId']?.toString(),
       championshipName: j['championshipName'] as String?,
+      podium: (j['podium'] as List?)
+              ?.whereType<Map>()
+              .map((item) => HistoryPodiumTeam(
+                    position: (item['position'] as num?)?.toInt() ?? 0,
+                    teamName: (item['teamName'] as String?) ?? 'Time',
+                    colorHex: item['colorHex'] as String?,
+                  ))
+              .where((item) => item.position > 0)
+              .toList(growable: false) ??
+          const [],
     );
   }
 

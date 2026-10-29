@@ -27,6 +27,23 @@ void main() {
       expect(item.ruleBadges, ['Todos contra todos', 'Pontos por jogo']);
     });
 
+    test('lê o pódio (1º a 3º) com nome e cor de cada time', () {
+      final item = HistoryMatch.fromJson(const {
+        'id': 'resumo-2',
+        'kind': 'championship',
+        'podium': [
+          {'position': 1, 'teamName': 'Preto', 'colorHex': '000000'},
+          {'position': 2, 'teamName': 'Azul', 'colorHex': '#1565C0'},
+          {'position': 3, 'teamName': 'Verde', 'colorHex': null},
+        ],
+      });
+
+      expect(item.podium.map((t) => t.position), [1, 2, 3]);
+      expect(item.podium.map((t) => t.teamName), ['Preto', 'Azul', 'Verde']);
+      expect(item.podium.map((t) => t.colorHex), ['#000000', '#1565C0', null]);
+      expect(HistoryMatch.fromJson(const {'id': 'x'}).podium, isEmpty);
+    });
+
     test('lê jogo de campeonato preservando placar e identificação', () {
       final item = HistoryMatch.fromJson(const {
         'matchId': 'jogo-1',
