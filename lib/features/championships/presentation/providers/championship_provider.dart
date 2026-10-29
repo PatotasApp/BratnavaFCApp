@@ -486,9 +486,8 @@ class ChampionshipDetailsNotifier
         'Falha ao encerrar jogo.',
       );
 
-  /// Troca 2 jogadores de lugar. Em times diferentes, cada um vai para o time
-  /// do outro e quem chega assume o papel de goleiro de quem saiu. No mesmo
-  /// time, o goleiro passa para o outro.
+  /// Troca 2 jogadores de times diferentes (do mesmo time não troca). O
+  /// goleiro vai junto e vira o goleiro do novo time; nenhum time fica com 2.
   Future<bool> swapPlayers(String firstId, String secondId) {
     final details = state.details;
     if (details == null) return Future.value(false);
@@ -496,51 +495,26 @@ class ChampionshipDetailsNotifier
     final second = details.playerById(secondId);
     final firstTeam = first?.teamId;
     final secondTeam = second?.teamId;
-    if (first == null || second == null) return Future.value(false);
+    if (first == null ||
+        second == null ||
+        firstTeam == null ||
+        secondTeam == null ||
+        firstTeam == secondTeam) {
+      return Future.value(false);
+    }
     return _mutate(() async {
-      if (firstTeam != null && firstTeam == secondTeam) {
-        if (first.isGoalkeeper != second.isGoalkeeper) {
-          await _dataSource.setGoalkeeper(
-            groupId,
-            championshipId,
-            firstTeam,
-            first.isGoalkeeper ? secondId : firstId,
-          );
-        }
-        return;
+      await _dataSource.assignPlayerTeam(
+          groupId, championshipId, firstId, secondTeam);
+      await _dataSource.assignPlayerTeam(
+          groupId, championshipId, secondId, firstTeam);
+      // Quem era goleiro continua goleiro e passa a ser o único do time novo.
+      if (first.isGoalkeeper) {
+        await _dataSource.setGoalkeeper(
+            groupId, championshipId, secondTeam, firstId);
       }
-      if (secondTeam != null) {
-        await _dataSource.assignPlayerTeam(
-            groupId, championshipId, firstId, secondTeam);
-      }
-      if (firstTeam != null) {
-        await _dataSource.assignPlayerTeam(
-            groupId, championshipId, secondId, firstTeam);
-      }
-      // Reafirma o goleiro dos dois times para quem saiu não continuar
-      // marcado como goleiro no time novo.
-      String? goalkeeperOf(String teamId) {
-        for (final player in details.players) {
-          if (player.teamId == teamId && player.isGoalkeeper) {
-            return player.playerId;
-          }
-        }
-        return null;
-      }
-
-      if (firstTeam != null) {
-        final keeper = first.isGoalkeeper ? secondId : goalkeeperOf(firstTeam);
-        if (keeper != null) {
-          await _dataSource.setGoalkeeper(
-              groupId, championshipId, firstTeam, keeper);
-        }
-      }
-      if (secondTeam != null) {
-        final keeper = second.isGoalkeeper ? firstId : goalkeeperOf(secondTeam);
-        if (keeper != null) {
-          await _dataSource.setGoalkeeper(
-              groupId, championshipId, secondTeam, keeper);
-        }
+      if (second.isGoalkeeper) {
+        await _dataSource.setGoalkeeper(
+            groupId, championshipId, firstTeam, secondId);
       }
     }, 'Falha ao trocar jogadores.');
   }

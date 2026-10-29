@@ -18,27 +18,29 @@ void main() {
     return notifier;
   }
 
-  test('trocar goleiro com jogador de outro time leva o papel junto', () async {
+  test('trocar o goleiro com alguém de outro time: o goleiro vai junto',
+      () async {
     final notifier = await loaded();
 
     expect(await notifier.swapPlayers(player(1), player(5)), isTrue);
 
     final details = notifier.state.details!;
     expect(details.playerById(player(5))!.teamId, team(1));
-    expect(details.playerById(player(5))!.isGoalkeeper, isTrue);
+    expect(details.playerById(player(5))!.isGoalkeeper, isFalse);
     expect(details.playerById(player(1))!.teamId, team(2));
-    expect(details.playerById(player(1))!.isGoalkeeper, isFalse);
-    expect(details.playerById(player(4))!.isGoalkeeper, isTrue);
+    expect(details.playerById(player(1))!.isGoalkeeper, isTrue);
+    // Time 2 não fica com 2 goleiros.
+    expect(details.playerById(player(4))!.isGoalkeeper, isFalse);
   });
 
-  test('no mesmo time, a troca passa o goleiro para o outro', () async {
+  test('do mesmo time não troca', () async {
     final notifier = await loaded();
 
-    await notifier.swapPlayers(player(2), player(1));
+    expect(await notifier.swapPlayers(player(2), player(1)), isFalse);
 
     final details = notifier.state.details!;
-    expect(details.playerById(player(2))!.isGoalkeeper, isTrue);
-    expect(details.playerById(player(1))!.isGoalkeeper, isFalse);
+    expect(details.playerById(player(1))!.isGoalkeeper, isTrue);
+    expect(details.playerById(player(2))!.teamId, team(1));
   });
 
   test('voltar etapa: Times → Sorteio (goleiros ficam) → Presença', () async {

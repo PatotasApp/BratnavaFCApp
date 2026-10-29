@@ -19,6 +19,7 @@ import '../widgets/championship_draw_panel.dart';
 import '../widgets/championship_live_game.dart';
 import '../widgets/championship_replays_section.dart';
 import '../widgets/championship_stage_header.dart';
+import '../widgets/championship_swap_teams.dart';
 
 class ChampionshipDetailPage extends ConsumerStatefulWidget {
   const ChampionshipDetailPage({super.key, required this.championshipId});
@@ -702,12 +703,10 @@ class _TeamsSection extends ConsumerStatefulWidget {
   ConsumerState<_TeamsSection> createState() => _TeamsSectionState();
 }
 
-/// Etapa Times, como a aba Times da formação da partida: toca em 2 jogadores
-/// para trocar (levando o papel de goleiro), encaixa quem ficou sem time e
-/// edita nome e cor.
+/// Etapa Times, como a aba Times da formação da partida: troca 2 jogadores de
+/// times diferentes (levando o papel de goleiro, sem time com 2 goleiros),
+/// encaixa quem ficou sem time e edita nome e cor.
 class _TeamsSectionState extends ConsumerState<_TeamsSection> {
-  String? _selected;
-
   ChampionshipDetails get details => widget.details;
 
   bool get _canEditTeams =>
@@ -720,26 +719,8 @@ class _TeamsSectionState extends ConsumerState<_TeamsSection> {
       (details.status == ChampionshipStatus.teamDraw ||
           details.status == ChampionshipStatus.inProgress);
 
-  Future<void> _tap(String playerId) async {
-    final first = _selected;
-    if (first == null) {
-      setState(() => _selected = playerId);
-      return;
-    }
-    setState(() => _selected = null);
-    if (first == playerId) return;
-    final ok = await widget.notifier.swapPlayers(first, playerId);
-    if (ok && mounted) {
-      _showMessage(
-        context,
-        '${_playerName(details, first)} ⇄ ${_playerName(details, playerId)}',
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final unassigned = details.unassignedPlayers;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -768,58 +749,42 @@ class _TeamsSectionState extends ConsumerState<_TeamsSection> {
               if (_canSwap) ...[
                 const SizedBox(height: 4),
                 Text(
-                  _selected == null
-                      ? 'Toque em 2 jogadores para trocar de lugar (vale também '
-                          'para o goleiro).'
-                      : 'Agora toque no jogador para trocar com '
-                          '${_playerName(details, _selected!)}.',
+                  'Toque num jogador e depois num de outro time para trocar '
+                  'os dois (o goleiro vai junto).',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
-              const SizedBox(height: 8),
-              for (final team in details.teams)
-                ExpansionTile(
-                  initiallyExpanded: _canSwap,
-                  tilePadding: EdgeInsets.zero,
-                  childrenPadding: const EdgeInsets.only(bottom: 8),
-                  leading: _TeamColor(hex: team.colorHex),
-                  title: Text(team.name),
-                  subtitle: Text('${team.playerIds.length} jogadores'
-                      '${team.colorHex == null ? ' · sem cor' : ''}'
-                      '${team.playerIds.any((id) => details.playerById(id)?.isGoalkeeper == true) ? '' : ' · sem goleiro'}'),
-                  trailing: _canEditTeams
-                      ? IconButton(
-                          tooltip: 'Editar nome e cor',
-                          onPressed: () =>
-                              _editTeam(context, team, widget.notifier),
-                          icon: const Icon(Icons.edit_outlined),
-                        )
-                      : null,
-                  children: [
-                    if (team.playerIds.isEmpty)
-                      const ListTile(
-                        dense: true,
-                        title: Text('Sem jogadores ainda.'),
-                      ),
-                    for (final playerId in team.playerIds)
-                      ListTile(
-                        dense: true,
-                        selected: _selected == playerId,
-                        selectedTileColor: scheme.primaryContainer,
-                        onTap: _canSwap ? () => _tap(playerId) : null,
-                        title: PlayerNameWithIcon(
-                          name: _playerName(details, playerId),
-                          icons: widget.icons,
-                          isGoalkeeper:
-                              details.playerById(playerId)?.isGoalkeeper ==
-                                  true,
-                        ),
-                        trailing: _selected == playerId
-                            ? const Icon(Icons.swap_horiz_rounded)
-                            : null,
-                      ),
-                  ],
-                ),
+              SwappableTeams(
+                teams: [
+                  for (final team in details.teams)
+                    SwapTeam(
+                      id: team.id,
+                      name: team.name,
+                      colorHex: team.colorHex,
+                      playerIds: team.playerIds,
+                      isGoalkeeper: (id) =>
+                          details.playerById(id)?.isGoalkeeper == true,
+                      subtitle: [
+                        if (team.colorHex == null) 'sem cor',
+                        if (!team.playerIds.any((id) =>
+                            details.playerById(id)?.isGoalkeeper == true))
+                          'sem goleiro',
+                      ].join(' · ').ifEmptyNull,
+                      trailing: _canEditTeams
+                          ? IconButton(
+                              tooltip: 'Editar nome e cor',
+                              onPressed: () =>
+                                  _editTeam(context, team, widget.notifier),
+                              icon: const Icon(Icons.edit_outlined),
+                            )
+                          : null,
+                    ),
+                ],
+                playerName: (id) => _playerName(details, id),
+                icons: widget.icons,
+                enabled: _canSwap,
+                onSwap: widget.notifier.swapPlayers,
+              ),
             ],
           ),
         ),
@@ -1637,4 +1602,8 @@ class _InviteButton extends StatelessWidget {
       ),
     );
   }
+}
+
+extension on String {
+  String? get ifEmptyNull => isEmpty ? null : this;
 }

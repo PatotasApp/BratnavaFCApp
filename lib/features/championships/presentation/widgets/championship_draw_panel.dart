@@ -6,6 +6,7 @@ import '../../../team_colors/domain/entities/team_color.dart';
 import '../../../team_colors/presentation/providers/team_colors_provider.dart';
 import '../../domain/entities/championship_models.dart';
 import '../providers/championship_provider.dart';
+import 'championship_swap_teams.dart';
 
 /// Métodos da formação da partida, com os ids que a API espera.
 const kChampionshipDrawStrategies = [
@@ -81,6 +82,9 @@ class _ChampionshipDrawPanelState extends ConsumerState<ChampionshipDrawPanel> {
   ChampionshipDrawOptions? _draw;
   int _selected = 0;
 
+  /// Trocas feitas à mão, por opção. "Sortear de novo" descarta.
+  final Map<int, List<DefineChampionshipTeam>> _swapped = {};
+
   ChampionshipDetails get _details => widget.details;
 
   int get _minTeams => _details.rules.minimumTeams;
@@ -136,15 +140,42 @@ class _ChampionshipDrawPanelState extends ConsumerState<ChampionshipDrawPanel> {
     setState(() {
       _draw = draw;
       _selected = 0;
+      _swapped.clear();
       _tab = _DrawTab.opcoes;
     });
     if (draw.message != null) _snack(draw.message!);
   }
 
+  /// Times da opção mostrada, já com as trocas feitas à mão.
+  List<DefineChampionshipTeam> _teamsOf(ChampionshipDrawOption option) =>
+      _swapped[_selected] ?? option.teams;
+
   Future<void> _useOption(ChampionshipDrawOption option) async {
     await widget.notifier.defineTeams(DefineChampionshipTeams(
-      teams: option.teams,
+      teams: _teamsOf(option),
     ));
+  }
+
+  bool _swap(ChampionshipDrawOption option, String first, String second) {
+    final teams = _teamsOf(option);
+    final swapped = swapInOption(
+      [
+        for (final t in teams)
+          (playerIds: t.playerIds, goalkeeperPlayerId: t.goalkeeperPlayerId),
+      ],
+      first,
+      second,
+    );
+    setState(() => _swapped[_selected] = [
+          for (var i = 0; i < teams.length; i++)
+            DefineChampionshipTeam(
+              name: teams[i].name,
+              colorId: teams[i].colorId,
+              playerIds: swapped[i].playerIds,
+              goalkeeperPlayerId: swapped[i].goalkeeperPlayerId,
+            ),
+        ]);
+    return true;
   }
 
   void _snack(String message) => ScaffoldMessenger.of(context)
@@ -351,7 +382,15 @@ class _ChampionshipDrawPanelState extends ConsumerState<ChampionshipDrawPanel> {
                   children: [
                     Text('Opção ${_selected + 1} de ${draw.options.length}',
                         style: Theme.of(context).textTheme.titleSmall),
-                    if (_strategy != 1)
+                    // A API só manda a força por time: depois de uma troca
+                    // não dá para recalcular, então avisa que foi à mão.
+                    if (_swapped.containsKey(_selected))
+                      Text(
+                        'Ajustada manualmente',
+                        key: const ValueKey('option-adjusted'),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      )
+                    else if (_strategy != 1)
                       Text(
                         'Diferença de força: '
                         '${(option.strengthDifference * 100).toStringAsFixed(0)}%',
@@ -370,13 +409,23 @@ class _ChampionshipDrawPanelState extends ConsumerState<ChampionshipDrawPanel> {
             ],
           ),
           const SizedBox(height: 8),
-          for (var i = 0; i < option.teams.length; i++)
-            _OptionTeam(
-              team: option.teams[i],
-              hex: _hexOf(option.teams[i].colorId),
-              details: _details,
-              icons: widget.icons,
-            ),
+          SwappableTeams(
+            key: ValueKey('option-teams-$_selected'),
+            teams: [
+              for (final (i, team) in _teamsOf(option).indexed)
+                SwapTeam(
+                  id: 'option-team-$i',
+                  name: team.name,
+                  colorHex: _hexOf(team.colorId),
+                  playerIds: team.playerIds,
+                  isGoalkeeper: (id) => id == team.goalkeeperPlayerId,
+                ),
+            ],
+            playerName: (id) => _details.playerById(id)?.name ?? 'Jogador',
+            icons: widget.icons,
+            enabled: !mutating,
+            onSwap: (first, second) async => _swap(option, first, second),
+          ),
           if (option.unassignedPlayerIds.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
@@ -483,52 +532,6 @@ class _GoalkeepersCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _OptionTeam extends StatelessWidget {
-  const _OptionTeam({
-    required this.team,
-    required this.hex,
-    required this.details,
-    required this.icons,
-  });
-
-  final DefineChampionshipTeam team;
-  final String? hex;
-  final ChampionshipDetails details;
-  final GroupIcons icons;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                _Dot(hex: hex),
-                const SizedBox(width: 8),
-                Text('${team.name} · ${team.playerIds.length}',
-                    style: Theme.of(context).textTheme.titleSmall),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 10,
-              runSpacing: 4,
-              children: [
-                for (final id in team.playerIds)
-                  PlayerNameWithIcon(
-                    name: details.playerById(id)?.name ?? 'Jogador',
-                    icons: icons,
-                    isGoalkeeper: id == team.goalkeeperPlayerId,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-              ],
-            ),
-          ],
-        ),
-      );
 }
 
 class _StrategyCard extends StatelessWidget {

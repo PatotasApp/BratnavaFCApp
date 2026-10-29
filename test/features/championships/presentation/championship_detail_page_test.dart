@@ -115,6 +115,18 @@ void main() {
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.text('Opção 1 de 1'), findsOneWidget);
 
+    // Troca 2 jogadores de times diferentes antes de usar a opção.
+    final firstTeam =
+        find.byKey(const ValueKey('swap-player-championship-2-player-1'));
+    final otherTeam =
+        find.byKey(const ValueKey('swap-player-championship-2-player-4'));
+    await tester.tap(firstTeam);
+    await tester.pumpAndSettle();
+    await tester.tap(otherTeam);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('option-adjusted')), findsOneWidget);
+    expect(find.textContaining('Diferença de força'), findsNothing);
+
     await tester.tap(find.text('Usar esta opção'));
     await tester.pumpAndSettle();
     expect(find.text('Times'), findsWidgets);
