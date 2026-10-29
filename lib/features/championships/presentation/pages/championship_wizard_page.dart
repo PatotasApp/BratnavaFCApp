@@ -9,6 +9,9 @@ import '../../domain/entities/championship_rules.dart';
 import '../championship_ui_text.dart';
 import '../providers/championship_provider.dart';
 
+/// Espaço no topo das etapas para o rótulo flutuante do 1º campo não cortar.
+const _stepTopGap = 14.0;
+
 class ChampionshipWizardPage extends ConsumerStatefulWidget {
   const ChampionshipWizardPage({super.key});
 
@@ -56,25 +59,6 @@ class _ChampionshipWizardPageState
     setState(() {
       _playedAt =
           DateTime(date.year, date.month, date.day, time.hour, time.minute);
-    });
-  }
-
-  void _applyPreset({required int consecutiveWinsLimit}) {
-    setState(() {
-      _rules = _rules.copyWith(
-        format: ChampionshipFormat.winnerStays,
-        winnerStays: WinnerStaysRules(
-          consecutiveWinsLimit: consecutiveWinsLimit,
-          tieRule: WinnerStaysTieRule.longestOnFieldLeaves,
-          limitRule: WinnerStaysLimitRule.winnerLeaves,
-        ),
-        standings: ChampionshipStandingsRules(
-          mode: ChampionshipStandingMode.pointsPerGame,
-          winPoints: _rules.standings.winPoints,
-          drawPoints: _rules.standings.drawPoints,
-          tiebreakers: _rules.standings.tiebreakers,
-        ),
-      );
     });
   }
 
@@ -168,6 +152,9 @@ class _ChampionshipWizardPageState
 
   Widget _buildInformation() => Column(
         children: [
+          // O Stepper recorta o conteúdo da etapa no topo: sem esse respiro, o
+          // rótulo que sobe para cima do campo ao tocar fica cortado.
+          const SizedBox(height: _stepTopGap),
           TextField(
             controller: _name,
             decoration: const InputDecoration(
@@ -197,23 +184,7 @@ class _ChampionshipWizardPageState
   Widget _buildFormat() => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Comece por um preset'),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ActionChip(
-                label: const Text('Fica quem ganha clássico'),
-                onPressed: () => _applyPreset(consecutiveWinsLimit: 0),
-              ),
-              ActionChip(
-                label: const Text('Troca quem ganhou 2'),
-                onPressed: () => _applyPreset(consecutiveWinsLimit: 2),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: _stepTopGap),
           _dropdown(
             label: 'Formato',
             value: _rules.format,
@@ -247,7 +218,9 @@ class _ChampionshipWizardPageState
           if (_rules.format == ChampionshipFormat.winnerStays) ...[
             const SizedBox(height: 12),
             TextFormField(
-              key: ValueKey(_rules.winnerStays?.consecutiveWinsLimit),
+              // Chave fixa: com o valor na chave o campo era recriado a cada
+              // tecla e perdia o foco.
+              key: const ValueKey('wins-limit'),
               initialValue: '${_rules.winnerStays?.consecutiveWinsLimit ?? 0}',
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
@@ -295,6 +268,7 @@ class _ChampionshipWizardPageState
               Expanded(
                 child: _optionalNumber(
                   label: 'Minutos',
+                  helper: 'Em branco se o jogo não acaba por tempo.',
                   value: _rules.gameEnd.timeLimitMinutes,
                   onChanged: _setGameEndTime,
                 ),
@@ -303,6 +277,7 @@ class _ChampionshipWizardPageState
               Expanded(
                 child: _optionalNumber(
                   label: 'Gols',
+                  helper: 'Em branco se o jogo não acaba por gols.',
                   value: _rules.gameEnd.goalLimit,
                   onChanged: _setGameEndGoals,
                 ),
@@ -320,6 +295,7 @@ class _ChampionshipWizardPageState
   Widget _buildStatistics() => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          const SizedBox(height: _stepTopGap),
           _dropdown(
             label: 'Como aparece no histórico',
             value: _rules.historyMode,
@@ -359,9 +335,7 @@ class _ChampionshipWizardPageState
               const SizedBox(height: 8),
             ],
             TextFormField(
-              key: ValueKey(
-                'min-games-${_rules.minGamesForPlacementResult}',
-              ),
+              key: const ValueKey('min-games'),
               initialValue: '${_rules.minGamesForPlacementResult}',
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
@@ -514,7 +488,7 @@ class _ChampionshipWizardPageState
     required ValueChanged<int> onChanged,
   }) =>
       TextFormField(
-        key: ValueKey('$label-$value'),
+        key: ValueKey('number-$label'),
         initialValue: '$value',
         keyboardType: TextInputType.number,
         decoration: InputDecoration(labelText: label),
@@ -525,12 +499,18 @@ class _ChampionshipWizardPageState
     required String label,
     required int? value,
     required ValueChanged<int?> onChanged,
+    String? helper,
   }) =>
       TextFormField(
-        key: ValueKey('$label-$value'),
+        key: ValueKey('optional-$label'),
         initialValue: value?.toString() ?? '',
         keyboardType: TextInputType.number,
-        decoration: InputDecoration(labelText: label, hintText: 'Sem limite'),
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: 'Sem limite',
+          helperText: helper,
+          helperMaxLines: 2,
+        ),
         onChanged: (text) =>
             onChanged(text.trim().isEmpty ? null : int.tryParse(text) ?? -1),
       );

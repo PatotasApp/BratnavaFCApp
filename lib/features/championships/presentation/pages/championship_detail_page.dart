@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../../../core/errors/app_exception.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../team_colors/domain/entities/team_color.dart';
@@ -158,16 +158,8 @@ class _Overview extends StatelessWidget {
             Text('${DateFormat('dd/MM/yyyy · HH:mm').format(details.playedAt)}'
                 ' · ${details.placeName}'),
             const SizedBox(height: 8),
+            // Só o resumo por extenso: os selos repetiam a mesma coisa.
             Text(championshipRulesSummary(details.rules)),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final badge in details.ruleBadges)
-                  PrototypeBadge(label: badge),
-              ],
-            ),
           ],
         ),
       );
@@ -237,15 +229,33 @@ class _PresenceSection extends StatelessWidget {
               trailing: isAdmin &&
                       (details.status == ChampionshipStatus.acceptation ||
                           details.status == ChampionshipStatus.teamDraw)
-                  ? PopupMenuButton<bool>(
-                      tooltip: 'Alterar presença',
-                      onSelected: (accepted) => notifier.setInvite(
-                        player.playerId,
-                        accepted: accepted,
-                      ),
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(value: true, child: Text('Confirmar')),
-                        PopupMenuItem(value: false, child: Text('Recusar')),
+                  // Como na aceitação da partida: os dois botões na linha,
+                  // escondendo o que já é a resposta atual.
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (player.inviteResponse !=
+                            ChampionshipInviteResponse.rejected)
+                          _InviteButton(
+                            icon: Icons.close,
+                            tooltip: 'Recusar ${player.name}',
+                            onTap: () => notifier.setInvite(
+                              player.playerId,
+                              accepted: false,
+                            ),
+                          ),
+                        if (player.inviteResponse !=
+                            ChampionshipInviteResponse.accepted) ...[
+                          const SizedBox(width: 6),
+                          _InviteButton(
+                            icon: Icons.check,
+                            tooltip: 'Confirmar ${player.name}',
+                            onTap: () => notifier.setInvite(
+                              player.playerId,
+                              accepted: true,
+                            ),
+                          ),
+                        ],
                       ],
                     )
                   : Text(_inviteLabel(player.inviteResponse)),
@@ -938,7 +948,8 @@ Future<void> _editTeam(
     ),
   );
   final name = controller.text.trim();
-  controller.dispose();
+  // Sem dispose aqui: o diálogo ainda está animando a saída e usa o campo; o
+  // controller sai junto com o diálogo pelo coletor.
   if (saved != true || name.isEmpty) return;
   final ok = await notifier.updateTeam(team.id, name: name, colorId: colorId);
   if (ok && context.mounted) _showMessage(context, 'Time atualizado.');
@@ -1198,67 +1209,119 @@ Future<void> _addGuest(
   ChampionshipDetailsNotifier notifier,
 ) async {
   final already = {for (final player in details.players) player.playerId};
-  final id = await showDialog<String>(
+  final nameController = TextEditingController();
+  var isGoalkeeper = false;
+  int? stars;
+  String? error;
+
+  // Como na partida: convidado novo pelo nome, goleiro e nota. Embaixo, os
+  // convidados que já jogaram na patota, para quem volta não ser duplicado.
+  final result = await showDialog<Object>(
     context: context,
-    builder: (context) => Consumer(
-      builder: (context, ref, _) {
-        final playersAsync =
-            ref.watch(championshipGroupPlayersProvider(notifier.groupId));
-        return AlertDialog(
-          title: const Text('Adicionar convidado'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 360,
-            child: playersAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, _) => Center(
-                child: Text(
-                  extractDioError(error, 'Falha ao carregar os jogadores.'),
-                  textAlign: TextAlign.center,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) => Consumer(
+        builder: (context, ref, _) {
+          final playersAsync =
+              ref.watch(championshipGroupPlayersProvider(notifier.groupId));
+          final returning = (playersAsync.valueOrNull ?? const [])
+              .where((p) => p.isGuest && !already.contains(p.id))
+              .toList();
+          return AlertDialog(
+            title: const Text('Adicionar convidado'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: nameController,
+                      autofocus: true,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: InputDecoration(
+                        labelText: 'Nome do convidado',
+                        hintText: 'Ex: Zé da Pelada',
+                        errorText: error,
+                      ),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Goleiro'),
+                      value: isGoalkeeper,
+                      onChanged: (value) =>
+                          setDialogState(() => isGoalkeeper = value),
+                    ),
+                    Text('Nota (opcional)',
+                        style: Theme.of(context).textTheme.labelMedium),
+                    Row(
+                      children: [
+                        for (var star = 1; star <= 5; star++)
+                          IconButton(
+                            tooltip: '$star estrela${star > 1 ? 's' : ''}',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => setDialogState(
+                                () => stars = stars == star ? null : star),
+                            icon: Icon(
+                              star <= (stars ?? 0)
+                                  ? Icons.star_rounded
+                                  : Icons.star_border_rounded,
+                              color: AppColors.amber500,
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (returning.isNotEmpty) ...[
+                      const Divider(height: 24),
+                      Text('Ou um convidado que já jogou',
+                          style: Theme.of(context).textTheme.labelMedium),
+                      for (final player in returning)
+                        ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.person_add_alt_outlined),
+                          title: Text(player.name),
+                          onTap: () => Navigator.pop(context, player.id),
+                        ),
+                    ],
+                  ],
                 ),
               ),
-              data: (players) {
-                final available = players
-                    .where((player) => !already.contains(player.id))
-                    .toList();
-                if (available.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      'Todos os jogadores da patota já estão no campeonato.',
-                      textAlign: TextAlign.center,
-                    ),
-                  );
-                }
-                return ListView(
-                  children: [
-                    for (final player in available)
-                      ListTile(
-                        leading: Icon(
-                          player.isGuest
-                              ? Icons.person_add_alt_outlined
-                              : Icons.person_outline,
-                        ),
-                        title: Text(player.name),
-                        subtitle:
-                            player.isGuest ? const Text('Convidado') : null,
-                        onTap: () => Navigator.pop(context, player.id),
-                      ),
-                  ],
-                );
-              },
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-          ],
-        );
-      },
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (nameController.text.trim().isEmpty) {
+                    setDialogState(() => error = 'Nome é obrigatório.');
+                    return;
+                  }
+                  Navigator.pop(context, true);
+                },
+                child: const Text('Adicionar'),
+              ),
+            ],
+          );
+        },
+      ),
     ),
   );
-  if (id != null && id.isNotEmpty) await notifier.addGuest(id);
+  final name = nameController.text.trim();
+  // Sem dispose aqui: o diálogo ainda está animando a saída e usa o campo; o
+  // controller sai junto com o diálogo pelo coletor.
+  if (result is String) {
+    await notifier.addGuest(result);
+  } else if (result == true) {
+    await notifier.addNewGuest(
+      name: name,
+      isGoalkeeper: isGoalkeeper,
+      starRating: stars,
+    );
+  }
 }
 
 /// `POST /{id}/finish`. Depois dele vem a votação do MVP (se houver) e o
@@ -1488,3 +1551,51 @@ String _inviteLabel(ChampionshipInviteResponse response) => switch (response) {
       ChampionshipInviteResponse.rejected => 'Recusou',
       ChampionshipInviteResponse.accepted => 'Confirmado',
     };
+
+/// Botão de presença por jogador, igual ao da aceitação da partida
+/// (`.proto-icon-btn`: 44×44, borda neutra, ícone em text-secondary).
+class _InviteButton extends StatelessWidget {
+  const _InviteButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        label: tooltip,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(PrototypeLayout.controlRadius),
+          child: Container(
+            width: PrototypeLayout.minimumTouchTarget,
+            height: PrototypeLayout.minimumTouchTarget,
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.slate900 : AppColors.lightCard,
+              borderRadius:
+                  BorderRadius.circular(PrototypeLayout.controlRadius),
+              border: Border.all(
+                  color: isDark ? AppColors.slate700 : AppColors.lightBorder),
+            ),
+            child: Icon(
+              icon,
+              size: 15,
+              color: isDark
+                  ? AppColors.darkTextSecondary
+                  : AppColors.lightTextSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

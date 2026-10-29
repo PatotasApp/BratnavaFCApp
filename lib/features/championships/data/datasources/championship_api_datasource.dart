@@ -128,6 +128,23 @@ class ChampionshipApiDataSource implements ChampionshipDataSource {
           ));
 
   @override
+  Future<void> addNewGuest(
+    String groupId,
+    String id, {
+    required String name,
+    required bool isGoalkeeper,
+    int? starRating,
+  }) =>
+      _send(() => _dio.post(
+            '${_base(groupId)}/$id/players/guest',
+            data: {
+              'name': name,
+              'isGoalkeeper': isGoalkeeper,
+              'guestStarRating': starRating,
+            },
+          ));
+
+  @override
   Future<ChampionshipTeamsDraw> drawTeams(
     String groupId,
     String id,

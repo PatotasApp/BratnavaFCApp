@@ -13,6 +13,16 @@ abstract interface class ChampionshipDataSource {
   Future<void> acceptInvite(String groupId, String id, String playerId);
   Future<void> rejectInvite(String groupId, String id, String playerId);
   Future<void> addGuest(String groupId, String id, String playerId);
+
+  /// Convidado novo, como na partida: criado na patota pelo nome e já
+  /// confirmado no campeonato.
+  Future<void> addNewGuest(
+    String groupId,
+    String id, {
+    required String name,
+    required bool isGoalkeeper,
+    int? starRating,
+  });
   Future<ChampionshipTeamsDraw> drawTeams(
     String groupId,
     String id,

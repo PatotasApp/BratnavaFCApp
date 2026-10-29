@@ -282,6 +282,21 @@ class ChampionshipDetailsNotifier
             : _dataSource.rejectInvite(groupId, championshipId, playerId),
         'Falha ao alterar presença.',
       );
+  Future<bool> addNewGuest({
+    required String name,
+    required bool isGoalkeeper,
+    int? starRating,
+  }) =>
+      _mutate(
+        () => _dataSource.addNewGuest(
+          groupId,
+          championshipId,
+          name: name,
+          isGoalkeeper: isGoalkeeper,
+          starRating: starRating,
+        ),
+        'Falha ao adicionar convidado.',
+      );
   Future<bool> addGuest(String playerId) => _mutate(
         () => _dataSource.addGuest(groupId, championshipId, playerId),
         'Falha ao adicionar convidado.',

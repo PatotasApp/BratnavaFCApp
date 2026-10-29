@@ -171,14 +171,37 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
       _setInvite(id, playerId, ChampionshipInviteResponse.rejected);
 
   @override
-  Future<void> addGuest(String groupId, String id, String playerId) async {
+  Future<void> addGuest(String groupId, String id, String playerId) =>
+      _addGuestRow(id, playerId: playerId, name: 'Convidado');
+
+  @override
+  Future<void> addNewGuest(
+    String groupId,
+    String id, {
+    required String name,
+    required bool isGoalkeeper,
+    int? starRating,
+  }) =>
+      _addGuestRow(
+        id,
+        playerId: '$id-guest-${_sequence++}',
+        name: name,
+        isGoalkeeper: isGoalkeeper,
+      );
+
+  Future<void> _addGuestRow(
+    String id, {
+    required String playerId,
+    required String name,
+    bool isGoalkeeper = false,
+  }) async {
     final players = _require(id)['players'] as List<dynamic>;
     players.add({
       'playerId': playerId,
-      'name': 'Convidado',
+      'name': name,
       'photoUrl': null,
       'isGuest': true,
-      'isGoalkeeper': false,
+      'isGoalkeeper': isGoalkeeper,
       'inviteResponse': ChampionshipInviteResponse.accepted.value,
       'teamId': null,
       'didNotPlay': false,
@@ -714,8 +737,9 @@ List<String> buildChampionshipRuleBadges(ChampionshipRules rules) {
     ChampionshipHistoryMode.championshipOnly => 'Só no campeonato',
   };
   final result = switch (rules.resultMode) {
-    ChampionshipResultMode.perGame => 'Resultado por jogo',
-    ChampionshipResultMode.placement => '1º V · 2º E · 3º D',
+    ChampionshipResultMode.perGame => 'Resultado de cada jogo',
+    ChampionshipResultMode.placement =>
+      'Colocação: 1º vitória, 2º empate, 3º+ derrota',
     ChampionshipResultMode.winForAll => 'Vitória para todos',
     ChampionshipResultMode.presenceOnly => 'Só presença',
   };
