@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:patotas_app/features/championships/data/datasources/championship_mock_datasource.dart';
 import 'package:patotas_app/features/championships/domain/entities/championship_enums.dart';
+import 'package:patotas_app/features/championships/domain/entities/championship_models.dart';
 import 'package:patotas_app/features/championships/presentation/providers/championship_provider.dart';
 
 void main() {
@@ -40,14 +41,49 @@ void main() {
     expect(details.playerById(player(1))!.isGoalkeeper, isFalse);
   });
 
-  test('voltar etapa desfaz os times e volta para a presença', () async {
+  test('voltar etapa: Times → Sorteio (goleiros ficam) → Presença', () async {
     final notifier = await loaded();
+    final keepers = notifier.state.details!.players
+        .where((p) => p.isGoalkeeper)
+        .map((p) => p.playerId)
+        .toSet();
 
     expect(await notifier.stepBack(), isTrue);
-
-    final details = notifier.state.details!;
-    expect(details.status, ChampionshipStatus.acceptation);
-    expect(details.teams, isEmpty);
+    var details = notifier.state.details!;
+    expect(details.status, ChampionshipStatus.teamDraw);
+    expect(details.isDrawStage, isTrue);
     expect(details.players.every((p) => p.teamId == null), isTrue);
+    expect(
+      details.players.where((p) => p.isGoalkeeper).map((p) => p.playerId),
+      unorderedEquals(keepers),
+    );
+
+    expect(await notifier.stepBack(), isTrue);
+    details = notifier.state.details!;
+    expect(details.status, ChampionshipStatus.acceptation);
+  });
+
+  test('sorteio com os métodos da partida e goleiros marcados antes', () async {
+    final notifier = await loaded();
+    await notifier.stepBack(); // volta para o Sorteio
+    final first = notifier.state.details!.confirmedPlayers.first;
+    expect(await notifier.setPlayerGoalkeeper(first.playerId, true), isTrue);
+    expect(notifier.state.details!.playerById(first.playerId)!.isGoalkeeper,
+        isTrue);
+
+    final manual = await notifier.drawTeamOptions(
+        teamCount: 3, strategyType: 1, includeGoalkeepers: true);
+    expect(
+        manual!.options.single.teams.every((t) => t.playerIds.isEmpty), isTrue);
+
+    final draw = await notifier.drawTeamOptions(
+        teamCount: 3, strategyType: 3, includeGoalkeepers: true);
+    final option = draw!.options.first;
+    expect(option.teams, hasLength(3));
+    expect(
+        await notifier
+            .defineTeams(DefineChampionshipTeams(teams: option.teams)),
+        isTrue);
+    expect(notifier.state.details!.isTeamsStage, isTrue);
   });
 }

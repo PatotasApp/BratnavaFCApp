@@ -114,6 +114,9 @@ class ChampionshipRules {
   final bool includeInTeamDraw;
   final int minGamesForPlacementResult;
   final ChampionshipFormat format;
+
+  /// Mínimo de times do formato (igual à API): fica quem ganha precisa de 3.
+  int get minimumTeams => format == ChampionshipFormat.winnerStays ? 3 : 2;
   final int roundRobinTurns;
   final WinnerStaysRules? winnerStays;
   final ChampionshipGameEndRules gameEnd;

@@ -229,6 +229,125 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
   }
 
   @override
+  Future<void> openTeamDraw(String groupId, String id) async {
+    _require(id)['status'] = ChampionshipStatus.teamDraw.value;
+  }
+
+  @override
+  Future<void> setPlayerGoalkeeper(
+    String groupId,
+    String id,
+    String playerId,
+    bool isGoalkeeper,
+  ) async {
+    for (final raw in _require(id)['players'] as List<dynamic>) {
+      final player = raw as Map<String, dynamic>;
+      if (player['playerId'] == playerId) player['isGoalkeeper'] = isGoalkeeper;
+    }
+  }
+
+  @override
+  Future<ChampionshipDrawOptions> drawTeamOptions(
+    String groupId,
+    String id, {
+    required int teamCount,
+    required int strategyType,
+    required bool includeGoalkeepers,
+    List<String?> colorIds = const [],
+  }) async {
+    final players = (_require(id)['players'] as List<dynamic>)
+        .cast<Map<String, dynamic>>()
+        .where((player) =>
+            player['inviteResponse'] ==
+            ChampionshipInviteResponse.accepted.value)
+        .toList();
+    final pool = players
+        .where((p) => includeGoalkeepers || p['isGoalkeeper'] != true)
+        .toList()
+      ..sort((a, b) => (b['isGoalkeeper'] == true ? 1 : 0)
+          .compareTo(a['isGoalkeeper'] == true ? 1 : 0));
+    const names = ['Azul', 'Verde', 'Laranja', 'Roxo', 'Branco'];
+    final manual = strategyType == 1;
+    final teams = List.generate(teamCount, (teamIndex) {
+      final ids = <String>[];
+      if (!manual) {
+        for (var i = teamIndex; i < pool.length; i += teamCount) {
+          ids.add(pool[i]['playerId'] as String);
+        }
+      }
+      final colorId = teamIndex < colorIds.length && colorIds[teamIndex] != null
+          ? colorIds[teamIndex]
+          : teamIndex < _mockColors.length
+              ? _mockColors[teamIndex].$1
+              : null;
+      String? keeper;
+      for (final p in players) {
+        if (ids.contains(p['playerId']) && p['isGoalkeeper'] == true) {
+          keeper = p['playerId'] as String;
+          break;
+        }
+      }
+      return DefineChampionshipTeam(
+        name: names[teamIndex % names.length],
+        colorId: colorId,
+        playerIds: ids,
+        goalkeeperPlayerId: keeper,
+      );
+    });
+    final assigned = {for (final t in teams) ...t.playerIds};
+    return ChampionshipDrawOptions(
+      options: [
+        ChampionshipDrawOption(
+          teams: teams,
+          unassignedPlayerIds: [
+            for (final p in players)
+              if (!assigned.contains(p['playerId'])) p['playerId'] as String,
+          ],
+          teamStrengths: [for (final t in teams) t.playerIds.length * .5],
+          strengthDifference: 0,
+        ),
+      ],
+      message: _colorWarning(teamCount),
+    );
+  }
+
+  @override
+  Future<void> setLinkedPoll(String groupId, String id, String? pollId) async {
+    _require(id)['linkedPollId'] = pollId;
+  }
+
+  @override
+  Future<ChampionshipReplays> fetchReplays(String groupId, String id) async {
+    final item = _require(id);
+    final teams = (item['teams'] as List<dynamic>).cast<Map<String, dynamic>>();
+    Map<String, dynamic>? team(String teamId) =>
+        teams.where((t) => t['id'] == teamId).firstOrNull;
+    return ChampionshipReplays(
+      championshipId: id,
+      games: [
+        for (final raw in item['games'] as List<dynamic>)
+          ChampionshipGameReplays(
+            gameId: (raw as Map<String, dynamic>)['id'] as String,
+            order: raw['order'] as int,
+            teamAId: raw['teamAId'] as String,
+            teamAName: (team(raw['teamAId'] as String)?['name'] as String?) ??
+                'Time A',
+            teamAColorHex:
+                team(raw['teamAId'] as String)?['colorHex'] as String?,
+            teamBId: raw['teamBId'] as String,
+            teamBName: (team(raw['teamBId'] as String)?['name'] as String?) ??
+                'Time B',
+            teamBColorHex:
+                team(raw['teamBId'] as String)?['colorHex'] as String?,
+            teamAGoals: raw['teamAGoals'] as int?,
+            teamBGoals: raw['teamBGoals'] as int?,
+            clips: const [],
+          ),
+      ],
+    );
+  }
+
+  @override
   Future<ChampionshipTeamsDraw> drawTeams(
     String groupId,
     String id,
@@ -320,8 +439,9 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
         if (definition.playerIds.contains(player['playerId'])) {
           player
             ..['teamId'] = teamId
-            ..['isGoalkeeper'] =
-                player['playerId'] == definition.goalkeeperPlayerId;
+            ..['isGoalkeeper'] = definition.goalkeeperPlayerId == null
+                ? player['isGoalkeeper'] == true
+                : player['playerId'] == definition.goalkeeperPlayerId;
         }
       }
     }
@@ -360,14 +480,15 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
         players.clear();
         item['status'] = ChampionshipStatus.created.value;
       case ChampionshipStatus.teamDraw:
-        for (final raw in players) {
-          (raw as Map<String, dynamic>)
-            ..['teamId'] = null
-            ..['isGoalkeeper'] = false;
+        // Times → Sorteio (goleiros ficam); Sorteio → Presença.
+        if ((item['teams'] as List<dynamic>).isNotEmpty) {
+          for (final raw in players) {
+            (raw as Map<String, dynamic>)['teamId'] = null;
+          }
+          item['teams'] = <Map<String, dynamic>>[];
+        } else {
+          item['status'] = ChampionshipStatus.acceptation.value;
         }
-        item
-          ..['teams'] = <Map<String, dynamic>>[]
-          ..['status'] = ChampionshipStatus.acceptation.value;
       case ChampionshipStatus.inProgress:
         if ((item['games'] as List<dynamic>).isNotEmpty) {
           throw StateError('Só é possível voltar antes do 1º jogo.');
@@ -527,7 +648,16 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
     String gameId,
     String type,
   ) async {
-    _require(id);
+    // Como na API: o botão de gol já soma no placar do jogo.
+    for (final raw in _require(id)['games'] as List<dynamic>) {
+      final game = raw as Map<String, dynamic>;
+      if (game['id'] != gameId) continue;
+      if (type == 'GolTimeA') {
+        game['teamAGoals'] = (game['teamAGoals'] as int) + 1;
+      } else if (type == 'GolTimeB') {
+        game['teamBGoals'] = (game['teamBGoals'] as int) + 1;
+      }
+    }
   }
 
   @override

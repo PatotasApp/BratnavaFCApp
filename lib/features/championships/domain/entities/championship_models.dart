@@ -371,6 +371,7 @@ class ChampionshipDetails {
     required this.myInviteResponse,
     required this.canVote,
     required this.myVotes,
+    this.linkedPollId,
   });
 
   final String id;
@@ -393,6 +394,25 @@ class ChampionshipDetails {
   final ChampionshipInviteResponse? myInviteResponse;
   final bool canVote;
   final List<ChampionshipVote> myVotes;
+
+  /// Votação/evento vinculado, como na partida (v8).
+  final String? linkedPollId;
+
+  /// Etapa Sorteio: `TeamDraw` ainda sem times (v8). Com times é a etapa Times.
+  bool get isDrawStage =>
+      status == ChampionshipStatus.teamDraw && teams.isEmpty;
+
+  bool get isTeamsStage =>
+      status == ChampionshipStatus.teamDraw && teams.isNotEmpty;
+
+  List<ChampionshipPlayer> get confirmedPlayers => players
+      .where((p) => p.inviteResponse == ChampionshipInviteResponse.accepted)
+      .toList(growable: false);
+
+  /// Jogadores confirmados que ainda não estão em nenhum time.
+  List<ChampionshipPlayer> get unassignedPlayers => confirmedPlayers
+      .where((p) => p.teamId == null || teamById(p.teamId!) == null)
+      .toList(growable: false);
 
   ChampionshipGame? get currentGame {
     if (currentGameId == null) return null;
@@ -479,6 +499,7 @@ class ChampionshipDetails {
                   item as Map<String, dynamic>,
                 ))
             .toList(growable: false),
+        linkedPollId: json['linkedPollId'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -502,6 +523,7 @@ class ChampionshipDetails {
         'myInviteResponse': myInviteResponse?.value,
         'canVote': canVote,
         'myVotes': myVotes.map((item) => item.toJson()).toList(),
+        'linkedPollId': linkedPollId,
       };
 }
 
@@ -592,6 +614,147 @@ class DefineChampionshipTeams {
 
 /// Sugestão de `POST /{id}/teams/draw`: os times (não salvos) e o aviso do
 /// servidor em `message` quando há menos cores ativas que times (v5).
+/// Uma opção do sorteio da etapa Sorteio (`POST /{id}/teams/draw-options`, v8).
+class ChampionshipDrawOption {
+  const ChampionshipDrawOption({
+    required this.teams,
+    required this.unassignedPlayerIds,
+    required this.teamStrengths,
+    required this.strengthDifference,
+  });
+
+  final List<DefineChampionshipTeam> teams;
+  final List<String> unassignedPlayerIds;
+  final List<double> teamStrengths;
+  final double strengthDifference;
+
+  factory ChampionshipDrawOption.fromJson(Map<String, dynamic> json) =>
+      ChampionshipDrawOption(
+        teams: (json['teams'] as List<dynamic>)
+            .map((item) =>
+                DefineChampionshipTeam.fromJson(item as Map<String, dynamic>))
+            .toList(growable: false),
+        unassignedPlayerIds: List<String>.from(
+            (json['unassignedPlayerIds'] as List<dynamic>?) ?? const []),
+        teamStrengths: ((json['teamStrengths'] as List<dynamic>?) ?? const [])
+            .map((value) => (value as num).toDouble())
+            .toList(growable: false),
+        strengthDifference:
+            (json['strengthDifference'] as num?)?.toDouble() ?? 0,
+      );
+}
+
+class ChampionshipDrawOptions {
+  const ChampionshipDrawOptions({required this.options, this.message});
+
+  final List<ChampionshipDrawOption> options;
+
+  /// Aviso do servidor (ex.: menos cores que times).
+  final String? message;
+}
+
+/// Replays do campeonato por jogo (`GET /{id}/replays`, v8).
+class ChampionshipReplayClip {
+  const ChampionshipReplayClip({
+    required this.id,
+    required this.url,
+    required this.eventType,
+    required this.recordedAt,
+    required this.teamId,
+    required this.teamAGoals,
+    required this.teamBGoals,
+    required this.label,
+  });
+
+  final String id;
+  final String url;
+  final String eventType;
+  final DateTime recordedAt;
+  final String? teamId;
+  final int teamAGoals;
+  final int teamBGoals;
+
+  /// Placar do momento, ex.: "Jogo 1 - 1 x 0".
+  final String label;
+
+  bool get isGoal => eventType == 'GolTimeA' || eventType == 'GolTimeB';
+
+  factory ChampionshipReplayClip.fromJson(Map<String, dynamic> json) =>
+      ChampionshipReplayClip(
+        id: json['id'] as String,
+        url: (json['url'] as String?) ?? '',
+        eventType: json['eventType'] as String,
+        recordedAt: DateTime.parse(json['recordedAt'] as String).toLocal(),
+        teamId: json['teamId'] as String?,
+        teamAGoals: (json['teamAGoals'] as num?)?.toInt() ?? 0,
+        teamBGoals: (json['teamBGoals'] as num?)?.toInt() ?? 0,
+        label: (json['label'] as String?) ?? '',
+      );
+}
+
+class ChampionshipGameReplays {
+  const ChampionshipGameReplays({
+    required this.gameId,
+    required this.order,
+    required this.teamAId,
+    required this.teamAName,
+    required this.teamAColorHex,
+    required this.teamBId,
+    required this.teamBName,
+    required this.teamBColorHex,
+    required this.teamAGoals,
+    required this.teamBGoals,
+    required this.clips,
+  });
+
+  final String gameId;
+  final int order;
+  final String teamAId;
+  final String teamAName;
+  final String? teamAColorHex;
+  final String teamBId;
+  final String teamBName;
+  final String? teamBColorHex;
+  final int? teamAGoals;
+  final int? teamBGoals;
+  final List<ChampionshipReplayClip> clips;
+
+  factory ChampionshipGameReplays.fromJson(Map<String, dynamic> json) =>
+      ChampionshipGameReplays(
+        gameId: json['gameId'] as String,
+        order: (json['order'] as num).toInt(),
+        teamAId: json['teamAId'] as String,
+        teamAName: json['teamAName'] as String,
+        teamAColorHex: json['teamAColorHex'] as String?,
+        teamBId: json['teamBId'] as String,
+        teamBName: json['teamBName'] as String,
+        teamBColorHex: json['teamBColorHex'] as String?,
+        teamAGoals: (json['teamAGoals'] as num?)?.toInt(),
+        teamBGoals: (json['teamBGoals'] as num?)?.toInt(),
+        clips: ((json['clips'] as List<dynamic>?) ?? const [])
+            .map((item) =>
+                ChampionshipReplayClip.fromJson(item as Map<String, dynamic>))
+            .toList(growable: false),
+      );
+}
+
+class ChampionshipReplays {
+  const ChampionshipReplays(
+      {required this.championshipId, required this.games});
+
+  final String championshipId;
+  final List<ChampionshipGameReplays> games;
+
+  factory ChampionshipReplays.fromJson(Map<String, dynamic> json) =>
+      ChampionshipReplays(
+        championshipId: json['championshipId'] as String,
+        games: ((json['games'] as List<dynamic>?) ?? const [])
+            .map((item) =>
+                ChampionshipGameReplays.fromJson(item as Map<String, dynamic>))
+            .toList(growable: false),
+      );
+}
+
 class ChampionshipTeamsDraw {
   const ChampionshipTeamsDraw({required this.teams, this.message});
 

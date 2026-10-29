@@ -23,6 +23,35 @@ abstract interface class ChampionshipDataSource {
     required bool isGoalkeeper,
     int? starRating,
   });
+
+  /// Fecha a presença e vai para a etapa Sorteio (`POST /{id}/team-draw/open`).
+  Future<void> openTeamDraw(String groupId, String id);
+
+  /// Marca quem joga no gol antes do sorteio.
+  Future<void> setPlayerGoalkeeper(
+    String groupId,
+    String id,
+    String playerId,
+    bool isGoalkeeper,
+  );
+
+  /// Sorteio com os métodos da partida (1 Manual, 2 Aleatório, 3 Algoritmo,
+  /// 4 Por vitórias, 5 Por perfil) e a quantidade de times. Não salva.
+  Future<ChampionshipDrawOptions> drawTeamOptions(
+    String groupId,
+    String id, {
+    required int teamCount,
+    required int strategyType,
+    required bool includeGoalkeepers,
+    List<String?> colorIds = const [],
+  });
+
+  /// Vincula (ou desvincula, com null) uma votação/evento, como na partida.
+  Future<void> setLinkedPoll(String groupId, String id, String? pollId);
+
+  /// Replays do campeonato separados por jogo.
+  Future<ChampionshipReplays> fetchReplays(String groupId, String id);
+
   Future<ChampionshipTeamsDraw> drawTeams(
     String groupId,
     String id,

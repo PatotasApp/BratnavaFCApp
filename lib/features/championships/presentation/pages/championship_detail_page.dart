@@ -4,13 +4,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
+import '../../../group_settings/presentation/providers/group_settings_provider.dart';
+import '../../../matches/presentation/pages/matches_page.dart'
+    show LinkedPollStrip;
 import '../../../team_colors/domain/entities/team_color.dart';
 import '../../../team_colors/presentation/providers/team_colors_provider.dart';
 import '../../domain/entities/championship_enums.dart';
 import '../../domain/entities/championship_models.dart';
 import '../championship_ui_text.dart';
 import '../providers/championship_provider.dart';
+import '../widgets/championship_draw_panel.dart';
+import '../widgets/championship_live_game.dart';
+import '../widgets/championship_replays_section.dart';
+import '../widgets/championship_stage_header.dart';
 
 class ChampionshipDetailPage extends ConsumerStatefulWidget {
   const ChampionshipDetailPage({super.key, required this.championshipId});
@@ -22,9 +30,12 @@ class ChampionshipDetailPage extends ConsumerStatefulWidget {
       _ChampionshipDetailPageState();
 }
 
+/// Campeonato em etapas, como a partida: Criado → Presença → Sorteio → Times →
+/// Jogos → Pós-jogo → Final. Cada etapa mostra só o que importa nela.
 class _ChampionshipDetailPageState
     extends ConsumerState<ChampionshipDetailPage> {
   Timer? _polling;
+  String _gamesTab = 'Jogo';
 
   @override
   void initState() {
@@ -48,7 +59,14 @@ class _ChampionshipDetailPageState
     final provider = championshipDetailsProvider(widget.championshipId);
     final state = ref.watch(provider);
     final isAdmin = ref.watch(championshipIsAdminProvider);
+    final groupId = ref.watch(championshipGroupIdProvider);
+    final icons =
+        GroupIcons.from(ref.watch(groupSettingsProvider(groupId)).valueOrNull);
+    final notifier = ref.read(provider.notifier);
     final details = state.details;
+    final stage = details == null ? null : championshipStageOf(details);
+    final liveGame =
+        stage == ChampionshipStage.games ? details!.currentGame : null;
 
     return Column(
       children: [
@@ -56,7 +74,8 @@ class _ChampionshipDetailPageState
           title: details?.name ?? 'Campeonato',
           subtitle: details == null
               ? 'Carregando detalhes'
-              : championshipStatusLabel(details.status),
+              : '${DateFormat('dd/MM · HH:mm').format(details.playedAt)} · '
+                  '${details.placeName}',
           icon: Icons.emoji_events_outlined,
         ),
         Expanded(
@@ -65,75 +84,469 @@ class _ChampionshipDetailPageState
               : details == null
                   ? _ErrorView(
                       message: state.error ?? 'Campeonato não encontrado.',
-                      retry: ref.read(provider.notifier).load,
+                      retry: notifier.load,
                     )
-                  : RefreshIndicator(
-                      onRefresh: ref.read(provider.notifier).load,
-                      child: ListView(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
-                        children: [
-                          if (state.error != null) ...[
-                            _MessageCard(message: state.error!),
-                            const SizedBox(height: 12),
-                          ],
-                          _Overview(details: details),
-                          const SizedBox(height: 12),
-                          _PresenceSection(
-                            details: details,
-                            isAdmin: isAdmin,
-                            notifier: ref.read(provider.notifier),
+                  : Stack(
+                      children: [
+                        RefreshIndicator(
+                          onRefresh: notifier.load,
+                          child: ListView(
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+                            children: _spaced([
+                              if (state.error != null)
+                                _MessageCard(message: state.error!),
+                              ChampionshipStageHeader(stage: stage!),
+                              ..._stageContent(
+                                context,
+                                details: details,
+                                stage: stage,
+                                state: state,
+                                isAdmin: isAdmin,
+                                notifier: notifier,
+                                icons: icons,
+                                groupId: groupId,
+                              ),
+                            ]),
                           ),
-                          if (details.teams.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            _TeamsSection(
-                              details: details,
-                              isAdmin: isAdmin,
-                              notifier: ref.read(provider.notifier),
+                        ),
+                        // "Registrar gol" é a bolinha no canto, como na partida.
+                        if (isAdmin && liveGame != null)
+                          Positioned(
+                            right: 20,
+                            bottom: 24,
+                            child: FloatingActionButton(
+                              heroTag: 'championship-quick-goal',
+                              tooltip: 'Registrar gol',
+                              backgroundColor: AppColors.onDark,
+                              foregroundColor: AppColors.infoLight,
+                              onPressed: state.mutating
+                                  ? null
+                                  : () => showChampionshipGoalSheet(
+                                        context,
+                                        details: details,
+                                        game: liveGame,
+                                        notifier: notifier,
+                                        icons: icons,
+                                      ),
+                              child: const Icon(Icons.sports_soccer_rounded,
+                                  size: 30),
                             ),
-                          ],
-                          if (details.status == ChampionshipStatus.inProgress ||
-                              details.games.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            _LiveSection(
-                              details: details,
-                              suggestion: state.nextGame,
-                              isAdmin: isAdmin,
-                              notifier: ref.read(provider.notifier),
-                            ),
-                          ],
-                          if (details.standings.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            _StandingsSection(details: details),
-                          ],
-                          if (details.topScorers.isNotEmpty ||
-                              details.topAssists.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            _HighlightsSection(details: details),
-                          ],
-                          if (details.rules.mvpMode !=
-                                  ChampionshipMvpMode.none &&
-                              (details.status == ChampionshipStatus.postGame ||
-                                  details.status ==
-                                      ChampionshipStatus.finalized)) ...[
-                            const SizedBox(height: 12),
-                            _MvpSection(
-                              details: details,
-                              notifier: ref.read(provider.notifier),
-                            ),
-                          ],
-                          if (isAdmin) ...[
-                            const SizedBox(height: 12),
-                            _AdminActions(
-                              details: details,
-                              mutating: state.mutating,
-                              notifier: ref.read(provider.notifier),
-                            ),
-                          ],
-                        ],
-                      ),
+                          ),
+                      ],
                     ),
         ),
       ],
+    );
+  }
+
+  List<Widget> _stageContent(
+    BuildContext context, {
+    required ChampionshipDetails details,
+    required ChampionshipStage stage,
+    required ChampionshipDetailsState state,
+    required bool isAdmin,
+    required ChampionshipDetailsNotifier notifier,
+    required GroupIcons icons,
+    required String groupId,
+  }) {
+    final admin = isAdmin
+        ? _AdminActions(
+            details: details,
+            stage: stage,
+            mutating: state.mutating,
+            notifier: notifier,
+          )
+        : null;
+    final linked = LinkedPollStrip(
+      groupId: groupId,
+      linkedPollId: details.linkedPollId,
+      isAdmin: isAdmin,
+      onLink: (pollId) => notifier.setLinkedPoll(pollId),
+      onUnlink: () => notifier.setLinkedPoll(null),
+    );
+    final presence = _PresenceSection(
+      details: details,
+      isAdmin: isAdmin,
+      notifier: notifier,
+      icons: icons,
+    );
+    final teamsByPosition = _TeamsByPosition(details: details, icons: icons);
+    final replays = ChampionshipReplaysSection(
+      details: details,
+      groupId: groupId,
+    );
+
+    return switch (stage) {
+      ChampionshipStage.created => [
+          _Overview(details: details),
+          linked,
+          if (admin != null) admin
+        ],
+      ChampionshipStage.acceptation => [
+          _Overview(details: details),
+          linked,
+          presence,
+          if (admin != null) admin,
+        ],
+      ChampionshipStage.draw => [
+          if (isAdmin)
+            ChampionshipDrawPanel(
+              details: details,
+              notifier: notifier,
+              icons: icons,
+              onAddGuest: () => _addGuest(context, details, notifier),
+            )
+          else ...[
+            const _MessageCard(
+                message: 'O admin está sorteando os times. Já já eles '
+                    'aparecem aqui.'),
+            presence,
+          ],
+          if (admin != null) admin,
+        ],
+      ChampionshipStage.teams => [
+          _TeamsSection(
+            details: details,
+            isAdmin: isAdmin,
+            notifier: notifier,
+            icons: icons,
+          ),
+          if (admin != null) admin,
+        ],
+      ChampionshipStage.games => [
+          PrototypeSegmented(
+            items: const ['Jogo', 'Classificação'],
+            value: _gamesTab,
+            onChanged: (value) => setState(() => _gamesTab = value),
+            semanticLabel: 'Jogo ou classificação',
+          ),
+          if (_gamesTab == 'Jogo')
+            ..._gameTab(context, details, state, isAdmin, notifier, icons)
+          else ...[
+            if (details.standings.isNotEmpty)
+              _StandingsSection(details: details),
+            if (details.topScorers.isNotEmpty || details.topAssists.isNotEmpty)
+              _HighlightsSection(details: details, icons: icons),
+            _GamesList(details: details),
+            _TeamsSection(
+              details: details,
+              isAdmin: isAdmin,
+              notifier: notifier,
+              icons: icons,
+            ),
+          ],
+          if (details.currentGame == null)
+            if (admin != null) admin,
+        ],
+      ChampionshipStage.postGame => [
+          if (details.standings.isNotEmpty) _StandingsSection(details: details),
+          if (details.rules.mvpMode != ChampionshipMvpMode.none)
+            _MvpSection(details: details, notifier: notifier),
+          if (details.topScorers.isNotEmpty || details.topAssists.isNotEmpty)
+            _HighlightsSection(details: details, icons: icons),
+          teamsByPosition,
+          replays,
+          if (admin != null) admin,
+        ],
+      ChampionshipStage.finalized => [
+          teamsByPosition,
+          if (details.standings.isNotEmpty) _StandingsSection(details: details),
+          if (details.rules.mvpMode != ChampionshipMvpMode.none)
+            _MvpSection(details: details, notifier: notifier),
+          if (details.topScorers.isNotEmpty || details.topAssists.isNotEmpty)
+            _HighlightsSection(details: details, icons: icons),
+          replays,
+          if (admin != null) admin,
+        ],
+      ChampionshipStage.cancelled => [_Overview(details: details)],
+    };
+  }
+
+  List<Widget> _gameTab(
+    BuildContext context,
+    ChampionshipDetails details,
+    ChampionshipDetailsState state,
+    bool isAdmin,
+    ChampionshipDetailsNotifier notifier,
+    GroupIcons icons,
+  ) {
+    final current = details.currentGame;
+    if (current != null) {
+      return [
+        ChampionshipLiveGame(
+          details: details,
+          game: current,
+          isAdmin: isAdmin,
+          notifier: notifier,
+          icons: icons,
+          nextMatchup: nextMatchupDuringGame(details),
+          onEndGame: () => _endGame(context, details, current, notifier),
+        ),
+      ];
+    }
+    return [
+      _NextMatchupCard(
+        details: details,
+        suggestion: state.nextGame,
+        isAdmin: isAdmin,
+        mutating: state.mutating,
+        onStart: notifier.createSuggestedGame,
+      ),
+      if (details.games.isNotEmpty) _GamesList(details: details),
+    ];
+  }
+}
+
+/// Coloca o espaço padrão entre os cards de uma etapa.
+List<Widget> _spaced(List<Widget> children) => [
+      for (var i = 0; i < children.length; i++) ...[
+        if (i > 0) const SizedBox(height: 12),
+        children[i],
+      ],
+    ];
+
+/// "Próximo confronto" com um jogo em andamento: no fica quem ganha é o
+/// vencedor contra o primeiro da fila; nos outros formatos, os dois da fila.
+String? nextMatchupDuringGame(ChampionshipDetails details) {
+  final waiting = details.waitingTeamIds;
+  final current = details.currentGame;
+  if (waiting.isEmpty || current == null) return null;
+  String name(String id) => details.teamById(id)?.name ?? 'Time';
+  if (details.rules.format == ChampionshipFormat.winnerStays ||
+      waiting.length == 1) {
+    return 'vencedor de ${name(current.teamAId)} × ${name(current.teamBId)} '
+        'contra ${name(waiting.first)}';
+  }
+  return '${name(waiting[0])} × ${name(waiting[1])}';
+}
+
+class _NextMatchupCard extends StatelessWidget {
+  const _NextMatchupCard({
+    required this.details,
+    required this.suggestion,
+    required this.isAdmin,
+    required this.mutating,
+    required this.onStart,
+  });
+
+  final ChampionshipDetails details;
+  final NextGameSuggestion? suggestion;
+  final bool isAdmin;
+  final bool mutating;
+  final Future<bool> Function() onStart;
+
+  @override
+  Widget build(BuildContext context) {
+    final next = suggestion;
+    final theme = Theme.of(context);
+    if (next == null) {
+      return const _MessageCard(
+        message: 'Não há próximo confronto sugerido. Quando quiser, encerre '
+            'o campeonato.',
+      );
+    }
+    final teamA = details.teamById(next.teamAId);
+    final teamB = details.teamById(next.teamBId);
+    return PrototypeCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            details.games.isEmpty
+                ? '1º CONFRONTO'
+                : 'PRÓXIMO CONFRONTO · JOGO ${details.games.length + 1}',
+            style: theme.textTheme.labelSmall,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: _MatchupTeam(team: teamA)),
+              Text('×',
+                  style: theme.textTheme.headlineMedium
+                      ?.copyWith(fontWeight: FontWeight.w900)),
+              Expanded(child: _MatchupTeam(team: teamB)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(next.reason,
+              textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
+          if (next.waitingTeamIds.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Depois: vencedor contra '
+              '${details.teamById(next.waitingTeamIds.first)?.name ?? 'Time'}',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
+          if (isAdmin) ...[
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 52,
+              child: FilledButton.icon(
+                key: const ValueKey('start-game'),
+                onPressed: mutating ? null : onStart,
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: const Text('Iniciar partida'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MatchupTeam extends StatelessWidget {
+  const _MatchupTeam({required this.team});
+  final ChampionshipTeam? team;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        children: [
+          _TeamColor(hex: team?.colorHex, size: 34),
+          const SizedBox(height: 6),
+          Text(team?.name ?? 'Time',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium),
+          Text('${team?.playerIds.length ?? 0} jogadores',
+              style: Theme.of(context).textTheme.bodySmall),
+        ],
+      );
+}
+
+class _GamesList extends StatelessWidget {
+  const _GamesList({required this.details});
+  final ChampionshipDetails details;
+
+  @override
+  Widget build(BuildContext context) => PrototypeCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SectionTitle(
+              icon: Icons.sports_soccer_rounded,
+              title: 'Jogos',
+              trailing: Text('${details.games.length}'),
+            ),
+            if (details.games.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text('Nenhum jogo ainda.'),
+              ),
+            for (final game in details.games.reversed)
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Text('${game.order}'),
+                title: Text('${_teamName(details, game.teamAId)} '
+                    '${game.teamAGoals} × ${game.teamBGoals} '
+                    '${_teamName(details, game.teamBId)}'),
+                trailing: game.status == ChampionshipGameStatus.inProgress
+                    ? const PrototypeBadge(
+                        label: 'AO VIVO', tone: PrototypeBadgeTone.danger)
+                    : null,
+              ),
+          ],
+        ),
+      );
+}
+
+/// Jogadores agrupados por time, um time por aba, na ordem da colocação
+/// (1º, 2º, 3º…). Substitui a lista de presenças depois dos jogos.
+class _TeamsByPosition extends StatefulWidget {
+  const _TeamsByPosition({required this.details, required this.icons});
+  final ChampionshipDetails details;
+  final GroupIcons icons;
+
+  @override
+  State<_TeamsByPosition> createState() => _TeamsByPositionState();
+}
+
+class _TeamsByPositionState extends State<_TeamsByPosition> {
+  int _index = 0;
+
+  List<(int, ChampionshipTeam)> get _ordered {
+    final details = widget.details;
+    int positionOf(ChampionshipTeam team) =>
+        team.finalPosition ??
+        details.standings
+            .where((s) => s.teamId == team.id)
+            .map((s) => s.position)
+            .firstOrNull ??
+        99;
+    final teams = [...details.teams]
+      ..sort((a, b) => positionOf(a).compareTo(positionOf(b)));
+    return [for (final team in teams) (positionOf(team), team)];
+  }
+
+  String _rankIcon(int position) => switch (position) {
+        1 => widget.icons.rank1,
+        2 => widget.icons.rank2,
+        3 => widget.icons.rank3,
+        _ => '',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final ordered = _ordered;
+    if (ordered.isEmpty) return const SizedBox.shrink();
+    final index = _index.clamp(0, ordered.length - 1);
+    final (position, team) = ordered[index];
+    final players = team.playerIds
+        .map((id) => widget.details.playerById(id))
+        .whereType<ChampionshipPlayer>()
+        .toList();
+    return PrototypeCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _SectionTitle(icon: Icons.groups_outlined, title: 'Times'),
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (var i = 0; i < ordered.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      key: ValueKey('team-tab-$i'),
+                      avatar: _TeamColor(hex: ordered[i].$2.colorHex, size: 16),
+                      label: Text(ordered[i].$1 == 99
+                          ? ordered[i].$2.name
+                          : '${ordered[i].$1}º ${ordered[i].$2.name}'),
+                      selected: i == index,
+                      onSelected: (_) => setState(() => _index = i),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (_rankIcon(position).isNotEmpty) ...[
+                renderGroupIcon(_rankIcon(position), size: 20),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                position == 99 ? team.name : '$positionº lugar · ${team.name}',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ],
+          ),
+          for (final player in players)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: PlayerNameWithIcon(
+                name: player.name,
+                icons: widget.icons,
+                isGoalkeeper: player.isGoalkeeper,
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -170,11 +583,13 @@ class _PresenceSection extends StatelessWidget {
     required this.details,
     required this.isAdmin,
     required this.notifier,
+    required this.icons,
   });
 
   final ChampionshipDetails details;
   final bool isAdmin;
   final ChampionshipDetailsNotifier notifier;
+  final GroupIcons icons;
 
   @override
   Widget build(BuildContext context) {
@@ -224,7 +639,11 @@ class _PresenceSection extends StatelessWidget {
               dense: true,
               contentPadding: EdgeInsets.zero,
               leading: Icon(_inviteIcon(player.inviteResponse)),
-              title: Text(player.name),
+              title: PlayerNameWithIcon(
+                name: player.name,
+                icons: icons,
+                isGoalkeeper: player.isGoalkeeper,
+              ),
               subtitle: player.isGuest ? const Text('Convidado') : null,
               trailing: isAdmin &&
                       (details.status == ChampionshipStatus.acceptation ||
@@ -271,18 +690,21 @@ class _TeamsSection extends ConsumerStatefulWidget {
     required this.details,
     required this.isAdmin,
     required this.notifier,
+    required this.icons,
   });
 
   final ChampionshipDetails details;
   final bool isAdmin;
   final ChampionshipDetailsNotifier notifier;
+  final GroupIcons icons;
 
   @override
   ConsumerState<_TeamsSection> createState() => _TeamsSectionState();
 }
 
-/// Troca como na partida: toca em 2 jogadores e eles trocam de lugar,
-/// levando junto o papel de goleiro.
+/// Etapa Times, como a aba Times da formação da partida: toca em 2 jogadores
+/// para trocar (levando o papel de goleiro), encaixa quem ficou sem time e
+/// edita nome e cor.
 class _TeamsSectionState extends ConsumerState<_TeamsSection> {
   String? _selected;
 
@@ -318,274 +740,134 @@ class _TeamsSectionState extends ConsumerState<_TeamsSection> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return PrototypeCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _SectionTitle(
-            icon: Icons.groups_outlined,
-            title: 'Times',
-            trailing: _canEditTeams
-                ? TextButton.icon(
-                    onPressed: () async {
-                      final message = await widget.notifier.drawTeamColors();
-                      if (message != null && context.mounted) {
-                        _showMessage(context, message);
-                      }
-                    },
-                    icon: const Icon(Icons.palette_outlined, size: 18),
-                    label: const Text('Sortear cores'),
-                  )
-                : null,
-          ),
-          if (_canSwap) ...[
-            const SizedBox(height: 4),
-            Text(
-              _selected == null
-                  ? 'Toque em 2 jogadores para trocar de lugar (vale também '
-                      'para o goleiro). No jogo em andamento, vale para os '
-                      'próximos jogos.'
-                  : 'Agora toque no jogador para trocar com '
-                      '${_playerName(details, _selected!)}.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-          const SizedBox(height: 8),
-          for (final team in details.teams)
-            ExpansionTile(
-              initiallyExpanded: _canSwap,
-              tilePadding: EdgeInsets.zero,
-              childrenPadding: const EdgeInsets.only(bottom: 8),
-              leading: _TeamColor(hex: team.colorHex),
-              title: Text(team.name),
-              subtitle: Text('${team.playerIds.length} jogadores'
-                  '${team.colorHex == null ? ' · sem cor' : ''}'
-                  '${team.playerIds.any((id) => details.playerById(id)?.isGoalkeeper == true) ? '' : ' · sem goleiro'}'),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (team.finalPosition != null)
-                    Text('${team.finalPosition}º'),
-                  if (_canEditTeams)
-                    IconButton(
-                      tooltip: 'Editar nome e cor',
-                      onPressed: () =>
-                          _editTeam(context, team, widget.notifier),
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                ],
+    final unassigned = details.unassignedPlayers;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        PrototypeCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _SectionTitle(
+                icon: Icons.groups_outlined,
+                title: 'Times',
+                trailing: _canEditTeams
+                    ? TextButton.icon(
+                        onPressed: () async {
+                          final message =
+                              await widget.notifier.drawTeamColors();
+                          if (message != null && context.mounted) {
+                            _showMessage(context, message);
+                          }
+                        },
+                        icon: const Icon(Icons.palette_outlined, size: 18),
+                        label: const Text('Sortear cores'),
+                      )
+                    : null,
               ),
-              children: [
-                for (final playerId in team.playerIds)
-                  ListTile(
-                    dense: true,
-                    selected: _selected == playerId,
-                    selectedTileColor: scheme.primaryContainer,
-                    onTap: _canSwap ? () => _tap(playerId) : null,
-                    title: Text(_playerName(details, playerId)),
-                    subtitle: details.playerById(playerId)?.isGoalkeeper == true
-                        ? const Text('Goleiro')
-                        : null,
-                    leading: Icon(
-                      details.playerById(playerId)?.isGoalkeeper == true
-                          ? Icons.sports_handball
-                          : Icons.person_outline,
-                    ),
-                    trailing: _selected == playerId
-                        ? const Icon(Icons.swap_horiz_rounded)
-                        : null,
-                  ),
+              if (_canSwap) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _selected == null
+                      ? 'Toque em 2 jogadores para trocar de lugar (vale também '
+                          'para o goleiro).'
+                      : 'Agora toque no jogador para trocar com '
+                          '${_playerName(details, _selected!)}.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ],
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LiveSection extends StatelessWidget {
-  const _LiveSection({
-    required this.details,
-    required this.suggestion,
-    required this.isAdmin,
-    required this.notifier,
-  });
-
-  final ChampionshipDetails details;
-  final NextGameSuggestion? suggestion;
-  final bool isAdmin;
-  final ChampionshipDetailsNotifier notifier;
-
-  @override
-  Widget build(BuildContext context) {
-    final current = details.currentGame;
-    return PrototypeCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _SectionTitle(
-            icon: Icons.sports_soccer_rounded,
-            title: current == null ? 'Jogos' : 'Ao vivo',
-            trailing: current == null
-                ? Text('${details.games.length} jogos')
-                : const PrototypeBadge(
-                    label: 'AO VIVO',
-                    tone: PrototypeBadgeTone.danger,
-                  ),
-          ),
-          if (current != null) ...[
-            const SizedBox(height: 14),
-            _Score(details: details, game: current),
-            if (current.goals.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              for (final goal in current.goals)
-                ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.sports_soccer, size: 20),
-                  title: Text(_playerName(details, goal.scorerPlayerId)),
-                  subtitle: Text([
-                    if (goal.assistPlayerId != null)
-                      'Assistência: ${_playerName(details, goal.assistPlayerId!)}',
-                    if (goal.isOwnGoal) 'Gol contra',
-                  ].join(' · ')),
-                  trailing: isAdmin
+              const SizedBox(height: 8),
+              for (final team in details.teams)
+                ExpansionTile(
+                  initiallyExpanded: _canSwap,
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: const EdgeInsets.only(bottom: 8),
+                  leading: _TeamColor(hex: team.colorHex),
+                  title: Text(team.name),
+                  subtitle: Text('${team.playerIds.length} jogadores'
+                      '${team.colorHex == null ? ' · sem cor' : ''}'
+                      '${team.playerIds.any((id) => details.playerById(id)?.isGoalkeeper == true) ? '' : ' · sem goleiro'}'),
+                  trailing: _canEditTeams
                       ? IconButton(
-                          tooltip: 'Remover gol',
-                          onPressed: () => notifier.deleteGoal(
-                            current.id,
-                            goal.id,
-                          ),
-                          icon: const Icon(Icons.delete_outline),
+                          tooltip: 'Editar nome e cor',
+                          onPressed: () =>
+                              _editTeam(context, team, widget.notifier),
+                          icon: const Icon(Icons.edit_outlined),
                         )
                       : null,
+                  children: [
+                    if (team.playerIds.isEmpty)
+                      const ListTile(
+                        dense: true,
+                        title: Text('Sem jogadores ainda.'),
+                      ),
+                    for (final playerId in team.playerIds)
+                      ListTile(
+                        dense: true,
+                        selected: _selected == playerId,
+                        selectedTileColor: scheme.primaryContainer,
+                        onTap: _canSwap ? () => _tap(playerId) : null,
+                        title: PlayerNameWithIcon(
+                          name: _playerName(details, playerId),
+                          icons: widget.icons,
+                          isGoalkeeper:
+                              details.playerById(playerId)?.isGoalkeeper ==
+                                  true,
+                        ),
+                        trailing: _selected == playerId
+                            ? const Icon(Icons.swap_horiz_rounded)
+                            : null,
+                      ),
+                  ],
                 ),
             ],
-            if (isAdmin) ...[
-              const SizedBox(height: 10),
-              Text('Marcar lance para as câmeras',
-                  style: Theme.of(context).textTheme.labelMedium),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final (type, label) in [
-                    ('GolTimeA', 'Gol ${_teamName(details, current.teamAId)}'),
-                    ('GolTimeB', 'Gol ${_teamName(details, current.teamBId)}'),
-                    ('Jogada', 'Jogada'),
-                  ])
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        final ok =
-                            await notifier.publishGameEvent(current.id, type);
-                        if (ok && context.mounted) {
-                          _showMessage(context, 'Lance marcado: $label.');
-                        }
-                      },
-                      icon: Icon(type == 'Jogada'
-                          ? Icons.videocam_outlined
-                          : Icons.sports_soccer),
-                      label: Text(label),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  FilledButton.icon(
-                    onPressed: () => _showGoalDialog(
-                      context,
-                      details,
-                      current,
-                      notifier,
-                    ),
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Registrar gol'),
+          ),
+        ),
+        if (unassigned.isNotEmpty && details.teams.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          PrototypeCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _SectionTitle(
+                  icon: Icons.person_search_outlined,
+                  title: 'Sem time',
+                  trailing: Text('${unassigned.length}'),
+                ),
+                const SizedBox(height: 4),
+                Text('Escolha o time de cada um.',
+                    style: Theme.of(context).textTheme.bodySmall),
+                for (final player in unassigned) ...[
+                  const SizedBox(height: 10),
+                  PlayerNameWithIcon(
+                    name: player.name,
+                    icons: widget.icons,
+                    isGoalkeeper: player.isGoalkeeper,
                   ),
-                  OutlinedButton(
-                    onPressed: () => _endGame(
-                      context,
-                      details,
-                      current,
-                      notifier,
-                    ),
-                    child: const Text('Encerrar jogo'),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      for (final team in details.teams)
+                        ActionChip(
+                          avatar: _TeamColor(hex: team.colorHex, size: 16),
+                          label: Text(team.name),
+                          onPressed: widget.isAdmin
+                              ? () => widget.notifier
+                                  .assignPlayerTeam(player.playerId, team.id)
+                              : null,
+                        ),
+                    ],
                   ),
                 ],
-              ),
-            ],
-          ] else if (suggestion != null) ...[
-            const SizedBox(height: 12),
-            Text(suggestion!.reason),
-            const SizedBox(height: 8),
-            Text('${_teamName(details, suggestion!.teamAId)} × '
-                '${_teamName(details, suggestion!.teamBId)}'),
-            if (isAdmin) ...[
-              const SizedBox(height: 10),
-              FilledButton.icon(
-                onPressed: notifier.createSuggestedGame,
-                icon: const Icon(Icons.play_arrow_rounded),
-                label: const Text('Começar próximo jogo'),
-              ),
-            ],
-          ],
-          if (details.waitingTeamIds.isNotEmpty) ...[
-            const Divider(height: 26),
-            Text(
-                'Fila: ${details.waitingTeamIds.map((id) => _teamName(details, id)).join(' → ')}'),
-          ],
-          if (details.games.isNotEmpty) ...[
-            const Divider(height: 26),
-            for (final game in details.games.reversed.take(5))
-              ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                title: Text('${_teamName(details, game.teamAId)} '
-                    '${game.teamAGoals} × ${game.teamBGoals} '
-                    '${_teamName(details, game.teamBId)}'),
-                trailing: Text('Jogo ${game.order}'),
-              ),
-          ],
+              ],
+            ),
+          ),
         ],
-      ),
+      ],
     );
   }
-}
-
-class _Score extends StatelessWidget {
-  const _Score({required this.details, required this.game});
-  final ChampionshipDetails details;
-  final ChampionshipGame game;
-
-  @override
-  Widget build(BuildContext context) => Row(
-        children: [
-          Expanded(
-            child: Text(
-              _teamName(details, game.teamAId),
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-          Text(
-            '${game.teamAGoals}  ×  ${game.teamBGoals}',
-            style: Theme.of(context)
-                .textTheme
-                .headlineMedium
-                ?.copyWith(fontWeight: FontWeight.w900),
-          ),
-          Expanded(
-            child: Text(
-              _teamName(details, game.teamBId),
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-        ],
-      );
 }
 
 class _StandingsSection extends StatelessWidget {
@@ -639,8 +921,9 @@ class _StandingsSection extends StatelessWidget {
 }
 
 class _HighlightsSection extends StatelessWidget {
-  const _HighlightsSection({required this.details});
+  const _HighlightsSection({required this.details, required this.icons});
   final ChampionshipDetails details;
+  final GroupIcons icons;
 
   @override
   Widget build(BuildContext context) => PrototypeCard(
@@ -658,6 +941,7 @@ class _HighlightsSection extends StatelessWidget {
                 ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
+                  leading: renderGroupIcon(icons.goal, size: 16),
                   title: Text(_playerName(details, item.playerId)),
                   trailing: Text('${item.total} gols'),
                 ),
@@ -669,6 +953,7 @@ class _HighlightsSection extends StatelessWidget {
                 ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
+                  leading: renderGroupIcon(icons.assist, size: 16),
                   title: Text(_playerName(details, item.playerId)),
                   trailing: Text('${item.total} assistências'),
                 ),
@@ -716,18 +1001,20 @@ class _MvpSection extends StatelessWidget {
 class _AdminActions extends StatelessWidget {
   const _AdminActions({
     required this.details,
+    required this.stage,
     required this.mutating,
     required this.notifier,
   });
   final ChampionshipDetails details;
+  final ChampionshipStage stage;
   final bool mutating;
   final ChampionshipDetailsNotifier notifier;
 
   @override
   Widget build(BuildContext context) {
     final actions = <Widget>[];
-    switch (details.status) {
-      case ChampionshipStatus.created:
+    switch (stage) {
+      case ChampionshipStage.created:
         actions.add(FilledButton(
           onPressed: notifier.openAcceptation,
           child: const Text('Abrir confirmação de presença'),
@@ -736,38 +1023,31 @@ class _AdminActions extends StatelessWidget {
           onPressed: notifier.cancel,
           child: const Text('Cancelar campeonato'),
         ));
-      case ChampionshipStatus.acceptation:
-        actions.add(FilledButton(
-          onPressed: () => _drawTeams(context, details, notifier),
-          child: const Text('Sortear e definir times'),
+      case ChampionshipStage.acceptation:
+        actions.add(FilledButton.icon(
+          onPressed: notifier.openTeamDraw,
+          icon: const Icon(Icons.shuffle_rounded),
+          label: const Text('Ir para o sorteio'),
         ));
         actions.add(OutlinedButton(
           onPressed: () => _addGuest(context, details, notifier),
           child: const Text('Adicionar convidado'),
         ));
-      case ChampionshipStatus.teamDraw:
+      case ChampionshipStage.draw:
+        break;
+      case ChampionshipStage.teams:
         actions.add(FilledButton.icon(
           onPressed: notifier.start,
           icon: const Icon(Icons.play_arrow_rounded),
           label: const Text('Iniciar campeonato'),
         ));
-        actions.add(OutlinedButton(
-          onPressed: () => _drawTeams(context, details, notifier),
-          child: const Text('Refazer o sorteio dos times'),
+      case ChampionshipStage.games:
+        actions.add(FilledButton.icon(
+          onPressed: () => _finish(context, details, notifier),
+          icon: const Icon(Icons.flag_outlined),
+          label: const Text('Encerrar campeonato'),
         ));
-        actions.add(OutlinedButton(
-          onPressed: () => _addGuest(context, details, notifier),
-          child: const Text('Adicionar convidado'),
-        ));
-      case ChampionshipStatus.inProgress:
-        if (details.currentGame == null) {
-          actions.add(FilledButton.icon(
-            onPressed: () => _finish(context, details, notifier),
-            icon: const Icon(Icons.flag_outlined),
-            label: const Text('Encerrar campeonato'),
-          ));
-        }
-      case ChampionshipStatus.postGame:
+      case ChampionshipStage.postGame:
         actions.add(FilledButton(
           onPressed: () => notifier.finalize(
             externalDecisionTeamOrder:
@@ -775,16 +1055,15 @@ class _AdminActions extends StatelessWidget {
           ),
           child: const Text('Finalizar com a classificação atual'),
         ));
-      case ChampionshipStatus.finalized:
-      case ChampionshipStatus.cancelled:
+      case ChampionshipStage.finalized:
+      case ChampionshipStage.cancelled:
         break;
     }
-    final previous = _previousStepLabel(details.status);
+    final previous = _previousStepLabel(stage);
     if (previous != null &&
-        !(details.status == ChampionshipStatus.inProgress &&
-            details.games.isNotEmpty)) {
+        !(stage == ChampionshipStage.games && details.games.isNotEmpty)) {
       actions.add(TextButton.icon(
-        onPressed: () => _stepBack(context, details, notifier),
+        onPressed: () => _stepBack(context, stage, notifier),
         icon: const Icon(Icons.undo_rounded),
         label: Text(previous),
       ));
@@ -984,210 +1263,45 @@ class _MessageCard extends StatelessWidget {
   Widget build(BuildContext context) => PrototypeCard(child: Text(message));
 }
 
-Future<void> _drawTeams(
-  BuildContext context,
-  ChampionshipDetails details,
-  ChampionshipDetailsNotifier notifier,
-) async {
-  var teamCount = 3;
-  final count = await showDialog<int>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Sortear times'),
-      content: StatefulBuilder(
-        builder: (context, setDialogState) => DropdownButtonFormField<int>(
-          initialValue: teamCount,
-          decoration: const InputDecoration(labelText: 'Quantidade de times'),
-          items: [
-            for (var value = 2; value <= 6; value++)
-              DropdownMenuItem(value: value, child: Text('$value times')),
-          ],
-          onChanged: (value) {
-            if (value != null) setDialogState(() => teamCount = value);
-          },
-        ),
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar')),
-        FilledButton(
-            onPressed: () => Navigator.pop(context, teamCount),
-            child: const Text('Sortear')),
-      ],
-    ),
-  );
-  if (count == null || !context.mounted) return;
-  final draw = await notifier.drawTeams(count);
-  if (draw == null || !context.mounted) return;
-  final teams = [
-    for (final team in draw.teams.teams)
-      (
-        name: team.name,
-        colorId: team.colorId,
-        playerIds: [...team.playerIds],
-        goalkeeper: team.goalkeeperPlayerId,
-      ),
-  ];
-  final everyone = [for (final team in teams) ...team.playerIds];
-
-  // Escolher como goleiro alguém de outro time traz o jogador para este time.
-  void setGoalkeeper(int index, String? playerId) {
-    if (playerId != null && !teams[index].playerIds.contains(playerId)) {
-      for (var other = 0; other < teams.length; other++) {
-        if (!teams[other].playerIds.remove(playerId)) continue;
-        if (teams[other].goalkeeper == playerId) {
-          teams[other] = (
-            name: teams[other].name,
-            colorId: teams[other].colorId,
-            playerIds: teams[other].playerIds,
-            goalkeeper: null,
-          );
-        }
-      }
-      teams[index].playerIds.add(playerId);
-    }
-    teams[index] = (
-      name: teams[index].name,
-      colorId: teams[index].colorId,
-      playerIds: teams[index].playerIds,
-      goalkeeper: playerId,
-    );
-  }
-
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setDialogState) {
-        final withoutGoalkeeper =
-            teams.where((team) => team.goalkeeper == null).toList();
-        final error = Theme.of(context).colorScheme.error;
-        return AlertDialog(
-          title: const Text('Confirmar times'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (draw.message != null) ...[
-                  Text(draw.message!, style: TextStyle(color: error)),
-                  const SizedBox(height: 10),
-                ],
-                for (var index = 0; index < teams.length; index++) ...[
-                  Text(
-                    '${teams[index].name} · '
-                    '${teams[index].playerIds.length} jogadores',
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  Text(
-                    teams[index]
-                        .playerIds
-                        .map((id) => _playerName(details, id))
-                        .join(', '),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 6),
-                  DropdownButtonFormField<String?>(
-                    key: ValueKey('gk-$index-${teams[index].goalkeeper}'),
-                    initialValue: teams[index].goalkeeper,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Goleiro'),
-                    items: [
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('Sem goleiro'),
-                      ),
-                      for (final playerId in everyone)
-                        DropdownMenuItem<String?>(
-                          value: playerId,
-                          child: Text(
-                            teams[index].playerIds.contains(playerId)
-                                ? _playerName(details, playerId)
-                                : '${_playerName(details, playerId)} '
-                                    '(vem de outro time)',
-                          ),
-                        ),
-                    ],
-                    onChanged: (value) =>
-                        setDialogState(() => setGoalkeeper(index, value)),
-                  ),
-                  const SizedBox(height: 14),
-                ],
-                if (withoutGoalkeeper.isNotEmpty)
-                  Text(
-                    'Sem goleiro: '
-                    '${withoutGoalkeeper.map((team) => team.name).join(', ')}.',
-                    style: TextStyle(color: error),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Voltar'),
-            ),
-            FilledButton(
-              onPressed: teams.any((team) => team.playerIds.isEmpty)
-                  ? null
-                  : () => Navigator.pop(context, true),
-              child: const Text('Salvar times'),
-            ),
-          ],
-        );
-      },
-    ),
-  );
-  if (confirmed != true) return;
-  await notifier.defineTeams(DefineChampionshipTeams(
-    teams: [
-      for (final team in teams)
-        DefineChampionshipTeam(
-          name: team.name,
-          colorId: team.colorId,
-          playerIds: team.playerIds,
-          goalkeeperPlayerId: team.goalkeeper,
-        ),
-    ],
-  ));
-}
-
-/// Etapa anterior de cada status para o `POST /{id}/step-back`.
-String? _previousStepLabel(ChampionshipStatus status) => switch (status) {
-      ChampionshipStatus.acceptation => 'Voltar para Criado',
-      ChampionshipStatus.teamDraw => 'Voltar para a presença',
-      ChampionshipStatus.inProgress => 'Voltar para os times',
-      ChampionshipStatus.postGame => 'Voltar para os jogos',
-      ChampionshipStatus.finalized => 'Reabrir (voltar para o MVP)',
-      ChampionshipStatus.created || ChampionshipStatus.cancelled => null,
+/// Etapa anterior de cada etapa para o `POST /{id}/step-back`.
+String? _previousStepLabel(ChampionshipStage stage) => switch (stage) {
+      ChampionshipStage.acceptation => 'Voltar para Criado',
+      ChampionshipStage.draw => 'Voltar para a presença',
+      ChampionshipStage.teams => 'Voltar para o sorteio',
+      ChampionshipStage.games => 'Voltar para os times',
+      ChampionshipStage.postGame => 'Voltar para os jogos',
+      ChampionshipStage.finalized => 'Reabrir (voltar para o MVP)',
+      ChampionshipStage.created || ChampionshipStage.cancelled => null,
     };
 
-String _previousStepWarning(ChampionshipStatus status) => switch (status) {
-      ChampionshipStatus.acceptation =>
+String _previousStepWarning(ChampionshipStage stage) => switch (stage) {
+      ChampionshipStage.acceptation =>
         'A lista de presença é apagada. Você pode abri-la de novo depois.',
-      ChampionshipStatus.teamDraw =>
-        'Os times são desfeitos. As presenças continuam.',
-      ChampionshipStatus.inProgress =>
+      ChampionshipStage.draw =>
+        'Volta para a confirmação de presença. Os goleiros marcados continuam.',
+      ChampionshipStage.teams =>
+        'Os times são desfeitos para sortear de novo. Os goleiros continuam.',
+      ChampionshipStage.games =>
         'Só é possível antes do 1º jogo. As regras voltam a poder ser editadas.',
-      ChampionshipStatus.postGame =>
+      ChampionshipStage.postGame =>
         'Os votos de MVP são descartados e dá para criar mais jogos.',
-      ChampionshipStatus.finalized =>
+      ChampionshipStage.finalized =>
         'O campeão e as estatísticas deixam de contar até finalizar de novo.',
       _ => '',
     };
 
 Future<void> _stepBack(
   BuildContext context,
-  ChampionshipDetails details,
+  ChampionshipStage stage,
   ChampionshipDetailsNotifier notifier,
 ) async {
-  final label = _previousStepLabel(details.status);
+  final label = _previousStepLabel(stage);
   if (label == null) return;
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
       title: Text('$label?'),
-      content: Text(_previousStepWarning(details.status)),
+      content: Text(_previousStepWarning(stage)),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
@@ -1357,81 +1471,6 @@ Future<void> _finish(
   final ok = await notifier.finish();
   if (ok && hasMvp && context.mounted) {
     _showMessage(context, 'Votação do MVP aberta.');
-  }
-}
-
-Future<void> _showGoalDialog(
-  BuildContext context,
-  ChampionshipDetails details,
-  ChampionshipGame game,
-  ChampionshipDetailsNotifier notifier,
-) async {
-  final eligible = details.players
-      .where((player) =>
-          player.teamId == game.teamAId || player.teamId == game.teamBId)
-      .toList();
-  if (eligible.isEmpty) return;
-  var scorer = eligible.first.playerId;
-  String? assist;
-  var ownGoal = false;
-  final result = await showDialog<bool>(
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setDialogState) => AlertDialog(
-        title: const Text('Registrar gol'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              initialValue: scorer,
-              decoration: const InputDecoration(labelText: 'Autor'),
-              items: [
-                for (final player in eligible)
-                  DropdownMenuItem(
-                      value: player.playerId, child: Text(player.name)),
-              ],
-              onChanged: (value) => setDialogState(() => scorer = value!),
-            ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<String?>(
-              initialValue: assist,
-              decoration: const InputDecoration(labelText: 'Assistência'),
-              items: [
-                const DropdownMenuItem(
-                    value: null, child: Text('Sem assistência')),
-                for (final player in eligible)
-                  DropdownMenuItem(
-                      value: player.playerId, child: Text(player.name)),
-              ],
-              onChanged: (value) => setDialogState(() => assist = value),
-            ),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Gol contra'),
-              value: ownGoal,
-              onChanged: (value) =>
-                  setDialogState(() => ownGoal = value ?? false),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Salvar')),
-        ],
-      ),
-    ),
-  );
-  if (result == true) {
-    await notifier.addGoal(
-      gameId: game.id,
-      scorerPlayerId: scorer,
-      assistPlayerId: assist,
-      isOwnGoal: ownGoal,
-    );
   }
 }
 

@@ -32,7 +32,8 @@ void main() {
     await tester.tap(find.text('Continuar').first);
     await tester.pumpAndSettle();
     expect(find.text('Comece por um preset'), findsNothing);
-    expect(find.text('Em branco se o jogo não acaba por gols.'), findsOneWidget);
+    expect(
+        find.text('Em branco se o jogo não acaba por gols.'), findsOneWidget);
 
     final gols = find.widgetWithText(TextFormField, 'Gols');
     await tester.tap(gols);

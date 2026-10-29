@@ -276,7 +276,7 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
       case MatchStep.accept:
         return Step2AceitacaoPage(
           linkedPollStrip: s.hasMatch
-              ? _LinkedPollStrip(
+              ? LinkedPollStrip(
                   groupId: groupId,
                   linkedPollId: s.linkedPollId,
                   isAdmin: isAdmin,
@@ -444,7 +444,7 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
       if (s.hasMatch && currentStep != MatchStep.accept)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: _LinkedPollStrip(
+          child: LinkedPollStrip(
             groupId: groupId,
             linkedPollId: s.linkedPollId,
             isAdmin: isAdmin,
@@ -561,7 +561,7 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
                       // passo 2 ele vem do padding da própria área rolável.
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: _LinkedPollStrip(
+                        child: LinkedPollStrip(
                           groupId: groupId,
                           linkedPollId: s.linkedPollId,
                           isAdmin: isAdmin,
@@ -732,16 +732,17 @@ class _MatchBanner extends StatelessWidget {
 
 enum _MatchHeaderAction { edit, rewind, delete, create, refresh }
 
-// ── Strip de votação/evento vinculado ────────────────────────────────────────
+// ── Strip de votação/evento vinculado (também usada no campeonato) ─────────
 
-class _LinkedPollStrip extends ConsumerWidget {
+class LinkedPollStrip extends ConsumerWidget {
   final String groupId;
   final String? linkedPollId;
   final bool isAdmin;
   final void Function(String) onLink;
   final VoidCallback onUnlink;
 
-  const _LinkedPollStrip({
+  const LinkedPollStrip({
+    super.key,
     required this.groupId,
     required this.linkedPollId,
     required this.isAdmin,

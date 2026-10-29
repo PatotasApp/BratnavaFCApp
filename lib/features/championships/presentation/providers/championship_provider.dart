@@ -319,6 +319,53 @@ class ChampionshipDetailsNotifier
     }
   }
 
+  Future<bool> openTeamDraw() => _mutate(
+        () => _dataSource.openTeamDraw(groupId, championshipId),
+        'Falha ao ir para o sorteio.',
+      );
+
+  Future<bool> setPlayerGoalkeeper(String playerId, bool isGoalkeeper) =>
+      _mutate(
+        () => _dataSource.setPlayerGoalkeeper(
+          groupId,
+          championshipId,
+          playerId,
+          isGoalkeeper,
+        ),
+        'Falha ao marcar o goleiro.',
+      );
+
+  Future<ChampionshipDrawOptions?> drawTeamOptions({
+    required int teamCount,
+    required int strategyType,
+    required bool includeGoalkeepers,
+    List<String?> colorIds = const [],
+  }) async {
+    state = state.copyWith(mutating: true, clearError: true);
+    try {
+      return await _dataSource.drawTeamOptions(
+        groupId,
+        championshipId,
+        teamCount: teamCount,
+        strategyType: strategyType,
+        includeGoalkeepers: includeGoalkeepers,
+        colorIds: colorIds,
+      );
+    } catch (error) {
+      state = state.copyWith(
+        error: extractDioError(error, 'Falha ao sortear times.'),
+      );
+      return null;
+    } finally {
+      state = state.copyWith(mutating: false);
+    }
+  }
+
+  Future<bool> setLinkedPoll(String? pollId) => _mutate(
+        () => _dataSource.setLinkedPoll(groupId, championshipId, pollId),
+        'Falha ao vincular o evento.',
+      );
+
   Future<bool> defineTeams(DefineChampionshipTeams input) => _mutate(
         () => _dataSource.defineTeams(
           groupId,
@@ -544,3 +591,12 @@ final championshipDetailsProvider = StateNotifierProvider.autoDispose
     return notifier;
   },
 );
+
+/// Replays do campeonato separados por jogo.
+final championshipReplaysProvider = FutureProvider.autoDispose
+    .family<ChampionshipReplays, String>((ref, championshipId) {
+  return ref.watch(championshipDataSourceProvider).fetchReplays(
+        ref.watch(championshipGroupIdProvider),
+        championshipId,
+      );
+});

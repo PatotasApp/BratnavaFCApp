@@ -47,7 +47,7 @@ void main() {
   testWidgets('presença: contagem e botões de confirmar', (tester) async {
     await pump(tester, ChampionshipStatus.acceptation);
 
-    expect(find.text('Confirmação de presença aberta'), findsOneWidget);
+    expect(find.text('9 confirmados · presença aberta'), findsOneWidget);
     expect(find.text('Presença confirmada'), findsOneWidget);
     expect(find.text('Não vou'), findsOneWidget);
     expect(find.text('9'), findsOneWidget); // 9 confirmados no mock
@@ -67,7 +67,7 @@ void main() {
 
     expect(find.text('AO VIVO'), findsOneWidget);
     expect(find.text('2 × 1'), findsOneWidget);
-    expect(find.text('Jogo 1: Azul × Verde'), findsOneWidget);
+    expect(find.text('Jogo 1 ao vivo: Azul 2 × 1 Verde'), findsOneWidget);
   });
 
   testWidgets('pós-jogo: votação do MVP', (tester) async {

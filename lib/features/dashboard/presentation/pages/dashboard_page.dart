@@ -20,6 +20,9 @@ import '../../../championships/domain/entities/championship_enums.dart';
 import '../../../championships/domain/entities/championship_models.dart';
 import '../../../championships/presentation/championship_ui_text.dart';
 import '../../../championships/presentation/providers/championship_provider.dart';
+import '../../../championships/presentation/pages/championship_detail_page.dart'
+    show nextMatchupDuringGame;
+import '../../../championships/presentation/widgets/championship_stage_header.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../matches/domain/entities/match_models.dart';
 import '../../../matches/presentation/providers/match_provider.dart';
@@ -2043,23 +2046,38 @@ class _ChampionshipDashboardBandState
     final date = DateFormat('EEE, dd/MM', 'pt_BR').format(details.playedAt);
     final time = DateFormat('HH:mm').format(details.playedAt);
     final hasTeams = details.teams.isNotEmpty;
+    final stage = championshipStageOf(details);
+    final icons = GroupIcons.from(
+        ref.watch(groupSettingsProvider(widget.groupId)).valueOrNull);
 
     String teamName(String id) => details.teamById(id)?.name ?? 'Time';
+    final confirmed = details.confirmedPlayers.length;
+    final keepers =
+        details.confirmedPlayers.where((p) => p.isGoalkeeper).length;
+    final upcoming = nextMatchupDuringGame(details);
 
-    final subtitle = switch (status) {
-      ChampionshipStatus.created => 'Presença ainda não aberta',
-      ChampionshipStatus.acceptation => 'Confirmação de presença aberta',
-      ChampionshipStatus.teamDraw =>
+    // Como na partida, cada etapa mostra os seus números.
+    final subtitle = switch (stage) {
+      ChampionshipStage.created => 'Presença ainda não aberta',
+      ChampionshipStage.acceptation =>
+        '$confirmed confirmados · presença aberta',
+      ChampionshipStage.draw =>
+        '$confirmed confirmados · $keepers goleiros · sorteando os times',
+      ChampionshipStage.teams =>
         '${details.teams.length} times definidos · aguardando início',
-      ChampionshipStatus.inProgress => current == null
-          ? '${details.games.length} jogos · próximo jogo em breve'
-          : 'Jogo ${current.order}: ${teamName(current.teamAId)} × '
+      ChampionshipStage.games => current == null
+          ? '${details.games.length} jogos · próximo confronto em breve'
+          : 'Jogo ${current.order} ao vivo: ${teamName(current.teamAId)} '
+              '${current.teamAGoals} × ${current.teamBGoals} '
               '${teamName(current.teamBId)}',
-      ChampionshipStatus.postGame =>
+      ChampionshipStage.postGame =>
         details.rules.mvpMode == ChampionshipMvpMode.none
             ? 'Jogos encerrados · aguardando finalização'
             : 'Jogos encerrados · votação do MVP',
-      _ => championshipStatusLabel(status),
+      ChampionshipStage.finalized => details.standings.isEmpty
+          ? 'Campeonato finalizado'
+          : 'Campeão: ${teamName(details.standings.first.teamId)}',
+      ChampionshipStage.cancelled => championshipStatusLabel(status),
     };
 
     return PrototypeHeaderBand(
@@ -2112,7 +2130,11 @@ class _ChampionshipDashboardBandState
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           PrototypeBadge(
-                            label: championshipStatusLabel(status),
+                            label: stage == ChampionshipStage.cancelled
+                                ? stage.label
+                                : 'Etapa ${stage.number}/'
+                                    '${ChampionshipStage.flow.length} · '
+                                    '${stage.label}',
                             tone: status == ChampionshipStatus.inProgress
                                 ? PrototypeBadgeTone.danger
                                 : PrototypeBadgeTone.neutral,
@@ -2148,11 +2170,24 @@ class _ChampionshipDashboardBandState
                           fontSize: 12,
                         ),
                       ),
+                      if (upcoming != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Próximo confronto: $upcoming',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: context.appTextSecondary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
                 const SizedBox(width: 12),
-                _ChampionshipCorner(details: details),
+                _ChampionshipCorner(details: details, icons: icons),
               ],
             ),
           ),
@@ -2216,7 +2251,7 @@ class _ChampionshipDashboardBandState
               firstChild: const SizedBox(width: double.infinity),
               secondChild: Padding(
                 padding: const EdgeInsets.only(top: 6),
-                child: _ChampionshipTeamsList(details: details),
+                child: _ChampionshipTeamsList(details: details, icons: icons),
               ),
               crossFadeState: _showTeams
                   ? CrossFadeState.showSecond
@@ -2232,8 +2267,9 @@ class _ChampionshipDashboardBandState
 /// Canto direito da faixa, como na partida: muda conforme a etapa.
 class _ChampionshipCorner extends StatelessWidget {
   final ChampionshipDetails details;
+  final GroupIcons icons;
 
-  const _ChampionshipCorner({required this.details});
+  const _ChampionshipCorner({required this.details, required this.icons});
 
   @override
   Widget build(BuildContext context) {
@@ -2261,6 +2297,46 @@ class _ChampionshipCorner extends StatelessWidget {
         );
       case ChampionshipStatus.postGame:
         return const _PostMatchIndicator();
+      // Sorteio: confirmados e goleiros marcados.
+      case ChampionshipStatus.teamDraw when details.teams.isEmpty:
+        final confirmed = details.confirmedPlayers;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            for (final (icon, count, label) in [
+              (icons.player, confirmed.length, 'confirmados'),
+              (
+                icons.goalkeeper,
+                confirmed.where((p) => p.isGoalkeeper).length,
+                'goleiros'
+              ),
+            ])
+              Semantics(
+                label: '$count $label',
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      renderGroupIcon(icon,
+                          size: 14, color: context.appTextSecondary),
+                      const SizedBox(width: 5),
+                      Text(
+                        '$count',
+                        style: TextStyle(
+                          color: context.appTextPrimary,
+                          fontSize: 15,
+                          height: 1,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        );
       case ChampionshipStatus.teamDraw:
       case ChampionshipStatus.inProgress:
         final total = details.teams
@@ -2311,8 +2387,9 @@ class _ChampionshipCorner extends StatelessWidget {
 /// Escalação do campeonato: N times, cada um com a cor e os jogadores.
 class _ChampionshipTeamsList extends StatelessWidget {
   final ChampionshipDetails details;
+  final GroupIcons icons;
 
-  const _ChampionshipTeamsList({required this.details});
+  const _ChampionshipTeamsList({required this.details, required this.icons});
 
   @override
   Widget build(BuildContext context) {
@@ -2332,31 +2409,33 @@ class _ChampionshipTeamsList extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: '${team.name}  ',
+                  // Goleiro e jogador com os ícones das configurações da patota.
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 2,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        team.name,
+                        style: TextStyle(
+                          color: context.appTextPrimary,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
+                      ),
+                      for (final id in team.playerIds)
+                        PlayerNameWithIcon(
+                          name: details.playerById(id)?.name ?? 'Jogador',
+                          icons: icons,
+                          isGoalkeeper:
+                              details.playerById(id)?.isGoalkeeper == true,
+                          iconSize: 12,
                           style: TextStyle(
-                            color: context.appTextPrimary,
-                            fontWeight: FontWeight.w800,
+                            color: context.appTextSecondary,
+                            fontSize: 12,
                           ),
                         ),
-                        TextSpan(
-                          text: team.playerIds.map((id) {
-                            final player = details.playerById(id);
-                            final name = player?.name ?? 'Jogador';
-                            return player?.isGoalkeeper == true
-                                ? '$name (gol)'
-                                : name;
-                          }).join(', '),
-                        ),
-                      ],
-                    ),
-                    style: TextStyle(
-                      color: context.appTextSecondary,
-                      fontSize: 12,
-                    ),
+                    ],
                   ),
                 ),
               ],

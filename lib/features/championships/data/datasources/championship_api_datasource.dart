@@ -4,7 +4,7 @@ import '../../../../core/errors/app_exception.dart';
 import '../../domain/entities/championship_models.dart';
 import 'championship_datasource.dart';
 
-/// Rotas de `docs/campeonato/CONTRATO-API.md` (v6) da API.
+/// Rotas de `docs/campeonato/CONTRATO-API.md` (v8) da API.
 ///
 /// As respostas vêm no envelope `ApiResponse` ({ success, data, message,
 /// error, errors }). Ações sem retorno respondem 204 sem corpo; recusas
@@ -143,6 +143,64 @@ class ChampionshipApiDataSource implements ChampionshipDataSource {
               'guestStarRating': starRating,
             },
           ));
+
+  @override
+  Future<void> openTeamDraw(String groupId, String id) =>
+      _send(() => _dio.post('${_base(groupId)}/$id/team-draw/open'));
+
+  @override
+  Future<void> setPlayerGoalkeeper(
+    String groupId,
+    String id,
+    String playerId,
+    bool isGoalkeeper,
+  ) =>
+      _send(() => _dio.patch(
+            '${_base(groupId)}/$id/players/$playerId/goalkeeper',
+            data: {'isGoalkeeper': isGoalkeeper},
+          ));
+
+  @override
+  Future<ChampionshipDrawOptions> drawTeamOptions(
+    String groupId,
+    String id, {
+    required int teamCount,
+    required int strategyType,
+    required bool includeGoalkeepers,
+    List<String?> colorIds = const [],
+  }) async {
+    final body = await _send(() => _dio.post(
+          '${_base(groupId)}/$id/teams/draw-options',
+          data: {
+            'teamCount': teamCount,
+            'strategyType': strategyType,
+            'includeGoalkeepers': includeGoalkeepers,
+            'colorIds': colorIds,
+          },
+        ));
+    final data = unwrapMap(body);
+    if (data == null) throw const ServerException('Resposta vazia da API.');
+    return ChampionshipDrawOptions(
+      options: ((data['options'] as List<dynamic>?) ?? const [])
+          .map((item) =>
+              ChampionshipDrawOption.fromJson(item as Map<String, dynamic>))
+          .toList(growable: false),
+      message: _message(body),
+    );
+  }
+
+  @override
+  Future<void> setLinkedPoll(String groupId, String id, String? pollId) =>
+      _send(() => _dio.patch(
+            '${_base(groupId)}/$id/linked-poll',
+            data: {'pollId': pollId},
+          ));
+
+  @override
+  Future<ChampionshipReplays> fetchReplays(String groupId, String id) async =>
+      ChampionshipReplays.fromJson(
+        await _map(() => _dio.get('${_base(groupId)}/$id/replays')),
+      );
 
   @override
   Future<ChampionshipTeamsDraw> drawTeams(

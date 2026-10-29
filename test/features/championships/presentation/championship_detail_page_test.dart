@@ -11,14 +11,15 @@ import 'package:patotas_app/shared/presentation/widgets/prototype_ui.dart';
 void main() {
   setUpAll(() => initializeDateFormatting('pt_BR'));
 
-  Future<void> pump(WidgetTester tester, String id) async {
+  Future<void> pump(WidgetTester tester, String id,
+      {ChampionshipMockDataSource? dataSource}) async {
     tester.view.physicalSize = const Size(1080, 4000);
     tester.view.devicePixelRatio = 2.5;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(ProviderScope(
       overrides: [
         championshipDataSourceProvider
-            .overrideWithValue(ChampionshipMockDataSource()),
+            .overrideWithValue(dataSource ?? ChampionshipMockDataSource()),
         championshipGroupIdProvider.overrideWithValue('g'),
         championshipIsAdminProvider.overrideWithValue(true),
       ],
@@ -62,7 +63,8 @@ void main() {
     await pump(tester, 'championship-0');
 
     final button = find.widgetWithText(OutlinedButton, 'Cancelar campeonato');
-    final card = find.ancestor(of: button, matching: find.byType(PrototypeCard));
+    final card =
+        find.ancestor(of: button, matching: find.byType(PrototypeCard));
     final buttonRect = tester.getRect(button);
     final cardRect = tester.getRect(card.first);
     expect(buttonRect.left, greaterThanOrEqualTo(cardRect.left));
@@ -85,6 +87,93 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Zé da Pelada'), findsOneWidget);
+    await unmount(tester);
+  });
+
+  testWidgets('sorteio em abas como a partida, sem modal, e depois Times',
+      (tester) async {
+    final dataSource = ChampionshipMockDataSource();
+    await dataSource.stepBack('g', 'championship-2'); // Times → Sorteio
+    await pump(tester, 'championship-2', dataSource: dataSource);
+
+    expect(find.text('Sorteio'), findsOneWidget);
+    expect(find.text('Goleiros'), findsOneWidget);
+    for (final label in [
+      'Manual',
+      'Aleatório',
+      'Algoritmo',
+      'Por vitórias',
+      'Por perfil'
+    ]) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(find.byKey(const ValueKey('draw-team-count')), findsOneWidget);
+
+    await tester.tap(find.text('Sortear times'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('Opção 1 de 1'), findsOneWidget);
+
+    await tester.tap(find.text('Usar esta opção'));
+    await tester.pumpAndSettle();
+    expect(find.text('Times'), findsWidgets);
+    expect(find.text('Iniciar campeonato'), findsOneWidget);
+    expect(find.text('Voltar para o sorteio'), findsOneWidget);
+    await unmount(tester);
+  });
+
+  testWidgets('jogo em andamento: só o confronto, botões grandes e cronômetro',
+      (tester) async {
+    await pump(tester, 'championship-3');
+
+    expect(find.text('Presenças'), findsNothing);
+    expect(find.text('Jogo'), findsOneWidget);
+    expect(find.text('Classificação'), findsOneWidget);
+    expect(find.byKey(const ValueKey('btn-gol-a')), findsOneWidget);
+    expect(find.byKey(const ValueKey('btn-gol-b')), findsOneWidget);
+    expect(find.byKey(const ValueKey('btn-jogada')), findsOneWidget);
+    expect(tester.getSize(find.byKey(const ValueKey('btn-gol-a'))).height,
+        greaterThanOrEqualTo(90));
+    expect(find.byTooltip('Registrar gol'), findsOneWidget);
+    expect(find.text('10:00'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('clock-play')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('clock-pause')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('clock-pause')));
+    await tester.pump();
+    expect(find.text('Continuar'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('clock-reset')));
+    await tester.pumpAndSettle();
+    expect(find.text('Zerar o cronômetro?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Zerar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Iniciar'), findsOneWidget);
+
+    // Botão de gol soma no placar, como na partida.
+    await tester.tap(find.byKey(const ValueKey('btn-gol-a')));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('3  ×  1'), findsOneWidget);
+
+    await tester.tap(find.text('Classificação'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('btn-gol-a')), findsNothing);
+    await unmount(tester);
+  });
+
+  testWidgets('finalizado: times em abas na ordem da colocação',
+      (tester) async {
+    await pump(tester, 'championship-5');
+
+    expect(find.text('Presenças'), findsNothing);
+    expect(find.text('1º Azul'), findsOneWidget);
+    expect(find.text('2º Verde'), findsOneWidget);
+    expect(find.text('1º lugar · Azul'), findsOneWidget);
+    await tester.tap(find.text('2º Verde'));
+    await tester.pumpAndSettle();
+    expect(find.text('2º lugar · Verde'), findsOneWidget);
     await unmount(tester);
   });
 }
