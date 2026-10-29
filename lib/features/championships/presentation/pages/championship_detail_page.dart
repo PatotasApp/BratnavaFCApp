@@ -341,9 +341,12 @@ class _NextMatchupCard extends StatelessWidget {
     final next = suggestion;
     final theme = Theme.of(context);
     if (next == null) {
-      return const _MessageCard(
-        message: 'Não há próximo confronto sugerido. Quando quiser, encerre '
-            'o campeonato.',
+      return _MessageCard(
+        message: championshipNoCurrentGameLine(
+          details,
+          const AsyncData(null),
+          isAdmin: isAdmin,
+        ),
       );
     }
     final teamA = details.teamById(next.teamAId);

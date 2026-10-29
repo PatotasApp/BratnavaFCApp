@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +7,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:patotas_app/core/theme/app_theme.dart';
 import 'package:patotas_app/features/championships/data/datasources/championship_mock_datasource.dart';
 import 'package:patotas_app/features/championships/domain/entities/championship_enums.dart';
+import 'package:patotas_app/features/championships/domain/entities/championship_models.dart';
 import 'package:patotas_app/features/championships/presentation/providers/championship_provider.dart';
 import 'package:patotas_app/features/dashboard/presentation/pages/dashboard_page.dart';
 
@@ -19,7 +22,10 @@ void main() {
     final details =
         await dataSource.fetchById('g', 'championship-${status.value}');
     await tester.pumpWidget(ProviderScope(
-      overrides: [championshipDataSourceProvider.overrideWithValue(dataSource)],
+      overrides: [
+        championshipDataSourceProvider.overrideWithValue(dataSource),
+        championshipIsAdminProvider.overrideWithValue(false),
+      ],
       child: MaterialApp(
         theme: AppTheme.light,
         home: Scaffold(
@@ -77,4 +83,80 @@ void main() {
     expect(find.text('Jogos encerrados · votação do MVP'), findsOneWidget);
     expect(find.text('Votar no MVP'), findsOneWidget);
   });
+
+  group('jogos sem partida em andamento usam o next-game', () {
+    Future<void> pumpBetweenGames(
+      WidgetTester tester,
+      Future<NextGameSuggestion?> Function() next, {
+      bool admin = false,
+    }) async {
+      final source = _NextGameDataSource(next);
+      await source.endGame('g', 'championship-3', 'championship-3-game-1');
+      final details = await source.fetchById('g', 'championship-3');
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          championshipDataSourceProvider.overrideWithValue(source),
+          championshipIsAdminProvider.overrideWithValue(admin),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light,
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: ChampionshipDashboardBand(
+                details: details,
+                groupId: 'g',
+                playerId: 'championship-3-player-1',
+              ),
+            ),
+          ),
+        ),
+      ));
+    }
+
+    testWidgets('com sugestão: mostra o próximo confronto', (tester) async {
+      await pumpBetweenGames(
+        tester,
+        () async => const NextGameSuggestion(
+          teamAId: 'championship-3-team-1',
+          teamBId: 'championship-3-team-3',
+          reason: '',
+          waitingTeamIds: [],
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Próximo: Azul × Laranja'), findsOneWidget);
+      expect(find.textContaining('em breve'), findsNothing);
+    });
+
+    testWidgets('sem sugestão: todos os jogos jogados', (tester) async {
+      await pumpBetweenGames(tester, () async => null, admin: true);
+      await tester.pump();
+      expect(
+        find.text('Todos os jogos foram jogados · aguardando encerramento · '
+            'encerre o campeonato'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('carregando: só a quantidade de jogos', (tester) async {
+      final pending = Completer<NextGameSuggestion?>();
+      await pumpBetweenGames(tester, () => pending.future);
+      await tester.pump();
+      expect(find.text('1 jogos'), findsOneWidget);
+      pending.complete(null);
+      await tester.pump();
+      await tester.pump();
+      expect(
+          find.textContaining('Todos os jogos foram jogados'), findsOneWidget);
+    });
+  });
+}
+
+class _NextGameDataSource extends ChampionshipMockDataSource {
+  _NextGameDataSource(this._next);
+  final Future<NextGameSuggestion?> Function() _next;
+
+  @override
+  Future<NextGameSuggestion?> fetchNextGame(String groupId, String id) =>
+      _next();
 }

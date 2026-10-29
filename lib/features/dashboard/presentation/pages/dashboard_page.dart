@@ -2022,6 +2022,8 @@ class _ChampionshipDashboardBandState
     _polling = Timer.periodic(const Duration(seconds: 10), (_) {
       if (widget.details.status == ChampionshipStatus.inProgress) {
         ref.invalidate(dashboardChampionshipsProvider(widget.groupId));
+        ref.invalidate(championshipNextGameProvider(
+            (groupId: widget.groupId, championshipId: widget.details.id)));
       }
     });
   }
@@ -2095,7 +2097,12 @@ class _ChampionshipDashboardBandState
       ChampionshipStage.teams =>
         '${details.teams.length} times definidos · aguardando início',
       ChampionshipStage.games => current == null
-          ? '${details.games.length} jogos · próximo confronto em breve'
+          ? championshipNoCurrentGameLine(
+              details,
+              ref.watch(championshipNextGameProvider(
+                  (groupId: widget.groupId, championshipId: details.id))),
+              isAdmin: ref.watch(championshipIsAdminProvider),
+            )
           : 'Jogo ${current.order} ao vivo: ${teamName(current.teamAId)} '
               '${current.teamAGoals} × ${current.teamBGoals} '
               '${teamName(current.teamBId)}',

@@ -574,3 +574,34 @@ final championshipReplaysProvider = FutureProvider.autoDispose
         championshipId,
       );
 });
+
+/// Sugestão do próximo jogo (`GET /{id}/next-game`) para quem só tem o detalhe,
+/// como o card do dashboard. `null` = o formato não tem mais jogos.
+final championshipNextGameProvider = FutureProvider.autoDispose
+    .family<NextGameSuggestion?, ({String groupId, String championshipId})>(
+  (ref, key) => ref
+      .watch(championshipDataSourceProvider)
+      .fetchNextGame(key.groupId, key.championshipId),
+);
+
+/// Linha dos jogos sem partida em andamento, igual no dashboard e no detalhe.
+String championshipNoCurrentGameLine(
+  ChampionshipDetails details,
+  AsyncValue<NextGameSuggestion?> next, {
+  required bool isAdmin,
+}) {
+  final played = '${details.games.length} jogos';
+  return next.when(
+    loading: () => played,
+    error: (_, __) => played,
+    data: (suggestion) {
+      if (suggestion == null) {
+        return 'Todos os jogos foram jogados · aguardando encerramento'
+            '${isAdmin ? ' · encerre o campeonato' : ''}';
+      }
+      String name(String id) => details.teamById(id)?.name ?? 'Time';
+      return 'Próximo: ${name(suggestion.teamAId)} × '
+          '${name(suggestion.teamBId)}';
+    },
+  );
+}
