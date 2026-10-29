@@ -20,6 +20,7 @@ import '../widgets/championship_live_game.dart';
 import '../widgets/championship_replays_section.dart';
 import '../widgets/championship_stage_header.dart';
 import '../widgets/championship_swap_teams.dart';
+import '../widgets/championship_team_field.dart';
 
 class ChampionshipDetailPage extends ConsumerStatefulWidget {
   const ChampionshipDetailPage({super.key, required this.championshipId});
@@ -229,12 +230,8 @@ class _ChampionshipDetailPageState
             if (details.topScorers.isNotEmpty || details.topAssists.isNotEmpty)
               _HighlightsSection(details: details, icons: icons),
             _GamesList(details: details),
-            _TeamsSection(
-              details: details,
-              isAdmin: isAdmin,
-              notifier: notifier,
-              icons: icons,
-            ),
+            // Depois do início os times ficam travados (API v9.1): só leitura.
+            teamsByPosition,
           ],
           if (details.currentGame == null)
             if (admin != null) admin,
@@ -456,8 +453,8 @@ class _GamesList extends StatelessWidget {
       );
 }
 
-/// Jogadores agrupados por time, um time por aba, na ordem da colocação
-/// (1º, 2º, 3º…). Substitui a lista de presenças depois dos jogos.
+/// Times só leitura depois do início: uma aba por time (nome e cor) com o
+/// campo. Depois dos jogos, na ordem da colocação (1º, 2º, 3º…).
 class _TeamsByPosition extends StatefulWidget {
   const _TeamsByPosition({required this.details, required this.icons});
   final ChampionshipDetails details;
@@ -472,6 +469,10 @@ class _TeamsByPositionState extends State<_TeamsByPosition> {
 
   List<(int, ChampionshipTeam)> get _ordered {
     final details = widget.details;
+    // Colocação só depois dos jogos; durante os jogos, na ordem dos times.
+    final ranked = details.status == ChampionshipStatus.postGame ||
+        details.status == ChampionshipStatus.finalized;
+    if (!ranked) return [for (final team in details.teams) (99, team)];
     int positionOf(ChampionshipTeam team) =>
         team.finalPosition ??
         details.standings
@@ -540,15 +541,22 @@ class _TeamsByPositionState extends State<_TeamsByPosition> {
               ),
             ],
           ),
-          for (final player in players)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: PlayerNameWithIcon(
-                name: player.name,
-                icons: widget.icons,
-                isGoalkeeper: player.isGoalkeeper,
-              ),
-            ),
+          const SizedBox(height: 8),
+          ChampionshipTeamField(
+            key: ValueKey('team-field-${team.id}'),
+            teamName: team.name,
+            teamColorHex: team.colorHex,
+            icons: widget.icons,
+            players: [
+              for (final player in players)
+                FieldPlayerInfo(
+                  id: player.playerId,
+                  name: player.name,
+                  isGoalkeeper: player.isGoalkeeper,
+                  dimmed: player.didNotPlay,
+                ),
+            ],
+          ),
         ],
       ),
     );
@@ -712,15 +720,11 @@ class _TeamsSection extends ConsumerStatefulWidget {
 class _TeamsSectionState extends ConsumerState<_TeamsSection> {
   ChampionshipDetails get details => widget.details;
 
+  // Times só se editam antes do início; depois ficam travados (API v9.1).
   bool get _canEditTeams =>
-      widget.isAdmin &&
-      details.status != ChampionshipStatus.finalized &&
-      details.status != ChampionshipStatus.cancelled;
+      widget.isAdmin && details.status == ChampionshipStatus.teamDraw;
 
-  bool get _canSwap =>
-      widget.isAdmin &&
-      (details.status == ChampionshipStatus.teamDraw ||
-          details.status == ChampionshipStatus.inProgress);
+  bool get _canSwap => _canEditTeams;
 
   @override
   Widget build(BuildContext context) {

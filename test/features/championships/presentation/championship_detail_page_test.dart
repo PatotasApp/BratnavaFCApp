@@ -173,6 +173,17 @@ void main() {
     await tester.tap(find.text('Classificação'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('btn-gol-a')), findsNothing);
+    // Depois do início os times ficam só leitura, em abas com o campo.
+    expect(find.text('Sortear cores'), findsNothing);
+    expect(find.byTooltip('Editar nome e cor'), findsNothing);
+    expect(find.textContaining('Toque num jogador'), findsNothing);
+    expect(find.byKey(const ValueKey('team-tab-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('team-field-championship-3-team-1')),
+        findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('team-tab-1')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('team-field-championship-3-team-2')),
+        findsOneWidget);
     await unmount(tester);
   });
 
