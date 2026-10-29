@@ -2,6 +2,18 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "PatotasApp — local (API e banco locais)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "dev",
+        "--dart-define-from-file",
+        "config/local.json"
+      ]
+    },
+    {
       "name": "PatotasApp — dev",
       "request": "launch",
       "type": "dart",

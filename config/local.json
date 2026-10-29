@@ -1,0 +1,7 @@
+{
+  "ENV": "development",
+  "API_URL": "http://localhost:5232",
+  "WEB_URL": "http://localhost:5173",
+  "CHAMPIONSHIPS_ENABLED": true,
+  "CHAMPIONSHIPS_USE_MOCK": false
+}

@@ -93,3 +93,15 @@ O que mudou:
 - **Lances para as câmeras:** botões "Gol <time A>", "Gol <time B>" e "Jogada" no jogo ao vivo, chamando `POST /{id}/games/{gameId}/events` com `{ type, eventTime }`. ⚠️ A rota também **ainda não existe na API** (mesmo prompt).
 - Corrigido no mock: as listas de jogadores dos times não aceitavam troca.
 - Testes novos: `test/features/championships/presentation/championship_details_notifier_test.dart` (troca e voltar etapa).
+
+## Como testar no celular contra a API local (28/10/2026)
+
+A API (`http://127.0.0.1:5232`) e o banco de dev (`localhost:5433`) rodam no PC. O app usa `config/local.json` (`API_URL=http://localhost:5232`, campeonato ligado, sem mock).
+
+1. Ligue o celular Android no USB, com a depuração USB ativa (ou abra o emulador).
+2. Encaminhe a porta da API para o aparelho: `adb reverse tcp:5232 tcp:5232`. Assim o `localhost` do celular é o PC, sem abrir nada na rede. Repita esse passo se desconectar o cabo.
+3. Rode a configuração **"PatotasApp — local (API e banco locais)"** do VS Code, ou `flutter run --flavor dev --dart-define-from-file=config/local.json`.
+
+O `http://` é liberado só no build de debug (`android/app/src/debug/AndroidManifest.xml`); release continua exigindo https.
+
+Voltar etapa (`POST /{id}/step-back`) e lances para as câmeras (`POST /{id}/games/{gameId}/events`) já existem na API (commit `6bdc626` da `feature/campeonato-integracao-local`, contrato v7).
