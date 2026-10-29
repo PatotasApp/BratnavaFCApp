@@ -352,6 +352,18 @@ class _BigButton extends StatelessWidget {
     // Texto legível sobre cores claras (ex.: time Branco).
     final foreground =
         color.computeLuminance() > .6 ? AppColors.slate900 : AppColors.onDark;
+    // Botão baixo (Jogada): ícone ao lado do texto; empilhado não cabe em 72.
+    final horizontal = height < 90;
+    final content = [
+      Icon(icon, size: 30),
+      SizedBox(width: horizontal ? 10 : 0, height: horizontal ? 0 : 4),
+      Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+      ),
+    ];
     return SizedBox(
       height: height,
       child: FilledButton(
@@ -363,6 +375,7 @@ class _BigButton extends StatelessWidget {
               : null,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         ),
         onPressed: disabled ? null : onPressed,
         child: loading
@@ -371,19 +384,12 @@ class _BigButton extends StatelessWidget {
                 child: CircularProgressIndicator(
                     strokeWidth: 3, color: foreground),
               )
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 30),
-                  const SizedBox(height: 4),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 17, fontWeight: FontWeight.w900),
-                  ),
-                ],
+            // FittedBox: com a fonte do sistema aumentada, encolhe em vez de estourar.
+            : FittedBox(
+                fit: BoxFit.scaleDown,
+                child: horizontal
+                    ? Row(mainAxisSize: MainAxisSize.min, children: content)
+                    : Column(mainAxisSize: MainAxisSize.min, children: content),
               ),
       ),
     );
