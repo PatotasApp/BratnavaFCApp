@@ -16,6 +16,10 @@ import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../../shared/presentation/widgets/user_profile_link.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../calendar/domain/entities/calendar_event.dart';
+import '../../../championships/domain/entities/championship_enums.dart';
+import '../../../championships/domain/entities/championship_models.dart';
+import '../../../championships/presentation/championship_ui_text.dart';
+import '../../../championships/presentation/providers/championship_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../matches/domain/entities/match_models.dart';
 import '../../../matches/presentation/providers/match_provider.dart';
@@ -46,6 +50,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     ref.invalidate(pollsListProvider(groupId));
     ref.invalidate(myPaymentSummaryProvider(groupId));
     ref.invalidate(pendingPollsCountProvider(groupId));
+    ref.invalidate(dashboardChampionshipsProvider(groupId));
     if (playerId != null) {
       ref.invalidate(
         player_history.playerHistoryProvider(
@@ -237,6 +242,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final pollsAsync = ref.watch(pendingPollsCountProvider(groupId));
     final eventsAsync = ref.watch(upcomingEventsProvider(groupId));
     final registeredEventsAsync = ref.watch(pollsListProvider(groupId));
+    final championships =
+        ref.watch(dashboardChampionshipsProvider(groupId)).valueOrNull ??
+            const <ChampionshipDetails>[];
 
     final summary = historyAsync.valueOrNull == null
         ? null
@@ -266,6 +274,15 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             loading: historyAsync.isLoading,
             onOpen: () => context.go('/app/player-history'),
           ),
+          for (final championship in championships) ...[
+            const SizedBox(height: 12),
+            ChampionshipDashboardBand(
+              key: ValueKey('championship-${championship.id}'),
+              details: championship,
+              groupId: groupId,
+              playerId: activePlayer.playerId,
+            ),
+          ],
           const SizedBox(height: 12),
           _NextMatchBand(
             match: nextMatch,
@@ -1936,4 +1953,423 @@ class _DashboardMessageState extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Campeonato ──────────────────────────────────────────────────────────────
+
+/// Campeonato no dashboard, no mesmo formato da próxima partida: a faixa do
+/// topo muda de conteúdo conforme a etapa (presença, times, ao vivo, MVP).
+class ChampionshipDashboardBand extends ConsumerStatefulWidget {
+  final ChampionshipDetails details;
+  final String groupId;
+  final String playerId;
+
+  const ChampionshipDashboardBand({
+    super.key,
+    required this.details,
+    required this.groupId,
+    required this.playerId,
+  });
+
+  @override
+  ConsumerState<ChampionshipDashboardBand> createState() =>
+      _ChampionshipDashboardBandState();
+}
+
+class _ChampionshipDashboardBandState
+    extends ConsumerState<ChampionshipDashboardBand> {
+  bool _showTeams = false;
+  bool _responding = false;
+  Timer? _polling;
+
+  @override
+  void initState() {
+    super.initState();
+    // Ao vivo o placar muda sem evento de realtime: atualiza como a tela do
+    // campeonato faz.
+    _polling = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (widget.details.status == ChampionshipStatus.inProgress) {
+        ref.invalidate(dashboardChampionshipsProvider(widget.groupId));
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _polling?.cancel();
+    super.dispose();
+  }
+
+  void _open() => context.go('/app/championships/${widget.details.id}');
+
+  Future<void> _respond({required bool accept}) async {
+    if (_responding) return;
+    setState(() => _responding = true);
+    try {
+      final dataSource = ref.read(championshipDataSourceProvider);
+      if (accept) {
+        await dataSource.acceptMyInvite(widget.groupId, widget.details.id);
+      } else {
+        await dataSource.rejectMyInvite(widget.groupId, widget.details.id);
+      }
+      ref.invalidate(dashboardChampionshipsProvider(widget.groupId));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content:
+              Text(accept ? 'Presença confirmada.' : 'Ausência informada.'),
+        ));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Não foi possível atualizar: $error'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _responding = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final details = widget.details;
+    final status = details.status;
+    final me = details.playerById(widget.playerId);
+    final myTeam = me?.teamId == null ? null : details.teamById(me!.teamId!);
+    final response = details.myInviteResponse;
+    final canRespond =
+        status == ChampionshipStatus.acceptation && response != null;
+    final current = details.currentGame;
+    final date = DateFormat('EEE, dd/MM', 'pt_BR').format(details.playedAt);
+    final time = DateFormat('HH:mm').format(details.playedAt);
+    final hasTeams = details.teams.isNotEmpty;
+
+    String teamName(String id) => details.teamById(id)?.name ?? 'Time';
+
+    final subtitle = switch (status) {
+      ChampionshipStatus.created => 'Presença ainda não aberta',
+      ChampionshipStatus.acceptation => 'Confirmação de presença aberta',
+      ChampionshipStatus.teamDraw =>
+        '${details.teams.length} times definidos · aguardando início',
+      ChampionshipStatus.inProgress => current == null
+          ? '${details.games.length} jogos · próximo jogo em breve'
+          : 'Jogo ${current.order}: ${teamName(current.teamAId)} × '
+              '${teamName(current.teamBId)}',
+      ChampionshipStatus.postGame =>
+        details.rules.mvpMode == ChampionshipMvpMode.none
+            ? 'Jogos encerrados · aguardando finalização'
+            : 'Jogos encerrados · votação do MVP',
+      _ => championshipStatusLabel(status),
+    };
+
+    return PrototypeHeaderBand(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: _open,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '🏆 CAMPEONATO NA PATOTA',
+                        style: TextStyle(
+                          color: AppColors.primaryHover,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: .8,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        details.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: context.appTextPrimary,
+                          fontSize: 23,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '$date · $time · ${details.placeName}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: context.appTextSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          PrototypeBadge(
+                            label: championshipStatusLabel(status),
+                            tone: status == ChampionshipStatus.inProgress
+                                ? PrototypeBadgeTone.danger
+                                : PrototypeBadgeTone.neutral,
+                          ),
+                          if (myTeam != null)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _ColorDot(
+                                  color: _hexColor(myTeam.colorHex),
+                                  label: myTeam.name,
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'Seu time: ${myTeam.name}',
+                                  style: TextStyle(
+                                    color: context.appTextSecondary,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: context.appTextSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                _ChampionshipCorner(details: details),
+              ],
+            ),
+          ),
+          if (canRespond) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: FilledButton.icon(
+                    onPressed:
+                        _responding ? null : () => _respond(accept: true),
+                    icon: _responding
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.check_rounded, size: 18),
+                    label: Text(
+                      response == ChampionshipInviteResponse.accepted
+                          ? 'Presença confirmada'
+                          : 'Confirmar presença',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 96),
+                  child: OutlinedButton(
+                    onPressed:
+                        _responding ? null : () => _respond(accept: false),
+                    style: response == ChampionshipInviteResponse.rejected
+                        ? OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.onDark,
+                            backgroundColor: AppColors.dangerOf(
+                                Theme.of(context).brightness),
+                          )
+                        : null,
+                    child: const Text('Não vou'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (status == ChampionshipStatus.postGame && details.canVote) ...[
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: _open,
+              icon: const Icon(Icons.how_to_vote_outlined, size: 18),
+              label: const Text('Votar no MVP'),
+            ),
+          ],
+          if (hasTeams && status != ChampionshipStatus.acceptation) ...[
+            const SizedBox(height: 4),
+            _TeamsExpander(
+              expanded: _showTeams,
+              onToggle: () => setState(() => _showTeams = !_showTeams),
+            ),
+            AnimatedCrossFade(
+              duration: const Duration(milliseconds: 220),
+              firstChild: const SizedBox(width: double.infinity),
+              secondChild: Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: _ChampionshipTeamsList(details: details),
+              ),
+              crossFadeState: _showTeams
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Canto direito da faixa, como na partida: muda conforme a etapa.
+class _ChampionshipCorner extends StatelessWidget {
+  final ChampionshipDetails details;
+
+  const _ChampionshipCorner({required this.details});
+
+  @override
+  Widget build(BuildContext context) {
+    final current = details.currentGame;
+    switch (details.status) {
+      case ChampionshipStatus.acceptation:
+        final players = details.players;
+        return _InviteTally(
+          accepted: players
+              .where((p) =>
+                  p.inviteResponse == ChampionshipInviteResponse.accepted)
+              .length,
+          pending: players
+              .where((p) => p.inviteResponse == ChampionshipInviteResponse.none)
+              .length,
+          refused: players
+              .where((p) =>
+                  p.inviteResponse == ChampionshipInviteResponse.rejected)
+              .length,
+        );
+      case ChampionshipStatus.inProgress when current != null:
+        return _LiveMatchIndicator(
+          teamAGoals: current.teamAGoals,
+          teamBGoals: current.teamBGoals,
+        );
+      case ChampionshipStatus.postGame:
+        return const _PostMatchIndicator();
+      case ChampionshipStatus.teamDraw:
+      case ChampionshipStatus.inProgress:
+        final total = details.teams
+            .fold<int>(0, (sum, team) => sum + team.playerIds.length);
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final team in details.teams.take(4)) ...[
+                  _ColorDot(color: _hexColor(team.colorHex), label: team.name),
+                  const SizedBox(width: 3),
+                ],
+              ],
+            ),
+            const SizedBox(height: 5),
+            Semantics(
+              label: '$total jogadores',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.groups_rounded,
+                      size: 14, color: context.appTextSecondary),
+                  const SizedBox(width: 5),
+                  Text(
+                    '$total',
+                    style: TextStyle(
+                      color: context.appTextPrimary,
+                      fontSize: 15,
+                      height: 1,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      default:
+        return Icon(Icons.emoji_events_outlined,
+            size: 28, color: context.appTextSecondary);
+    }
+  }
+}
+
+/// Escalação do campeonato: N times, cada um com a cor e os jogadores.
+class _ChampionshipTeamsList extends StatelessWidget {
+  final ChampionshipDetails details;
+
+  const _ChampionshipTeamsList({required this.details});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final team in details.teams)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: _ColorDot(
+                      color: _hexColor(team.colorHex), label: team.name),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: '${team.name}  ',
+                          style: TextStyle(
+                            color: context.appTextPrimary,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        TextSpan(
+                          text: team.playerIds.map((id) {
+                            final player = details.playerById(id);
+                            final name = player?.name ?? 'Jogador';
+                            return player?.isGoalkeeper == true
+                                ? '$name (gol)'
+                                : name;
+                          }).join(', '),
+                        ),
+                      ],
+                    ),
+                    style: TextStyle(
+                      color: context.appTextSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+Color _hexColor(String? hex) {
+  final value = hex == null
+      ? null
+      : int.tryParse('FF${hex.replaceFirst('#', '')}', radix: 16);
+  return value == null ? AppColors.slate400 : Color(value);
 }

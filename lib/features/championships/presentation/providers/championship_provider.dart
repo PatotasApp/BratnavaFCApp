@@ -61,6 +61,33 @@ final championshipGroupPlayersProvider = FutureProvider.autoDispose
   return players;
 });
 
+/// Campeonatos que aparecem no dashboard, como a próxima partida: os que ainda
+/// não terminaram (de Criado até a votação do MVP). O ao vivo vem primeiro,
+/// depois a etapa mais adiantada; empate pela data.
+final dashboardChampionshipsProvider = FutureProvider.autoDispose
+    .family<List<ChampionshipDetails>, String>((ref, groupId) async {
+  if (!AppConstants.championshipsEnabled || groupId.isEmpty) return const [];
+  const priority = [
+    ChampionshipStatus.inProgress,
+    ChampionshipStatus.postGame,
+    ChampionshipStatus.teamDraw,
+    ChampionshipStatus.acceptation,
+    ChampionshipStatus.created,
+  ];
+  final dataSource = ref.watch(championshipDataSourceProvider);
+  final active = (await dataSource.fetchAll(groupId))
+      .where((item) => priority.contains(item.status))
+      .toList()
+    ..sort((a, b) {
+      final byStatus =
+          priority.indexOf(a.status).compareTo(priority.indexOf(b.status));
+      return byStatus != 0 ? byStatus : a.playedAt.compareTo(b.playedAt);
+    });
+  return Future.wait([
+    for (final item in active) dataSource.fetchById(groupId, item.id),
+  ]);
+});
+
 class ChampionshipListState {
   const ChampionshipListState({
     this.loading = false,
