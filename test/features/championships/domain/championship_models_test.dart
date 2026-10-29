@@ -111,7 +111,7 @@ void main() {
   test('resumo traduz regras em linguagem simples', () {
     expect(
       championshipRulesSummary(ChampionshipRules.defaults()),
-      'Conta como 1 partida · 1º vitória, 2º empate, 3º derrota · '
+      'Conta como uma única partida · 1º vitória, 2º empate, 3º derrota · '
       '1 MVP do campeonato',
     );
   });

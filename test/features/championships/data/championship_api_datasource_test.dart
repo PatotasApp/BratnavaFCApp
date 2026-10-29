@@ -80,7 +80,7 @@ final _details = {
   'status': 3,
   'rules': _rules,
   'rulesLocked': true,
-  'ruleBadges': ['Conta como 1 partida', '1º V · 2º E · 3º D'],
+  'ruleBadges': ['Conta como uma única partida', '1º V · 2º E · 3º D'],
   'players': [
     {
       'playerId': 'p1',
@@ -192,7 +192,7 @@ void main() {
             'gameCount': 7,
             'championTeamName': 'Azul',
             'championTeamColorHex': '#2563EB',
-            'ruleBadges': ['Conta como 1 partida'],
+            'ruleBadges': ['Conta como uma única partida'],
           },
         ]),
       ),

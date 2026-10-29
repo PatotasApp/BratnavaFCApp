@@ -862,9 +862,11 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
 
 List<String> buildChampionshipRuleBadges(ChampionshipRules rules) {
   final history = switch (rules.historyMode) {
-    ChampionshipHistoryMode.consolidated => 'Conta como 1 partida',
-    ChampionshipHistoryMode.separateGames => 'Jogos separados',
-    ChampionshipHistoryMode.championshipOnly => 'Só no campeonato',
+    ChampionshipHistoryMode.consolidated => 'Conta como uma única partida',
+    ChampionshipHistoryMode.separateGames =>
+      'Todas as partidas vão pro histórico',
+    ChampionshipHistoryMode.championshipOnly =>
+      'Não vai pro histórico das partidas',
   };
   final result = switch (rules.resultMode) {
     ChampionshipResultMode.perGame => 'Resultado de cada jogo',

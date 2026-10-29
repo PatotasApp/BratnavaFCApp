@@ -54,7 +54,8 @@ void main() {
   testWidgets('visão geral só com o resumo por extenso', (tester) async {
     await pump(tester, 'championship-0');
 
-    expect(find.textContaining('Conta como 1 partida ·'), findsOneWidget);
+    expect(
+        find.textContaining('Conta como uma única partida ·'), findsOneWidget);
     expect(find.text('MVP do campeonato'), findsNothing);
     await unmount(tester);
   });

@@ -528,7 +528,11 @@ class _ChampionshipWizardPageState
         isExpanded: true,
         items: [
           for (final item in values)
-            DropdownMenuItem(value: item, child: Text(text(item))),
+            DropdownMenuItem(
+              value: item,
+              // Rótulos longos (ex.: histórico) não estouram em telas estreitas.
+              child: Text(text(item), overflow: TextOverflow.ellipsis),
+            ),
         ],
         onChanged: (item) {
           if (item != null) onChanged(item);
@@ -602,9 +606,11 @@ class _ChampionshipWizardPageState
 }
 
 String _historyLabel(ChampionshipHistoryMode value) => switch (value) {
-      ChampionshipHistoryMode.consolidated => 'Conta como 1 partida',
-      ChampionshipHistoryMode.separateGames => 'Jogos separados',
-      ChampionshipHistoryMode.championshipOnly => 'Só no campeonato',
+      ChampionshipHistoryMode.consolidated => 'Conta como uma única partida',
+      ChampionshipHistoryMode.separateGames =>
+        'Todas as partidas vão pro histórico',
+      ChampionshipHistoryMode.championshipOnly =>
+        'Não vai pro histórico das partidas',
     };
 
 String _resultLabel(ChampionshipResultMode value) => switch (value) {
