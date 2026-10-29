@@ -325,8 +325,17 @@ class _ChampionshipDrawPanelState extends ConsumerState<ChampionshipDrawPanel> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final color in colors)
+                for (final color in freeTeamColors(
+                  colors,
+                  current: _colorIds.length > team ? _colorIds[team] : null,
+                  takenByOthers: {
+                    for (var other = 0; other < _colorIds.length; other++)
+                      if (other != team && _colorIds[other] != null)
+                        _colorIds[other]!,
+                  },
+                ))
                   ChoiceChip(
+                    key: ValueKey('team-$team-color-${color.id}'),
                     avatar: _Dot(hex: color.hexValue),
                     label: Text(color.name),
                     selected:
@@ -462,6 +471,19 @@ class _ChampionshipDrawPanelState extends ConsumerState<ChampionshipDrawPanel> {
     return null;
   }
 }
+
+/// Cores que um time pode escolher: as ativas que nenhum outro time usa, mais
+/// a cor atual dele (a API recusa cor repetida).
+List<TeamColor> freeTeamColors(
+  List<TeamColor> colors, {
+  required String? current,
+  required Set<String> takenByOthers,
+}) =>
+    colors
+        .where((color) =>
+            color.id == current ||
+            (color.isActive && !takenByOthers.contains(color.id)))
+        .toList();
 
 class _GoalkeepersCard extends StatelessWidget {
   const _GoalkeepersCard({

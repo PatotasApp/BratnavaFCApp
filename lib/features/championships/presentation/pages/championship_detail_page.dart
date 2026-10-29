@@ -776,8 +776,14 @@ class _TeamsSectionState extends ConsumerState<_TeamsSection> {
                       trailing: _canEditTeams
                           ? IconButton(
                               tooltip: 'Editar nome e cor',
-                              onPressed: () =>
-                                  _editTeam(context, team, widget.notifier),
+                              onPressed: () => _editTeam(
+                                  context, team, widget.notifier,
+                                  takenByOthers: {
+                                    for (final other in details.teams)
+                                      if (other.id != team.id &&
+                                          other.colorId != null)
+                                        other.colorId!,
+                                  }),
                               icon: const Icon(Icons.edit_outlined),
                             )
                           : null,
@@ -1115,8 +1121,9 @@ void _showMessage(BuildContext context, String message) =>
 Future<void> _editTeam(
   BuildContext context,
   ChampionshipTeam team,
-  ChampionshipDetailsNotifier notifier,
-) async {
+  ChampionshipDetailsNotifier notifier, {
+  required Set<String> takenByOthers,
+}) async {
   final controller = TextEditingController(text: team.name);
   String? colorId = team.colorId;
   final saved = await showDialog<bool>(
@@ -1126,9 +1133,12 @@ Future<void> _editTeam(
         final colorsAsync = ref.watch(teamColorsProvider(notifier.groupId));
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            final colors = (colorsAsync.valueOrNull ?? const <TeamColor>[])
-                .where((color) => color.isActive || color.id == colorId)
-                .toList();
+            // Só as cores livres, mais a atual deste time e "Sem cor".
+            final colors = freeTeamColors(
+              colorsAsync.valueOrNull ?? const <TeamColor>[],
+              current: team.colorId,
+              takenByOthers: takenByOthers,
+            );
             final known =
                 colorId == null || colors.any((color) => color.id == colorId);
             return AlertDialog(
