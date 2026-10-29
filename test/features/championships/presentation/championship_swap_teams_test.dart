@@ -59,7 +59,12 @@ void main() {
                   playerIds: const ['b1', 'b2'],
                   isGoalkeeper: (id) => id == 'b1'),
             ],
-            playerName: (id) => 'Jogador $id',
+            playerName: (id) => const {
+              'a1': 'Ana Lima',
+              'a2': 'Bia Souza',
+              'b1': 'Caio Reis',
+              'b2': 'Davi Melo',
+            }[id]!,
             icons: GroupIcons.defaults,
             enabled: true,
             onSwap: (first, second) async {
@@ -71,30 +76,30 @@ void main() {
       ),
     ));
 
-    await tester.tap(find.text('Jogador a2'));
+    await tester.tap(find.byKey(const ValueKey('field-pin-a2')));
     await tester.pumpAndSettle();
     expect(
-        find.text('Toque num jogador de outro time para trocar com Jogador a2'),
+        find.text('Toque num jogador de outro time para trocar com Bia Souza'),
         findsOneWidget);
     expect(find.byKey(const ValueKey('swap-target-b1')), findsOneWidget);
     expect(find.byKey(const ValueKey('swap-target-a1')), findsNothing);
 
     // Mesmo time: só muda a seleção.
-    await tester.tap(find.text('Jogador a1'));
+    await tester.tap(find.byKey(const ValueKey('field-pin-a1')));
     await tester.pumpAndSettle();
     expect(swaps, isEmpty);
     expect(
-        find.text('Toque num jogador de outro time para trocar com Jogador a1'),
+        find.text('Toque num jogador de outro time para trocar com Ana Lima'),
         findsOneWidget);
 
-    await tester.tap(find.text('Jogador b2'));
+    await tester.tap(find.byKey(const ValueKey('field-pin-b2')));
     await tester.pumpAndSettle();
     expect(swaps, [('a1', 'b2')]);
-    expect(find.text('Jogador a1 ⇄ Jogador b2'), findsOneWidget);
+    expect(find.text('Ana Lima ⇄ Davi Melo'), findsOneWidget);
     expect(find.byKey(const ValueKey('swap-banner')), findsNothing);
 
     // Cancelar desfaz a seleção.
-    await tester.tap(find.text('Jogador b1'));
+    await tester.tap(find.byKey(const ValueKey('field-pin-b1')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Cancelar'));
     await tester.pumpAndSettle();

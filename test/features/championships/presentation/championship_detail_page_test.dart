@@ -117,9 +117,9 @@ void main() {
 
     // Troca 2 jogadores de times diferentes antes de usar a opção.
     final firstTeam =
-        find.byKey(const ValueKey('swap-player-championship-2-player-1'));
+        find.byKey(const ValueKey('field-pin-championship-2-player-1'));
     final otherTeam =
-        find.byKey(const ValueKey('swap-player-championship-2-player-4'));
+        find.byKey(const ValueKey('field-pin-championship-2-player-4'));
     await tester.tap(firstTeam);
     await tester.pumpAndSettle();
     await tester.tap(otherTeam);

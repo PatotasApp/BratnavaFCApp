@@ -66,6 +66,15 @@ void main() {
     expect(find.text('Seu time: Azul'), findsOneWidget);
     expect(find.text('Ver escalação'), findsOneWidget);
     expect(find.text('Confirmar presença'), findsNothing);
+
+    // "Ver escalação" abre um campo por time (só leitura), com os nomes.
+    await tester.tap(find.text('Ver escalação'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('dashboard-field-championship-2-team-1')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('dashboard-field-championship-2-team-3')),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('em andamento: ao vivo com placar e jogo atual', (tester) async {

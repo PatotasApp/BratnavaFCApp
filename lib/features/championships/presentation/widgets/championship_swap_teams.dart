@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
+import 'championship_team_field.dart';
 
 /// Um time na lista de troca.
 class SwapTeam {
@@ -22,10 +23,10 @@ class SwapTeam {
   final Widget? trailing;
 }
 
-/// Times com troca de 2 jogadores, igual na etapa Times e nas opções do sorteio:
-/// toca num jogador (fica destacado e aparece a faixa fixa), os do mesmo time
-/// ficam esmaecidos e não trocam (tocar num deles só muda a seleção), os dos
-/// outros times ganham o ⇄. Tocar de novo no mesmo desmarca.
+/// Times em campos com troca de 2 jogadores, igual na etapa Times e nas opções
+/// do sorteio: toca num jogador no campo (fica destacado e aparece a faixa
+/// fixa), os do mesmo time ficam esmaecidos e não trocam (tocar num deles só
+/// muda a seleção), os dos outros times ganham o ⇄. Tocar de novo desmarca.
 class SwappableTeams extends StatefulWidget {
   const SwappableTeams({
     super.key,
@@ -117,65 +118,86 @@ class _SwappableTeamsState extends State<SwappableTeams> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final selectedTeam = _selected == null ? null : _teamOf(_selected!);
+    // Campos em grade de 2 (1 em tela estreita); com número ímpar de times o
+    // último fica centralizado.
+    return LayoutBuilder(
+      builder: (context, box) {
+        const gap = 12.0;
+        final width =
+            box.maxWidth >= 300 ? (box.maxWidth - gap) / 2 : box.maxWidth;
+        return Wrap(
+          alignment: WrapAlignment.center,
+          spacing: gap,
+          runSpacing: 16,
+          children: [
+            for (final team in widget.teams)
+              SizedBox(
+                width: width,
+                child: _teamCell(context, team, selectedTeam),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _teamCell(BuildContext context, SwapTeam team, String? selectedTeam) {
+    final textTheme = Theme.of(context).textTheme;
+    final others = selectedTeam != null && selectedTeam != team.id;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final team in widget.teams) ...[
-          Padding(
-            padding: const EdgeInsets.only(top: 10, bottom: 4),
-            child: Row(
-              children: [
-                _Dot(hex: team.colorHex),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('${team.name} · ${team.playerIds.length}',
-                          style: Theme.of(context).textTheme.titleSmall),
-                      if (team.subtitle != null)
-                        Text(team.subtitle!,
-                            style: Theme.of(context).textTheme.bodySmall),
-                    ],
+        Row(
+          children: [
+            _Dot(hex: team.colorHex),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${team.name} · ${team.playerIds.length}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.titleSmall,
                   ),
-                ),
-                if (team.trailing != null) team.trailing!,
-              ],
-            ),
-          ),
-          if (team.playerIds.isEmpty)
-            const Padding(
-              padding: EdgeInsets.only(left: 24, bottom: 6),
-              child: Text('Sem jogadores ainda.'),
-            ),
-          for (final playerId in team.playerIds)
-            Opacity(
-              // Mesmo time do selecionado: esmaecido, não troca.
-              opacity:
-                  selectedTeam == team.id && _selected != playerId ? .45 : 1,
-              child: ListTile(
-                key: ValueKey('swap-player-$playerId'),
-                dense: true,
-                selected: _selected == playerId,
-                selectedTileColor: scheme.primaryContainer,
-                onTap: widget.enabled ? () => _tap(playerId) : null,
-                title: PlayerNameWithIcon(
-                  name: widget.playerName(playerId),
-                  icons: widget.icons,
-                  isGoalkeeper: team.isGoalkeeper(playerId),
-                ),
-                trailing: _selected == playerId
-                    ? const Icon(Icons.check_circle_rounded)
-                    : selectedTeam != null && selectedTeam != team.id
-                        ? Icon(Icons.swap_horiz_rounded,
-                            key: ValueKey('swap-target-$playerId'),
-                            color: scheme.primary)
-                        : null,
+                  if (team.subtitle != null)
+                    Text(team.subtitle!, style: textTheme.bodySmall),
+                ],
               ),
             ),
-        ],
+            if (team.trailing != null) team.trailing!,
+          ],
+        ),
+        const SizedBox(height: 6),
+        if (team.playerIds.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 6),
+            child: Text('Sem jogadores ainda.'),
+          ),
+        ChampionshipTeamField(
+          key: ValueKey('swap-field-${team.id}'),
+          teamName: team.name,
+          teamColorHex: team.colorHex,
+          showHeader: false,
+          icons: widget.icons,
+          players: [
+            for (final id in team.playerIds)
+              FieldPlayerInfo(
+                id: id,
+                name: widget.playerName(id),
+                isGoalkeeper: team.isGoalkeeper(id),
+              ),
+          ],
+          selectedPlayerId: _selected,
+          // Outros times: alvo da troca (⇄). Mesmo time: esmaecido.
+          swapTargets: others ? team.playerIds.toSet() : const {},
+          faded: selectedTeam == team.id
+              ? team.playerIds.where((id) => id != _selected).toSet()
+              : const {},
+          onTapPlayer: widget.enabled ? _tap : null,
+        ),
       ],
     );
   }

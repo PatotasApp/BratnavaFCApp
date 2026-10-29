@@ -95,6 +95,11 @@ class ChampionshipTeamField extends StatelessWidget {
     required this.players,
     required this.icons,
     this.maxWidth = 260,
+    this.showHeader = true,
+    this.selectedPlayerId,
+    this.swapTargets = const {},
+    this.faded = const {},
+    this.onTapPlayer,
   });
 
   final String teamName;
@@ -102,6 +107,16 @@ class ChampionshipTeamField extends StatelessWidget {
   final List<FieldPlayerInfo> players;
   final GroupIcons icons;
   final double maxWidth;
+
+  /// Cor e nome do time no topo (quem já mostra o cabeçalho pode esconder).
+  final bool showHeader;
+
+  /// Troca no próprio campo: o selecionado fica destacado, os alvos ganham o
+  /// ⇄ e os do mesmo time ficam esmaecidos.
+  final String? selectedPlayerId;
+  final Set<String> swapTargets;
+  final Set<String> faded;
+  final ValueChanged<String>? onTapPlayer;
 
   static Color colorOf(String? hex) {
     final value = hex == null
@@ -121,29 +136,31 @@ class ChampionshipTeamField extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration:
-                      BoxDecoration(color: color, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    teamName,
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.labelLarge
-                        ?.copyWith(fontWeight: FontWeight.w800),
+            if (showHeader) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration:
+                        BoxDecoration(color: color, shape: BoxShape.circle),
                   ),
-                ),
-                const SizedBox(width: 4),
-                Text('${players.length}j', style: textTheme.bodySmall),
-              ],
-            ),
-            const SizedBox(height: 6),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      teamName,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.labelLarge
+                          ?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text('${players.length}j', style: textTheme.bodySmall),
+                ],
+              ),
+              const SizedBox(height: 6),
+            ],
             Semantics(
               label: 'Campo do $teamName',
               child: AspectRatio(
@@ -167,6 +184,12 @@ class ChampionshipTeamField extends StatelessWidget {
                             color: color,
                             icons: icons,
                             pinSize: (box.maxWidth * .15).clamp(24.0, 34.0),
+                            selected: players[i].id == selectedPlayerId,
+                            swapTarget: swapTargets.contains(players[i].id),
+                            faded: faded.contains(players[i].id),
+                            onTap: onTapPlayer == null
+                                ? null
+                                : () => onTapPlayer!(players[i].id),
                           ),
                       ],
                     ),
@@ -189,6 +212,10 @@ class _Pin extends StatelessWidget {
     required this.color,
     required this.icons,
     required this.pinSize,
+    this.selected = false,
+    this.swapTarget = false,
+    this.faded = false,
+    this.onTap,
   });
 
   final FieldPlayerInfo player;
@@ -196,6 +223,10 @@ class _Pin extends StatelessWidget {
   final Color color;
   final GroupIcons icons;
   final double pinSize;
+  final bool selected;
+  final bool swapTarget;
+  final bool faded;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -206,59 +237,87 @@ class _Pin extends StatelessWidget {
       top: center.dy - pinSize / 2,
       width: labelWidth,
       child: Opacity(
-        opacity: player.dimmed ? .35 : 1,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: pinSize,
-              height: pinSize,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: light
-                      ? Colors.black.withValues(alpha: .25)
-                      : Colors.white.withValues(alpha: .9),
-                  width: 2,
-                ),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black26, blurRadius: 4),
-                ],
-              ),
-              child: player.isGoalkeeper
-                  ? renderGroupIcon(icons.goalkeeper, size: pinSize * .55)
-                  : Text(
-                      fieldInitials(player.name),
-                      style: TextStyle(
-                        color: light ? const Color(0xFF0F172A) : Colors.white,
-                        fontSize: pinSize * .32,
-                        fontWeight: FontWeight.w900,
+        opacity: player.dimmed || faded ? .35 : 1,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    width: pinSize,
+                    height: pinSize,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: selected
+                            ? const Color(0xFFF59E0B)
+                            : light
+                                ? Colors.black.withValues(alpha: .25)
+                                : Colors.white.withValues(alpha: .9),
+                        width: selected ? 3 : 2,
+                      ),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black26, blurRadius: 4),
+                      ],
+                    ),
+                    child: player.isGoalkeeper
+                        ? renderGroupIcon(icons.goalkeeper, size: pinSize * .55)
+                        : Text(
+                            fieldInitials(player.name),
+                            style: TextStyle(
+                              color: light
+                                  ? const Color(0xFF0F172A)
+                                  : Colors.white,
+                              fontSize: pinSize * .32,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                  ),
+                  if (swapTarget)
+                    Positioned(
+                      right: -6,
+                      top: -6,
+                      child: Container(
+                        key: ValueKey('swap-target-${player.id}'),
+                        padding: const EdgeInsets.all(1),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.swap_horiz_rounded,
+                            size: 13, color: Color(0xFF2563EB)),
                       ),
                     ),
-            ),
-            const SizedBox(height: 2),
-            // Nome sempre visível: só as iniciais não dizem quem é.
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: .6),
-                borderRadius: BorderRadius.circular(4),
+                ],
               ),
-              child: Text(
-                fieldFirstName(player.name),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  height: 1.1,
+              const SizedBox(height: 2),
+              // Nome sempre visível: só as iniciais não dizem quem é.
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: .6),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  fieldFirstName(player.name),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    height: 1.1,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

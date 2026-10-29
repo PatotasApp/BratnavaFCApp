@@ -23,6 +23,7 @@ import '../../../championships/presentation/providers/championship_provider.dart
 import '../../../championships/presentation/pages/championship_detail_page.dart'
     show nextMatchupDuringGame;
 import '../../../championships/presentation/widgets/championship_stage_header.dart';
+import '../../../championships/presentation/widgets/championship_team_field.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../matches/domain/entities/match_models.dart';
 import '../../../matches/presentation/providers/match_provider.dart';
@@ -2427,57 +2428,43 @@ class _ChampionshipTeamsList extends StatelessWidget {
 
   const _ChampionshipTeamsList({required this.details, required this.icons});
 
+  /// Um campo por time (só leitura), em grade de 2; com número ímpar de times
+  /// o último fica centralizado.
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final team in details.teams)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: _ColorDot(
-                      color: _hexColor(team.colorHex), label: team.name),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  // Goleiro e jogador com os ícones das configurações da patota.
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 2,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(
-                        team.name,
-                        style: TextStyle(
-                          color: context.appTextPrimary,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                        ),
+    return LayoutBuilder(
+      builder: (context, box) {
+        const gap = 12.0;
+        final width =
+            box.maxWidth >= 300 ? (box.maxWidth - gap) / 2 : box.maxWidth;
+        return Wrap(
+          alignment: WrapAlignment.center,
+          spacing: gap,
+          runSpacing: 14,
+          children: [
+            for (final team in details.teams)
+              SizedBox(
+                width: width,
+                child: ChampionshipTeamField(
+                  key: ValueKey('dashboard-field-${team.id}'),
+                  teamName: team.name,
+                  teamColorHex: team.colorHex,
+                  icons: icons,
+                  players: [
+                    for (final id in team.playerIds)
+                      FieldPlayerInfo(
+                        id: id,
+                        name: details.playerById(id)?.name ?? 'Jogador',
+                        isGoalkeeper:
+                            details.playerById(id)?.isGoalkeeper == true,
+                        dimmed: details.playerById(id)?.didNotPlay == true,
                       ),
-                      for (final id in team.playerIds)
-                        PlayerNameWithIcon(
-                          name: details.playerById(id)?.name ?? 'Jogador',
-                          icons: icons,
-                          isGoalkeeper:
-                              details.playerById(id)?.isGoalkeeper == true,
-                          iconSize: 12,
-                          style: TextStyle(
-                            color: context.appTextSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                    ],
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-      ],
+              ),
+          ],
+        );
+      },
     );
   }
 }
