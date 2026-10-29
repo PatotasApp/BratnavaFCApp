@@ -69,6 +69,61 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     }
   }
 
+  Widget _agenda({
+    required List<UpcomingMatchDetails> matches,
+    required bool matchesLoading,
+    required bool matchesError,
+    required List<ChampionshipDetails> championships,
+    required String groupId,
+    required String playerId,
+  }) {
+    Widget matchBand(UpcomingMatchDetails? match) => _NextMatchBand(
+          key: ValueKey('match-${match?.header.matchId}'),
+          match: match,
+          loading: match == null && matchesLoading,
+          error: match == null && matchesError,
+          playerId: playerId,
+          responding: match != null &&
+              _respondingMatches.contains(match.header.matchId),
+          onAccept: match == null
+              ? null
+              : () => _respondToMatch(
+                  match: match, playerId: playerId, accept: true),
+          onDecline: match == null
+              ? null
+              : () => _respondToMatch(
+                  match: match, playerId: playerId, accept: false),
+          onOpen: () => context.go(
+            match == null
+                ? '/app/matches'
+                : '/app/matches?matchId=${match.header.matchId}',
+          ),
+        );
+
+    final items = <({DateTime at, Widget card})>[
+      for (final match in matches)
+        (at: match.header.playedAt, card: matchBand(match)),
+      for (final championship in championships)
+        (
+          at: championship.playedAt,
+          card: ChampionshipDashboardBand(
+            key: ValueKey('championship-${championship.id}'),
+            details: championship,
+            groupId: groupId,
+            playerId: playerId,
+          ),
+        ),
+    ];
+    final ordered = agendaByDate(items);
+
+    if (ordered.isEmpty) return matchBand(null);
+    if (ordered.length == 1) return ordered.single;
+    return DashboardAgendaCarousel(
+      key: const ValueKey('dashboard-agenda'),
+      children: ordered,
+    );
+  }
+
   Future<void> _respondToMatch({
     required UpcomingMatchDetails match,
     required String playerId,
@@ -252,7 +307,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final summary = historyAsync.valueOrNull == null
         ? null
         : PlayerHistorySummary.from(historyAsync.valueOrNull!);
-    final nextMatch = matchesAsync.valueOrNull?.firstOrNull;
     final pendingPayments = paymentAsync.valueOrNull == null
         ? null
         : paymentAsync.valueOrNull!.pendingMonthlyCount +
@@ -277,42 +331,16 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             loading: historyAsync.isLoading,
             onOpen: () => context.go('/app/player-history'),
           ),
-          for (final championship in championships) ...[
-            const SizedBox(height: 12),
-            ChampionshipDashboardBand(
-              key: ValueKey('championship-${championship.id}'),
-              details: championship,
-              groupId: groupId,
-              playerId: activePlayer.playerId,
-            ),
-          ],
           const SizedBox(height: 12),
-          _NextMatchBand(
-            match: nextMatch,
-            loading: matchesAsync.isLoading,
-            error: matchesAsync.hasError,
+          // Partidas e campeonatos no mesmo carrossel, do mais próximo para o
+          // mais distante. Com um item só, o card aparece sozinho.
+          _agenda(
+            matches: matchesAsync.valueOrNull ?? const [],
+            matchesLoading: matchesAsync.isLoading,
+            matchesError: matchesAsync.hasError,
+            championships: championships,
+            groupId: groupId,
             playerId: activePlayer.playerId,
-            responding: nextMatch != null &&
-                _respondingMatches.contains(nextMatch.header.matchId),
-            onAccept: nextMatch == null
-                ? null
-                : () => _respondToMatch(
-                      match: nextMatch,
-                      playerId: activePlayer.playerId,
-                      accept: true,
-                    ),
-            onDecline: nextMatch == null
-                ? null
-                : () => _respondToMatch(
-                      match: nextMatch,
-                      playerId: activePlayer.playerId,
-                      accept: false,
-                    ),
-            onOpen: () => context.go(
-              nextMatch == null
-                  ? '/app/matches'
-                  : '/app/matches?matchId=${nextMatch.header.matchId}',
-            ),
           ),
           const SizedBox(height: 12),
           _ActionGrid(
@@ -709,6 +737,7 @@ class _NextMatchBand extends StatefulWidget {
   final VoidCallback onOpen;
 
   const _NextMatchBand({
+    super.key,
     required this.match,
     required this.loading,
     required this.error,
@@ -2451,4 +2480,95 @@ Color _hexColor(String? hex) {
       ? null
       : int.tryParse('FF${hex.replaceFirst('#', '')}', radix: 16);
   return value == null ? AppColors.slate400 : Color(value);
+}
+
+/// Ordem do carrossel: do mais próximo para o mais distante.
+List<T> agendaByDate<T>(List<({DateTime at, T card})> items) =>
+    ([...items]..sort((a, b) => a.at.compareTo(b.at)))
+        .map((item) => item.card)
+        .toList();
+
+/// Carrossel do topo do dashboard: um card por vez, com a altura do card
+/// mostrado (os cards têm tamanhos diferentes), deslize para os lados, setas e
+/// "1 de N".
+class DashboardAgendaCarousel extends StatefulWidget {
+  final List<Widget> children;
+
+  const DashboardAgendaCarousel({super.key, required this.children});
+
+  @override
+  State<DashboardAgendaCarousel> createState() =>
+      _DashboardAgendaCarouselState();
+}
+
+class _DashboardAgendaCarouselState extends State<DashboardAgendaCarousel> {
+  int _index = 0;
+
+  void _go(int delta) {
+    final next = (_index + delta).clamp(0, widget.children.length - 1);
+    if (next != _index) setState(() => _index = next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = widget.children.length;
+    final index = _index.clamp(0, count - 1);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onHorizontalDragEnd: (details) {
+            final velocity = details.primaryVelocity ?? 0;
+            if (velocity < -200) _go(1);
+            if (velocity > 200) _go(-1);
+          },
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            alignment: Alignment.topCenter,
+            child: KeyedSubtree(
+              key: ValueKey('agenda-$index'),
+              child: widget.children[index],
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              tooltip: 'Anterior',
+              visualDensity: VisualDensity.compact,
+              onPressed: index > 0 ? () => _go(-1) : null,
+              icon: const Icon(Icons.chevron_left_rounded),
+            ),
+            for (var i = 0; i < count; i++)
+              Container(
+                width: i == index ? 18 : 7,
+                height: 7,
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                decoration: BoxDecoration(
+                  color: i == index
+                      ? AppColors.accent
+                      : context.appTextSecondary.withValues(alpha: .35),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+            const SizedBox(width: 6),
+            Text(
+              '${index + 1} de $count',
+              key: const ValueKey('agenda-position'),
+              style: TextStyle(color: context.appTextSecondary, fontSize: 12),
+            ),
+            IconButton(
+              tooltip: 'Próximo',
+              visualDensity: VisualDensity.compact,
+              onPressed: index < count - 1 ? () => _go(1) : null,
+              icon: const Icon(Icons.chevron_right_rounded),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
