@@ -294,12 +294,11 @@ class _MoreSheet extends ConsumerWidget {
     _MoreGroup(
       label: 'Organização',
       items: [
-        if (AppConstants.championshipsEnabled)
-          _MoreItem(
-            icon: Icons.emoji_events_outlined,
-            label: 'Campeonatos',
-            path: '/app/championships',
-          ),
+        _MoreItem(
+          icon: Icons.emoji_events_outlined,
+          label: 'Campeonatos',
+          path: '/app/championships',
+        ),
         _MoreItem(
           icon: Icons.calendar_month_outlined,
           label: 'Calendário',

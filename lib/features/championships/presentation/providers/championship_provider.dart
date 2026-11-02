@@ -66,7 +66,7 @@ final championshipGroupPlayersProvider = FutureProvider.autoDispose
 /// depois a etapa mais adiantada; empate pela data.
 final dashboardChampionshipsProvider = FutureProvider.autoDispose
     .family<List<ChampionshipDetails>, String>((ref, groupId) async {
-  if (!AppConstants.championshipsEnabled || groupId.isEmpty) return const [];
+  if (groupId.isEmpty) return const [];
   const priority = [
     ChampionshipStatus.inProgress,
     ChampionshipStatus.postGame,
@@ -452,6 +452,27 @@ class ChampionshipDetailsNotifier
           timeSeconds: timeSeconds,
         ),
         'Falha ao registrar gol.',
+      );
+  Future<bool> updateGoal({
+    required String gameId,
+    required String goalId,
+    required String scorerPlayerId,
+    String? assistPlayerId,
+    bool isOwnGoal = false,
+    int? timeSeconds,
+  }) =>
+      _mutate(
+        () => _dataSource.updateGoal(
+          groupId,
+          championshipId,
+          gameId,
+          goalId,
+          scorerPlayerId: scorerPlayerId,
+          assistPlayerId: assistPlayerId,
+          isOwnGoal: isOwnGoal,
+          timeSeconds: timeSeconds,
+        ),
+        'Falha ao editar gol.',
       );
   Future<bool> deleteGoal(String gameId, String goalId) => _mutate(
         () => _dataSource.deleteGoal(

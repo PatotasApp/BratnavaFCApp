@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../../../core/api/api_response.dart';
-import '../../../../core/constants/app_constants.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../domain/entities/current_match.dart';
 import '../../domain/entities/my_player.dart';
@@ -74,7 +73,7 @@ class DashboardRemoteDataSource {
         queryParameters: {
           'playerId': playerId,
           'take': take,
-          if (AppConstants.championshipsEnabled) 'includeChampionships': true,
+          'includeChampionships': true,
         },
       );
       return unwrapList(res.data)

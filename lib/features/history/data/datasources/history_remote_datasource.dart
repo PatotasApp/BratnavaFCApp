@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../../../core/api/api_response.dart';
-import '../../../../core/constants/app_constants.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../domain/entities/history_match.dart';
 import '../../domain/entities/match_details.dart';
@@ -28,7 +27,7 @@ class HistoryRemoteDataSource {
           'page': page,
           'pageSize': pageSize,
           if (playerId != null) 'playerId': playerId,
-          if (AppConstants.championshipsEnabled) 'includeChampionships': true,
+          'includeChampionships': true,
         },
       );
       final items = unwrapList(res.data)

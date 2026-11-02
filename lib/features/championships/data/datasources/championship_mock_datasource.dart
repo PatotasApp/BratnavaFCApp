@@ -581,6 +581,27 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
           .firstWhere((game) => game['id'] == gameId);
 
   @override
+  Future<void> updateGoal(
+    String groupId,
+    String id,
+    String gameId,
+    String goalId, {
+    required String scorerPlayerId,
+    String? assistPlayerId,
+    required bool isOwnGoal,
+    int? timeSeconds,
+  }) async {
+    await deleteGoal(groupId, id, gameId, goalId);
+    await addGoal(groupId, id, gameId,
+        scorerPlayerId: scorerPlayerId,
+        assistPlayerId: assistPlayerId,
+        isOwnGoal: isOwnGoal,
+        timeSeconds: timeSeconds);
+    final goals = _game(_require(id), gameId)['goals'] as List<dynamic>;
+    (goals.last as Map<String, dynamic>)['id'] = goalId;
+  }
+
+  @override
   Future<void> deleteGoal(
     String groupId,
     String id,
