@@ -24,6 +24,7 @@ class MatchReplaysSection extends StatefulWidget {
   final bool isDark;
 
   const MatchReplaysSection({
+    super.key,
     required this.replays,
     required this.groupId,
     required this.accessToken,
@@ -537,18 +538,39 @@ class _ReplayVideoThumb extends StatefulWidget {
   State<_ReplayVideoThumb> createState() => _ReplayVideoThumbState();
 }
 
+/// Miniatura feita com um player parado num quadro do vídeo. Cada player segura
+/// um decodificador de 2560×720 e dezenas de MB; com vários abertos o Android
+/// encerra o app por falta de memória. Por isso: no máximo [_maxLiveControllers]
+/// ao mesmo tempo, só para as miniaturas que estão na tela, e o player é
+/// liberado quando a miniatura sai da tela (as que estão esperando assumem a vaga).
 class _ReplayVideoThumbState extends State<_ReplayVideoThumb> {
-  static const int _maxLiveControllers = 4;
+  static const int _maxLiveControllers = 2;
   static int _liveControllers = 0;
+
+  /// Avisa as miniaturas que ficaram esperando quando uma vaga é liberada.
+  static final ValueNotifier<int> _slotReleased = ValueNotifier(0);
 
   VideoPlayerController? _controller;
   bool _ready = false;
   bool _reservedControllerSlot = false;
+  bool _visible = false;
+  ScrollPosition? _scroll;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _slotReleased.addListener(_onSlotReleased);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkVisibility());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final scroll = Scrollable.maybeOf(context)?.position;
+    if (!identical(scroll, _scroll)) {
+      _scroll?.removeListener(_checkVisibility);
+      _scroll = scroll?..addListener(_checkVisibility);
+    }
   }
 
   @override
@@ -557,12 +579,41 @@ class _ReplayVideoThumbState extends State<_ReplayVideoThumb> {
     if (oldWidget.url != widget.url) {
       _disposeController();
       _ready = false;
-      _load();
+      if (_visible) _load();
     }
   }
 
+  /// Está (ao menos em parte) dentro da tela?
+  bool _isOnScreen() {
+    if (!mounted) return false;
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return false;
+    final rect = box.localToGlobal(Offset.zero) & box.size;
+    final screen = MediaQuery.sizeOf(context);
+    return rect.bottom > 0 &&
+        rect.top < screen.height &&
+        rect.right > 0 &&
+        rect.left < screen.width;
+  }
+
+  void _checkVisibility() {
+    final visible = _isOnScreen();
+    if (visible == _visible) return;
+    _visible = visible;
+    if (visible) {
+      _load();
+    } else if (_controller != null) {
+      _disposeController();
+      if (mounted) setState(() => _ready = false);
+    }
+  }
+
+  void _onSlotReleased() {
+    if (_visible && _controller == null) _load();
+  }
+
   Future<void> _load() async {
-    if (_liveControllers >= _maxLiveControllers) return;
+    if (_controller != null || _liveControllers >= _maxLiveControllers) return;
     _liveControllers++;
     _reservedControllerSlot = true;
 
@@ -581,11 +632,11 @@ class _ReplayVideoThumbState extends State<_ReplayVideoThumb> {
         setState(() => _ready = true);
       }
     } catch (_) {
-      await controller.dispose();
-      if (mounted && identical(_controller, controller)) {
+      if (identical(_controller, controller)) {
         _controller = null;
+        _releaseControllerSlot();
       }
-      _releaseControllerSlot();
+      await controller.dispose();
     }
   }
 
@@ -593,6 +644,7 @@ class _ReplayVideoThumbState extends State<_ReplayVideoThumb> {
     if (!_reservedControllerSlot) return;
     _reservedControllerSlot = false;
     if (_liveControllers > 0) _liveControllers--;
+    _slotReleased.value++;
   }
 
   void _disposeController() {
@@ -604,6 +656,8 @@ class _ReplayVideoThumbState extends State<_ReplayVideoThumb> {
 
   @override
   void dispose() {
+    _scroll?.removeListener(_checkVisibility);
+    _slotReleased.removeListener(_onSlotReleased);
     _disposeController();
     super.dispose();
   }
