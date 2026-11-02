@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../history/presentation/providers/history_provider.dart';
+import '../../../history/presentation/widgets/match_replays_section.dart';
 import '../../../replays/domain/entities/replay_clip.dart';
-import '../../../replays/presentation/pages/replay_video_player_page.dart';
 import '../../domain/entities/championship_models.dart';
 import '../providers/championship_provider.dart';
 
@@ -14,9 +14,11 @@ import '../providers/championship_provider.dart';
 String championshipCinemaUrl(String championshipId) =>
     '${AppConstants.webUrl}/public/championship/$championshipId/cinema';
 
-/// Vídeos do campeonato separados por jogo; em cada jogo, Gol de cada time e
-/// Jogada. O botão do topo compartilha o modo cinema do campeonato.
-class ChampionshipReplaysSection extends ConsumerWidget {
+/// Vídeos do campeonato separados por jogo, com a mesma seção de vídeos da
+/// partida (miniaturas, filtro e player). Cada jogo é uma partida: os vídeos
+/// vêm da mesma rota de replays da partida, com curtidas e favoritos. O botão
+/// do topo compartilha o modo cinema do campeonato.
+class ChampionshipReplaysSection extends ConsumerStatefulWidget {
   const ChampionshipReplaysSection({
     super.key,
     required this.details,
@@ -27,57 +29,99 @@ class ChampionshipReplaysSection extends ConsumerWidget {
   final String groupId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final replays = ref.watch(championshipReplaysProvider(details.id));
-    final token = ref.watch(idTokenProvider).valueOrNull;
+  ConsumerState<ChampionshipReplaysSection> createState() =>
+      _ChampionshipReplaysSectionState();
+}
+
+class _ChampionshipReplaysSectionState
+    extends ConsumerState<ChampionshipReplaysSection> {
+  String? _gameId;
+
+  @override
+  Widget build(BuildContext context) {
+    final replays = ref.watch(championshipReplaysProvider(widget.details.id));
+    final details = widget.details;
 
     return PrototypeCard(
+      padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.movie_outlined, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text('Vídeos',
-                    style: Theme.of(context).textTheme.titleMedium),
-              ),
-              TextButton.icon(
-                onPressed: () => Share.share(
-                  'Modo cinema · ${details.name}\n'
-                  '${championshipCinemaUrl(details.id)}',
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
+            child: Row(
+              children: [
+                const Icon(Icons.movie_outlined, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('Vídeos',
+                      style: Theme.of(context).textTheme.titleMedium),
                 ),
-                icon: const Icon(Icons.share_outlined, size: 18),
-                label: const Text('Modo cinema'),
-              ),
-            ],
+                TextButton.icon(
+                  onPressed: () => Share.share(
+                    'Modo cinema · ${details.name}\n'
+                    '${championshipCinemaUrl(details.id)}',
+                  ),
+                  icon: const Icon(Icons.share_outlined, size: 18),
+                  label: const Text('Modo cinema'),
+                ),
+              ],
+            ),
           ),
           replays.when(
             loading: () => const Padding(
-              padding: EdgeInsets.all(12),
+              padding: EdgeInsets.all(16),
               child: LinearProgressIndicator(),
             ),
             error: (_, __) => const Padding(
-              padding: EdgeInsets.only(top: 8),
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: Text('Não foi possível carregar os vídeos.'),
             ),
-            data: (data) => data.games.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text('Os vídeos aparecem aqui, separados por jogo.'),
-                  )
-                : Column(
-                    children: [
-                      for (final game in data.games)
-                        _GameReplays(
-                          game: game,
-                          details: details,
-                          groupId: groupId,
-                          token: token,
-                        ),
-                    ],
+            data: (data) {
+              final games = [...data.games]
+                ..sort((a, b) => a.order.compareTo(b.order));
+              if (games.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Text('Os vídeos aparecem aqui, separados por jogo.'),
+                );
+              }
+              final game =
+                  games.where((g) => g.gameId == _gameId).firstOrNull ??
+                      games.first;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (games.length > 1)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: PrototypeSegmented(
+                        items: [for (final g in games) 'Jogo ${g.order}'],
+                        value: 'Jogo ${game.order}',
+                        onChanged: (label) => setState(() => _gameId = games
+                            .firstWhere((g) => 'Jogo ${g.order}' == label)
+                            .gameId),
+                        semanticLabel: 'Jogo do campeonato',
+                      ),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                    child: Text(
+                      'Jogo ${game.order} · ${game.teamAName} '
+                      '${game.teamAGoals ?? 0} × ${game.teamBGoals ?? 0} '
+                      '${game.teamBName}',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
                   ),
+                  _GameReplays(
+                    key: ValueKey(game.gameId),
+                    gameId: game.gameId,
+                    groupId: widget.groupId,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -85,92 +129,64 @@ class ChampionshipReplaysSection extends ConsumerWidget {
   }
 }
 
-class _GameReplays extends StatelessWidget {
-  const _GameReplays({
-    required this.game,
-    required this.details,
-    required this.groupId,
-    required this.token,
-  });
+/// Vídeos de um jogo pela rota de replays da partida, na seção da partida.
+class _GameReplays extends ConsumerStatefulWidget {
+  const _GameReplays({super.key, required this.gameId, required this.groupId});
 
-  final ChampionshipGameReplays game;
-  final ChampionshipDetails details;
+  final String gameId;
   final String groupId;
-  final String? token;
 
-  List<ReplayClip> _asReplayClips() => [
-        for (final clip in game.clips)
-          ReplayClip(
-            clipId: clip.id,
-            matchId: game.gameId,
-            matchDate: details.playedAt.toIso8601String(),
-            matchPlace: details.placeName,
-            videoUrl: clip.url,
-            eventType: clip.eventType,
-            teamName: clip.eventType == 'GolTimeA'
-                ? game.teamAName
-                : clip.eventType == 'GolTimeB'
-                    ? game.teamBName
-                    : null,
-            isLiked: false,
-            isFavorited: false,
-            likeCount: 0,
-            createdAt: clip.recordedAt.toIso8601String(),
-          ),
-      ];
+  @override
+  ConsumerState<_GameReplays> createState() => _GameReplaysState();
+}
 
-  void _open(BuildContext context, ChampionshipReplayClip clip) {
-    final clips = _asReplayClips();
-    final index = game.clips.indexOf(clip);
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      fullscreenDialog: true,
-      builder: (_) => ReplayVideoPlayerPage(
-        clips: clips,
-        initialIndex: index < 0 ? 0 : index,
-        groupId: groupId,
-        accessToken: token,
-      ),
-    ));
+class _GameReplaysState extends ConsumerState<_GameReplays> {
+  List<ReplayClip>? _clips;
+  bool _error = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final clips = await ref
+          .read(historyDsProvider)
+          .fetchMatchReplays(widget.groupId, widget.gameId);
+      if (mounted) setState(() => _clips = clips);
+    } catch (_) {
+      if (mounted) setState(() => _error = true);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final groups = [
-      ('Gol ${game.teamAName}', 'GolTimeA'),
-      ('Gol ${game.teamBName}', 'GolTimeB'),
-      ('Jogada', 'Jogada'),
-    ];
-    return ExpansionTile(
-      tilePadding: EdgeInsets.zero,
-      title: Text('Jogo ${game.order} · ${game.teamAName} '
-          '${game.teamAGoals ?? 0} × ${game.teamBGoals ?? 0} ${game.teamBName}'),
-      subtitle: Text('${game.clips.length} vídeo(s)'),
-      children: [
-        for (final (label, type) in groups) ...[
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 6, bottom: 2),
-              child: Text(label, style: Theme.of(context).textTheme.labelLarge),
-            ),
-          ),
-          if (game.clips.every((c) => c.eventType != type))
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text('Nenhum vídeo.'),
-            ),
-          for (final clip in game.clips.where((c) => c.eventType == type))
-            ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.play_circle_outline_rounded),
-              title: Text(clip.label),
-              subtitle: Text(DateFormat('HH:mm:ss').format(clip.recordedAt)),
-              onTap: clip.url.isEmpty ? null : () => _open(context, clip),
-            ),
-        ],
-        const SizedBox(height: 8),
-      ],
+    if (_error) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text('Não foi possível carregar os vídeos deste jogo.'),
+      );
+    }
+    final clips = _clips;
+    if (clips == null) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: LinearProgressIndicator(),
+      );
+    }
+    if (clips.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text('Nenhum vídeo neste jogo.'),
+      );
+    }
+    return MatchReplaysSection(
+      replays: clips,
+      groupId: widget.groupId,
+      accessToken: ref.watch(idTokenProvider).valueOrNull,
+      isDark: Theme.of(context).brightness == Brightness.dark,
     );
   }
 }
