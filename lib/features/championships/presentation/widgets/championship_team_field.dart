@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 
 /// Jogador no campo.
@@ -122,7 +123,7 @@ class ChampionshipTeamField extends StatelessWidget {
     final value = hex == null
         ? null
         : int.tryParse('FF${hex.replaceFirst('#', '')}', radix: 16);
-    return value == null ? const Color(0xFF2563EB) : Color(value);
+    return value == null ? AppColors.teamBlue : Color(value);
   }
 
   @override
@@ -256,14 +257,14 @@ class _Pin extends StatelessWidget {
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: selected
-                            ? const Color(0xFFF59E0B)
+                            ? AppColors.amber500
                             : light
-                                ? Colors.black.withValues(alpha: .25)
-                                : Colors.white.withValues(alpha: .9),
+                                ? AppColors.darkApp.withValues(alpha: .25)
+                                : AppColors.onDark.withValues(alpha: .9),
                         width: selected ? 3 : 2,
                       ),
                       boxShadow: const [
-                        BoxShadow(color: Colors.black26, blurRadius: 4),
+                        BoxShadow(color: AppColors.shadow26, blurRadius: 4),
                       ],
                     ),
                     child: player.isGoalkeeper
@@ -272,8 +273,8 @@ class _Pin extends StatelessWidget {
                             fieldInitials(player.name),
                             style: TextStyle(
                               color: light
-                                  ? const Color(0xFF0F172A)
-                                  : Colors.white,
+                                  ? AppColors.slate900
+                                  : AppColors.onDark,
                               fontSize: pinSize * .32,
                               fontWeight: FontWeight.w900,
                             ),
@@ -287,11 +288,11 @@ class _Pin extends StatelessWidget {
                         key: ValueKey('swap-target-${player.id}'),
                         padding: const EdgeInsets.all(1),
                         decoration: const BoxDecoration(
-                          color: Colors.white,
+                          color: AppColors.onDark,
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(Icons.swap_horiz_rounded,
-                            size: 13, color: Color(0xFF2563EB)),
+                            size: 13, color: AppColors.info),
                       ),
                     ),
                 ],
@@ -301,7 +302,7 @@ class _Pin extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: .6),
+                  color: AppColors.darkApp.withValues(alpha: .6),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
@@ -309,7 +310,7 @@ class _Pin extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: AppColors.onDark,
                     fontSize: 9,
                     fontWeight: FontWeight.w700,
                     height: 1.1,
@@ -335,11 +336,11 @@ class _PitchPainter extends CustomPainter {
         ..shader = const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF166534), Color(0xFF15803D), Color(0xFF166534)],
+          colors: [AppColors.accentBackground, AppColors.primaryPressed, AppColors.accentBackground],
         ).createShader(rect),
     );
     // Faixas do gramado.
-    final stripe = Paint()..color = Colors.black.withValues(alpha: .05);
+    final stripe = Paint()..color = AppColors.darkApp.withValues(alpha: .05);
     final band = size.height / 8;
     for (var i = 1; i < 8; i += 2) {
       canvas.drawRect(Rect.fromLTWH(0, i * band, size.width, band), stripe);
@@ -349,7 +350,7 @@ class _PitchPainter extends CustomPainter {
     Rect r(double x, double y, double w, double h) =>
         Rect.fromLTWH(x * sx, y * sy, w * sx, h * sy);
     Paint line(double alpha, [double width = 1]) => Paint()
-      ..color = Colors.white.withValues(alpha: alpha)
+      ..color = AppColors.onDark.withValues(alpha: alpha)
       ..style = PaintingStyle.stroke
       ..strokeWidth = width;
 
@@ -361,15 +362,15 @@ class _PitchPainter extends CustomPainter {
         Offset(8 * sx, 150 * sy), Offset(192 * sx, 150 * sy), line(.45));
     canvas.drawCircle(Offset(100 * sx, 150 * sy), 28 * sx, line(.45));
     canvas.drawCircle(Offset(100 * sx, 150 * sy), 2.5 * sx,
-        Paint()..color = Colors.white.withValues(alpha: .6));
+        Paint()..color = AppColors.onDark.withValues(alpha: .6));
     for (final top in [true, false]) {
       canvas.drawRect(r(52, top ? 8 : 246, 96, 46), line(.38));
       canvas.drawRect(r(72, top ? 8 : 272, 56, 20), line(.38));
       canvas.drawRect(r(84, top ? 2 : 291, 32, 7),
-          Paint()..color = Colors.white.withValues(alpha: .14));
+          Paint()..color = AppColors.onDark.withValues(alpha: .14));
       canvas.drawRect(r(84, top ? 2 : 291, 32, 7), line(.6, 1.2));
       canvas.drawCircle(Offset(100 * sx, (top ? 36 : 264) * sy), 2 * sx,
-          Paint()..color = Colors.white.withValues(alpha: .45));
+          Paint()..color = AppColors.onDark.withValues(alpha: .45));
     }
   }
 
