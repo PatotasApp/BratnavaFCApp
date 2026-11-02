@@ -1333,6 +1333,24 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
   Widget _buildTabGeral(bool isDark, GroupDetail? detail) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Temporadas: tela própria (as ações valem na hora, sem o Salvar).
+          _subCard(
+            isDark: isDark,
+            accentBg: AppColors.emerald50,
+            accentFg: AppColors.emerald500,
+            icon: Icons.date_range_outlined,
+            title: 'Temporadas',
+            subtitle: 'Fechar, renomear e pré-temporada',
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: () => context.push('/app/seasons'),
+                icon: const Icon(Icons.chevron_right_rounded),
+                label: const Text('Gerenciar temporadas'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
           _subCard(
             isDark: isDark,
             accentBg: AppColors.emerald50,

@@ -1,3 +1,6 @@
+import '../../../seasons/domain/season_models.dart';
+import '../../../seasons/presentation/providers/seasons_provider.dart';
+import '../../../seasons/presentation/widgets/season_picker.dart';
 import 'dart:math' show min;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -344,8 +347,19 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
       );
     }
 
-    final statsArgs = (groupId: groupId, includeGuests: !_onlyMonthly);
-    final async = ref.watch(visualStatsProvider(statsArgs));
+    // Temporada (padrão: a atual); espera as temporadas para saber qual é a atual.
+    final seasonsAsync = ref.watch(seasonsProvider(groupId));
+    final seasons = seasonsAsync.valueOrNull;
+    final seasonKey = 'stats:$groupId';
+    final season = ref.watch(seasonSelectionProvider(seasonKey));
+    final statsArgs = (
+      groupId: groupId,
+      includeGuests: !_onlyMonthly,
+      period: Uri(queryParameters: season.params(seasons)).query,
+    );
+    final async = seasonsAsync.isLoading && seasons == null
+        ? const AsyncValue<PlayerVisualStatsReport>.loading()
+        : ref.watch(visualStatsProvider(statsArgs));
     final settings = ref.watch(groupSettingsProvider(groupId)).valueOrNull;
     final icons = GroupIcons.from(settings);
     final showGeneral = settings?.showStatsGeneralTab ?? true;
@@ -401,6 +415,13 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        SeasonPicker(
+                          overview: seasons,
+                          value: season,
+                          onChanged: (next) => ref
+                              .read(seasonSelectionProvider(seasonKey).notifier)
+                              .state = next,
+                        ),
                         _buildOnlyMonthlyToggle(isDark),
                         const SizedBox(height: 12),
                         _viewMode != _StatsViewMode.perMatch

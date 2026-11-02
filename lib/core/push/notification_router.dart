@@ -80,6 +80,12 @@ String notificationRoute(String type, Map<String, dynamic> data) {
     case 'bet_created':
       return '/app/bet';
 
+    // ── Temporadas ────────────────────────────────────────────────────────
+
+    case 'season_closed':
+      final seasonId = data['seasonId'] as String?;
+      return _ok(seasonId) ? '/app/seasons/$seasonId' : '/app/conquistas';
+
     // ── Outros ────────────────────────────────────────────────────────────
 
     case 'birthday':

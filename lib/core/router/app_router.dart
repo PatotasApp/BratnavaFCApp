@@ -34,6 +34,8 @@ import '../../features/championships/presentation/pages/championships_page.dart'
 import '../../features/championships/presentation/pages/championship_wizard_page.dart';
 import '../../features/championships/presentation/pages/championship_detail_page.dart';
 import '../../core/constants/app_constants.dart';
+import '../../features/seasons/presentation/pages/season_summary_page.dart';
+import '../../features/seasons/presentation/pages/seasons_settings_page.dart';
 import '../../core/push/local_notifications.dart';
 
 // ── Placeholder para rotas ainda não implementadas ────────────────────────────
@@ -291,6 +293,16 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/app/conquistas',
             builder: (_, __) => const ConquistasPage(),
+          ),
+          GoRoute(
+            path: '/app/seasons',
+            builder: (_, __) => const SeasonsSettingsPage(),
+          ),
+          GoRoute(
+            path: '/app/seasons/:seasonId',
+            builder: (_, state) => SeasonSummaryPage(
+              seasonId: state.pathParameters['seasonId']!,
+            ),
           ),
           if (AppConstants.championshipsEnabled)
             GoRoute(

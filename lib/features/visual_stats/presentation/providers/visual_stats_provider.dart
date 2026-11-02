@@ -7,11 +7,20 @@ final visualStatsDsProvider = Provider<VisualStatsDatasource>(
   (ref) => VisualStatsDatasource(ref.watch(dioProvider)),
 );
 
-typedef VisualStatsArgs = ({String groupId, bool includeGuests});
+/// [period]: chave estável da temporada escolhida (ver SeasonSelection), traduzida
+/// para parâmetros com [periodParams]. Vazio = tudo.
+typedef VisualStatsArgs = ({String groupId, bool includeGuests, String period});
 
 final visualStatsProvider =
     FutureProvider.autoDispose.family<PlayerVisualStatsReport, VisualStatsArgs>(
-  (ref, args) => ref
-      .watch(visualStatsDsProvider)
-      .fetchVisualStats(args.groupId, includeGuests: args.includeGuests),
+  (ref, args) => ref.watch(visualStatsDsProvider).fetchVisualStats(
+        args.groupId,
+        includeGuests: args.includeGuests,
+        period: periodParams(args.period),
+      ),
 );
+
+/// "seasonId=x" | "year=2026&includePreSeason=false" | "" → parâmetros da API.
+Map<String, String> periodParams(String period) => period.isEmpty
+    ? const {}
+    : Uri.splitQueryString(period);
