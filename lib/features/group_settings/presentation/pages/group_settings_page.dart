@@ -1760,7 +1760,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
             ),
           ),
           const SizedBox(height: 12),
-          if (AppConstants.championshipsEnabled) ...[
+          ...[
             Container(
               width: double.infinity,
               decoration: BoxDecoration(

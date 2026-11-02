@@ -32,7 +32,7 @@ class PlayerHistoryRemoteDataSource {
       queryParameters: {
         'playerId': playerId,
         if (year != null) 'year': year,
-        if (AppConstants.championshipsEnabled) 'includeChampionships': true,
+        'includeChampionships': true,
       },
     );
     return unwrapList(res.data)
