@@ -31,6 +31,7 @@ class MatchGoalsSection extends StatelessWidget {
   final void Function(MatchGoal)? onDeleteGoal;
 
   const MatchGoalsSection({
+    super.key,
     required this.goals,
     required this.tab,
     required this.onTab,
@@ -408,6 +409,7 @@ class GoalFormSheet extends StatefulWidget {
       String time, bool isOwnGoal) onSave;
 
   const GoalFormSheet({
+    super.key,
     required this.players,
     required this.icons,
     this.editing,
