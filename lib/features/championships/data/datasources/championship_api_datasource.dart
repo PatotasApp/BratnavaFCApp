@@ -303,6 +303,27 @@ class ChampionshipApiDataSource implements ChampionshipDataSource {
           ));
 
   @override
+  Future<void> updateGoal(
+    String groupId,
+    String id,
+    String gameId,
+    String goalId, {
+    required String scorerPlayerId,
+    String? assistPlayerId,
+    required bool isOwnGoal,
+    int? timeSeconds,
+  }) =>
+      _send(() => _dio.put(
+            '${_base(groupId)}/$id/games/$gameId/goals/$goalId',
+            data: {
+              'scorerPlayerId': scorerPlayerId,
+              'assistPlayerId': assistPlayerId,
+              'isOwnGoal': isOwnGoal,
+              'timeSeconds': timeSeconds,
+            },
+          ));
+
+  @override
   Future<void> deleteGoal(
     String groupId,
     String id,

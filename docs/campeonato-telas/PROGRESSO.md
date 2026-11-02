@@ -27,7 +27,7 @@ Contrato da API: **v6** de 27/10/2026 (antes: v3).
 - A flag será um `dart-define` explícito: ligada em `config/dev.json` e desligada em `config/prod.json`.
 - O datasource API contém todas as rotas da v3; o mock usa os mesmos DTOs e oferece exemplos nos sete status.
 - `CHAMPIONSHIPS_USE_MOCK` é lido apenas pelo provider do datasource; páginas e notifiers não conhecem a origem dos dados.
-- A entrada de Campeonatos fica no agrupamento Organização do menu Mais e a rota também é condicionada por `CHAMPIONSHIPS_ENABLED`, evitando acesso acidental em produção.
+- A entrada de Campeonatos fica no agrupamento Organização do menu Mais. A chave `CHAMPIONSHIPS_ENABLED` foi removida em 02/11/2026: com o backend em produção, campeonatos aparecem sempre.
 - A listagem usa os `ruleBadges` entregues pela API/mock como fonte de verdade e não tenta reconstruí-los no cliente.
 - O wizard expõe todos os campos de `ChampionshipRulesDto`, aplica apenas os dois presets definidos pelo contrato e valida as combinações antes do POST.
 - A ordem dos desempates é editável por subir/descer, mantendo os cinco critérios sem criar valores fora do contrato.

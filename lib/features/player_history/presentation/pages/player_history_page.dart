@@ -13,6 +13,7 @@ import '../../../dashboard/domain/entities/my_player.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart'
     as dashboard;
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
+import '../../../championships/presentation/widgets/championship_podium_box.dart';
 import '../../domain/entities/player_history_models.dart';
 import '../providers/player_history_provider.dart';
 
@@ -952,8 +953,11 @@ class _MatchRow extends StatelessWidget {
             ),
           ),
 
-          // Score
-          if (!item.isConsolidatedChampionship)
+          // Score — no campeonato consolidado, o pódio (1º a 3º) no lugar do
+          // placar, como no histórico de partidas.
+          if (item.isConsolidatedChampionship && item.podium.isNotEmpty)
+            ChampionshipPodiumBox(podium: item.podium)
+          else if (!item.isConsolidatedChampionship)
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
