@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/constants/app_constants.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -289,10 +288,21 @@ class _MoreSheet extends ConsumerWidget {
           label: 'Conquistas',
           path: '/app/conquistas',
         ),
+      ],
+    ),
+    // Ferramentas do evento de encerramento (só admin da patota).
+    _MoreGroup(
+      label: 'Evento',
+      items: [
         _MoreItem(
           icon: Icons.auto_awesome_outlined,
           label: 'Retrospectiva',
           path: '/app/retrospectiva',
+        ),
+        _MoreItem(
+          icon: Icons.people_alt_outlined,
+          label: 'Monte seu Time',
+          path: '/app/team-builder',
         ),
       ],
     ),
@@ -323,11 +333,6 @@ class _MoreSheet extends ConsumerWidget {
           icon: Icons.palette_outlined,
           label: 'Uniformes',
           path: '/app/team-colors',
-        ),
-        _MoreItem(
-          icon: Icons.people_alt_outlined,
-          label: 'Monte seu Time',
-          path: '/app/team-builder',
         ),
       ],
     ),
@@ -447,7 +452,13 @@ class _MoreSheet extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final group in _groups) ...[
+                  for (final group in _groups)
+                    if (group.items.any((item) => isShellMenuItemVisible(
+                          path: item.path,
+                          isAdmin: isAdmin,
+                          canSeeStats: canSeeStats,
+                          requiresStatsPermission: item.statsPermission,
+                        ))) ...[
                     Text(
                       group.label.toUpperCase(),
                       style: theme.textTheme.labelSmall,
