@@ -3,6 +3,7 @@ const shellAdminOnlyMenuPaths = <String>{
   '/app/team-builder',
   '/app/settings',
   '/app/conquistas',
+  '/app/retrospectiva',
 };
 
 int shellNavigationIndexForPath(String location) {
