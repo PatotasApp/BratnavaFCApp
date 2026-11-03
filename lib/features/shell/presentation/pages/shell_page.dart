@@ -289,6 +289,11 @@ class _MoreSheet extends ConsumerWidget {
           label: 'Conquistas',
           path: '/app/conquistas',
         ),
+        _MoreItem(
+          icon: Icons.auto_awesome_outlined,
+          label: 'Retrospectiva',
+          path: '/app/retrospectiva',
+        ),
       ],
     ),
     _MoreGroup(

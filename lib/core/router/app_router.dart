@@ -25,6 +25,7 @@ import '../../features/absences/presentation/pages/absences_page.dart';
 import '../../features/bet/presentation/pages/bet_page.dart';
 import '../../features/replays/presentation/pages/replay_vault_page.dart';
 import '../../features/player_spotlight/presentation/pages/player_spotlight_page.dart';
+import '../../features/retrospective/presentation/pages/retrospective_page.dart';
 import '../../features/player_history/presentation/pages/player_history_page.dart';
 import '../../features/groups/presentation/pages/group_invites_page.dart';
 import '../../features/team_builder/presentation/pages/team_builder_page.dart';
@@ -270,6 +271,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/app/spotlight',
             builder: (_, __) => const PlayerSpotlightPage(),
+          ),
+          GoRoute(
+            path: '/app/retrospectiva',
+            builder: (_, __) => const RetrospectivePage(),
           ),
           GoRoute(
             path: '/app/player-history',
