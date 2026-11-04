@@ -42,11 +42,4 @@ class RetroColors {
   static const black28 = Color(0x47000000);
   static const ink22 = Color(0x380D0D0F);
   static const scrim = Color(0x8C000000);
-
-  // Botão "Story do Instagram".
-  static const instagram = [
-    Color(0xFFF9A825),
-    Color(0xFFE1306C),
-    Color(0xFF833AB4)
-  ];
 }

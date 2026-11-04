@@ -215,9 +215,6 @@ class AppColors {
   static const pitchStripeAlt = Color(0xFF166534);
   static const goalkeeperYellow = Color(0xFFFDE047);
   static const shareCardMid = Color(0xFF10261A);
-  static const instagramOrange = Color(0xFFF9A825);
-  static const instagramPink = Color(0xFFE1306C);
-  static const instagramPurple = Color(0xFF833AB4);
 
   // Gradientes de avatar (determinísticos por nome)
   static const List<List<Color>> avatarGradients = [

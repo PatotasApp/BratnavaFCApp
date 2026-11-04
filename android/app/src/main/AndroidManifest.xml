@@ -14,8 +14,6 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
         </intent>
-        <!-- Compartilhar no Story: saber se o Instagram está instalado. -->
-        <package android:name="com.instagram.android" />
     </queries>
     <application
         android:label="@string/app_name"
