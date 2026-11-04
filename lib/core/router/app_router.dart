@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../features/moderation/moderation.dart';
 import '../../features/auth/presentation/pages/email_login_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/forgot_password_page.dart';
@@ -282,6 +283,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/app/account',
             builder: (_, __) => const MyAccountPage(),
+          ),
+          GoRoute(
+            path: '/app/account/blocked',
+            builder: (_, __) => const BlockedUsersPage(),
           ),
           GoRoute(
             path: '/app/team-builder',

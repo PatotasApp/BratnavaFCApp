@@ -382,6 +382,12 @@ class _SecurityTab extends StatelessWidget {
             icon: const Icon(Icons.privacy_tip_outlined),
             label: const Text('Política de privacidade'),
           ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () => context.push('/app/account/blocked'),
+            icon: const Icon(Icons.block_rounded),
+            label: const Text('Usuários bloqueados'),
+          ),
           const SizedBox(height: 24),
           const _DeleteAccountSection(),
         ],
