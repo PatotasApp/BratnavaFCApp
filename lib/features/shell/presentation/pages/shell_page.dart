@@ -350,11 +350,6 @@ class _MoreSheet extends ConsumerWidget {
           path: '/app/polls/votes',
         ),
         _MoreItem(
-          icon: Icons.monetization_on_outlined,
-          label: 'Bet',
-          path: '/app/bet',
-        ),
-        _MoreItem(
           icon: Icons.video_library_outlined,
           label: 'Replays',
           path: '/app/replays',

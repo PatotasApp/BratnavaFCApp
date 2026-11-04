@@ -22,7 +22,6 @@ import '../../features/polls/presentation/pages/polls_page.dart';
 import '../../features/matches/presentation/pages/matches_page.dart';
 import '../../features/payments/presentation/pages/payments_page.dart';
 import '../../features/absences/presentation/pages/absences_page.dart';
-import '../../features/bet/presentation/pages/bet_page.dart';
 import '../../features/replays/presentation/pages/replay_vault_page.dart';
 import '../../features/player_spotlight/presentation/pages/player_spotlight_page.dart';
 import '../../features/retrospective/presentation/pages/retrospective_page.dart';
@@ -259,10 +258,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/app/absences',
             builder: (_, __) => const AbsencesPage(),
-          ),
-          GoRoute(
-            path: '/app/bet',
-            builder: (_, __) => const BetPage(),
           ),
           GoRoute(
             path: '/app/replays',
