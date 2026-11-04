@@ -44,7 +44,6 @@ dependencies:
   flutter_local_notifications: ^17.2.2
 
   # Android home-screen widget
-  home_widget: ^0.9.3
 
   # Share / export
   share_plus: ^10.0.0
