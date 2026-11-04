@@ -72,6 +72,9 @@ class AppConstants {
   /// desenvolvimento apontar para um domínio diferente do que ele mesmo usa.
   static String get privacyPolicyUrl => '$webUrl/privacidade.html';
 
+  /// Termos de uso, aceitos no login e no cadastro (App Store, regra 1.2).
+  static String get termsOfUseUrl => '$webUrl/termos.html';
+
   /// Falha explícita em vez de cair num padrão silencioso.
   ///
   /// Mesma postura do `api/http.ts` no front web: um build sem config quebraria

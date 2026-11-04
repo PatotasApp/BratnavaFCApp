@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/auth/auth_errors.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../auth/presentation/widgets/legal_notice.dart';
 
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../widgets/editable_profile_avatar.dart';
@@ -381,6 +382,13 @@ class _SecurityTab extends StatelessWidget {
             onPressed: () => _abrirPoliticaDePrivacidade(context),
             icon: const Icon(Icons.privacy_tip_outlined),
             label: const Text('Política de privacidade'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () =>
+                openLegalPage(context, AppConstants.termsOfUseUrl),
+            icon: const Icon(Icons.gavel_rounded),
+            label: const Text('Termos de uso'),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
