@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/absence.dart';
 
@@ -48,6 +49,7 @@ class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
   int _absenceType = 1;
   final _descCtrl = TextEditingController();
   bool _saving = false;
+  String? _saveError;
 
   bool get _isEdit => widget.initial != null;
 
@@ -98,7 +100,11 @@ class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
           .showSnackBar(const SnackBar(content: Text('Informe o período.')));
       return;
     }
-    setState(() => _saving = true);
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
     try {
       await widget.onSave(CreateAbsenceDto(
         startDate: _toApiDate(_startDate!),
@@ -107,6 +113,15 @@ class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
         description:
             _descCtrl.text.trim().isNotEmpty ? _descCtrl.text.trim() : null,
       ));
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _saveError = extractDioError(
+            error,
+            'Não foi possível confirmar o cadastro. Confira a lista de ausências.',
+          );
+        });
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -309,6 +324,15 @@ class _AbsenceFormSheetState extends State<AbsenceFormSheet> {
                     ),
 
                     const SizedBox(height: 20),
+                    if (_saveError != null) ...[
+                      Text(
+                        _saveError!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
 
                     // Actions
                     Row(children: [
