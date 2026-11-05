@@ -1,3 +1,4 @@
+import '../constants/replay_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +6,7 @@ import '../../features/auth/presentation/pages/email_login_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/forgot_password_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
+import '../../features/auth/presentation/providers/account_store.dart';
 import '../../features/auth/presentation/providers/session_provider.dart';
 import '../../features/account/presentation/pages/my_account_page.dart';
 import '../../features/calendar/presentation/pages/calendar_page.dart';
@@ -266,6 +268,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/app/replays',
+            redirect: (_, __) => groupHasReplays(
+                    ref.read(accountStoreProvider).activeAccount?.activeGroupId)
+                ? null
+                : '/app',
             builder: (_, __) => const ReplayVaultPage(),
           ),
           GoRoute(
