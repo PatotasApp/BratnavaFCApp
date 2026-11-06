@@ -896,7 +896,7 @@ class _GroupCardState extends ConsumerState<_GroupCard> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Erro ao carregar a pagina.')),
+        const SnackBar(content: Text('Erro ao carregar a página.')),
       );
     } finally {
       if (mounted) setState(() => _loadingPage = false);
@@ -1062,7 +1062,7 @@ class _GroupCardState extends ConsumerState<_GroupCard> {
                     ),
                     const Spacer(),
                     Text(
-                      'Pagina $safePage de $totalPages',
+                      'Página $safePage de $totalPages',
                       style: TextStyle(
                         fontSize: 12,
                         color: widget.isDark
@@ -1075,7 +1075,7 @@ class _GroupCardState extends ConsumerState<_GroupCard> {
                       onPressed: safePage >= totalPages
                           ? null
                           : () => _loadPage(safePage + 1),
-                      label: const Text('Proxima'),
+                      label: const Text('Próxima'),
                       icon: const Icon(Icons.chevron_right_rounded, size: 18),
                     ),
                   ],
