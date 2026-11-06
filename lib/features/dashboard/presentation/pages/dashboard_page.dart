@@ -1,4 +1,6 @@
 import 'dart:async';
+import '../../../billing/presentation/billing_providers.dart';
+import '../../../billing/presentation/billing_widgets.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -54,6 +56,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     ref.invalidate(myPaymentSummaryProvider(groupId));
     ref.invalidate(pendingPollsCountProvider(groupId));
     ref.invalidate(dashboardChampionshipsProvider(groupId));
+    ref.invalidate(groupBillingProvider(groupId));
     if (playerId != null) {
       ref.invalidate(
         player_history.playerHistoryProvider(
@@ -304,6 +307,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Faltam 7 dias ou menos para vencer o plano (só admin/financeiro).
+          BillingDueBanner(groupId: groupId),
           _PlayerIdentityCard(
             userId: activePlayer.userId ?? account?.userId,
             groupId: groupId,
