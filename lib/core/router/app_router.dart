@@ -37,6 +37,9 @@ import '../../features/championships/presentation/pages/championships_page.dart'
 import '../../features/championships/presentation/pages/championship_wizard_page.dart';
 import '../../features/championships/presentation/pages/championship_detail_page.dart';
 import '../../core/push/local_notifications.dart';
+import '../../features/share/presentation/share_link_page.dart';
+import '../share/pending_share_link.dart';
+import '../share/share_links.dart';
 
 // ── Placeholder para rotas ainda não implementadas ────────────────────────────
 class _PlaceholderPage extends StatelessWidget {
@@ -117,6 +120,7 @@ final navigatorKeyProvider = Provider<GlobalKey<NavigatorState>>(
 final routerProvider = Provider<GoRouter>((ref) {
   final navigatorKey = ref.watch(navigatorKeyProvider);
   final authListenable = _SessionListenable(ref);
+  final pendingShare = PendingShareLink();
 
   return GoRouter(
     navigatorKey: navigatorKey,
@@ -137,11 +141,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       //    "deslogado" chutaria para o login quem estava autenticado — é o bug
       //    clássico de cold start.
       if (session.initializing) {
+        pendingShare.remember(state.uri);
         return path == '/splash' ? null : '/splash';
       }
 
-      // 2. Sem sessão no Firebase.
+      // 2. Sem sessão no Firebase. Link compartilhado (perfil, partida…) fica
+      //    guardado e abre depois do login.
       if (!session.isAuthenticated) {
+        pendingShare.remember(state.uri);
         return isAuthRoute ? null : '/login';
       }
 
@@ -154,14 +161,34 @@ final routerProvider = Provider<GoRouter>((ref) {
       //    desta rota.
       if (session.profileStatus == ProfileStatus.idle ||
           session.profileStatus == ProfileStatus.loading) {
+        pendingShare.remember(state.uri);
         return path == '/splash' ? null : '/splash';
       }
 
-      if (isAuthRoute || path == '/splash') return '/app';
+      if (isAuthRoute || path == '/splash')
+        return pendingShare.take() ?? '/app';
 
       return null;
     },
     routes: [
+      // ── Links compartilhados (App Links / Universal Links) ────────
+      // Mesmos caminhos do site (lib/core/share/share_links.dart).
+      GoRoute(
+        path: '/perfil/:userId',
+        redirect: (_, state) =>
+            '/app/profile/${state.pathParameters['userId']}',
+      ),
+      GoRoute(
+        path: '/patota/:groupId',
+        builder: (_, state) =>
+            SharedGroupLinkPage(groupId: state.pathParameters['groupId']!),
+      ),
+      for (final kind in ShareKind.values.where((k) => k.isInternal))
+        GoRoute(
+          path: '/${kind.path}/:id',
+          builder: (_, state) => SharedContentLinkPage(
+              kind: kind, id: state.pathParameters['id']!),
+        ),
       // ── Auth ──────────────────────────────────────────────────────
       GoRoute(
         path: '/splash',
@@ -240,11 +267,17 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/app/polls/events',
-            builder: (_, __) => const PollsPage(showEvents: true),
+            builder: (_, state) => PollsPage(
+              showEvents: true,
+              initialPollId: state.uri.queryParameters['pollId'],
+            ),
           ),
           GoRoute(
             path: '/app/polls/votes',
-            builder: (_, __) => const PollsPage(showEvents: false),
+            builder: (_, state) => PollsPage(
+              showEvents: false,
+              initialPollId: state.uri.queryParameters['pollId'],
+            ),
           ),
           GoRoute(
             path: '/app/birthdays',

@@ -18,6 +18,7 @@ import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../../shared/presentation/widgets/user_profile_link.dart';
+import '../../../../core/share/share_links.dart';
 
 extension _FirstOrNullExt<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
@@ -729,7 +730,11 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     if (meuUserId == null || _group == null) return false;
 
     return !_group!.players.any(
-      (p) => p.userId != null && p.userId!.isNotEmpty && p.userId != meuUserId && !p.isGuest,
+      (p) =>
+          p.userId != null &&
+          p.userId!.isNotEmpty &&
+          p.userId != meuUserId &&
+          !p.isGuest,
     );
   }
 
@@ -780,6 +785,12 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
                 ? () => _showInvite(activeGroupId)
                 : null,
             onLeave: canLeave ? _showLeaveConfirm : null,
+            onShare: activeGroupId == null || activeGroupId.isEmpty
+                ? null
+                : () => shareLink(context, ShareLinks.group(activeGroupId),
+                    text: activeGroupName == null
+                        ? 'Conheça nossa patota no PatotasApp'
+                        : '$activeGroupName no PatotasApp'),
           ),
           Expanded(
             child: SingleChildScrollView(
@@ -1121,8 +1132,10 @@ class _GroupsHeader extends StatelessWidget {
   final VoidCallback? onSettings;
   final VoidCallback? onInvite;
   final VoidCallback? onLeave;
+  final VoidCallback? onShare;
 
   const _GroupsHeader({
+    this.onShare,
     required this.groupName,
     required this.logoUrl,
     required this.loading,
@@ -1150,15 +1163,20 @@ class _GroupsHeader extends StatelessWidget {
         fit: BoxFit.cover,
         borderRadius: 13,
       ),
-      actions: onSettings == null
-          ? const []
-          : [
-              AppPageHeaderAction(
-                onPressed: onSettings,
-                tooltip: 'Configurações da patota',
-                icon: Icons.settings_outlined,
-              ),
-            ],
+      actions: [
+        if (onShare != null)
+          AppPageHeaderAction(
+            onPressed: onShare,
+            tooltip: 'Compartilhar patota',
+            icon: Icons.share_outlined,
+          ),
+        if (onSettings != null)
+          AppPageHeaderAction(
+            onPressed: onSettings,
+            tooltip: 'Configurações da patota',
+            icon: Icons.settings_outlined,
+          ),
+      ],
       footer: onInvite == null && onLeave == null
           ? null
           : AppPageHeaderActionBar(
@@ -5014,8 +5032,8 @@ class _LeaveConfirmDialogState extends State<_LeaveConfirmDialog> {
       content: Text(
         widget.encerraAPatota
             ? 'Você é a última pessoa desta patota. Ao sair, ela será encerrada: '
-              'partidas, enquetes, mensalidades e lançamentos serão apagados. '
-              'Não há como desfazer.'
+                'partidas, enquetes, mensalidades e lançamentos serão apagados. '
+                'Não há como desfazer.'
             : 'Essa ação remove você da patota atual.',
         style: TextStyle(
           color: isDark

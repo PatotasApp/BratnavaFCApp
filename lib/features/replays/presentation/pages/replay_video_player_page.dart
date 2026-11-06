@@ -16,7 +16,8 @@ const List<double> _kSpeeds = [0.25, 0.5, 1.0, 1.5, 2.0];
 const Duration _kFrameStep = Duration(milliseconds: 33);
 const String _kSpeedPrefKey = 'replay_speed';
 const String _kLoopPrefKey = 'replay_loop';
-String get _kSiteUrl => AppConstants.webUrl;
+// Site do sistema (Pages): as rotas /public/... vivem lá, não no institucional.
+String get _kSiteUrl => AppConstants.shareUrl;
 
 // ── URL resolver (shared) ─────────────────────────────────────────────────────
 

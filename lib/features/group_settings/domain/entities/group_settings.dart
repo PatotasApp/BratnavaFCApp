@@ -197,6 +197,9 @@ class GroupSettings {
   final bool showPlayerStats; // true = regular players can see goals/assists
   /// Campeonatos nas listas de histórico (histórico e últimas partidas).
   final bool showChampionshipsInHistory;
+
+  /// Página pública da patota (link compartilhado). Padrão ligada.
+  final bool publicPageEnabled;
   final bool showStatsGeneralTab;
   final bool showStatsPerMatchTab;
   final bool showStatsClassificationTab;
@@ -235,6 +238,7 @@ class GroupSettings {
     this.isPersisted = false,
     this.showPlayerStats = false,
     this.showChampionshipsInHistory = false,
+    this.publicPageEnabled = true,
     this.showStatsGeneralTab = true,
     this.showStatsPerMatchTab = true,
     this.showStatsClassificationTab = true,
@@ -278,6 +282,7 @@ class GroupSettings {
       showPlayerStats: (j['showPlayerStats'] as bool?) ?? false,
       showChampionshipsInHistory:
           (j['showChampionshipsInHistory'] as bool?) ?? false,
+      publicPageEnabled: (j['publicPageEnabled'] as bool?) ?? true,
       showStatsGeneralTab: (j['showStatsGeneralTab'] as bool?) ?? true,
       showStatsPerMatchTab: (j['showStatsPerMatchTab'] as bool?) ?? true,
       showStatsClassificationTab:
@@ -318,6 +323,7 @@ class GroupSettings {
     int? mvpTieMaxPlayers,
     required bool showPlayerStats,
     bool showChampionshipsInHistory = false,
+    bool? publicPageEnabled,
     bool showStatsGeneralTab = true,
     bool showStatsPerMatchTab = true,
     bool showStatsClassificationTab = true,
@@ -353,6 +359,7 @@ class GroupSettings {
         'mvpTieMaxPlayers': mvpTieRule == 2 ? mvpTieMaxPlayers : null,
         'showPlayerStats': showPlayerStats,
         'showChampionshipsInHistory': showChampionshipsInHistory,
+        if (publicPageEnabled != null) 'publicPageEnabled': publicPageEnabled,
         'showStatsGeneralTab': showStatsGeneralTab,
         'showStatsPerMatchTab': showStatsPerMatchTab,
         'showStatsClassificationTab': showStatsClassificationTab,

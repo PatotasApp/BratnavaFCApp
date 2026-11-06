@@ -22,7 +22,10 @@ class PollsPage extends ConsumerStatefulWidget {
   /// Null displays the section menu; a value opens its respective list.
   final bool? showEvents;
 
-  const PollsPage({super.key, this.showEvents});
+  /// Enquete a abrir direto (link compartilhado).
+  final String? initialPollId;
+
+  const PollsPage({super.key, this.showEvents, this.initialPollId});
 
   @override
   ConsumerState<PollsPage> createState() => _PollsPageState();
@@ -35,6 +38,28 @@ class _PollsPageState extends ConsumerState<PollsPage> {
   void initState() {
     super.initState();
     _activeTab = widget.showEvents == false ? _Tab.polls : _Tab.events;
+    final pollId = widget.initialPollId;
+    if (pollId != null && pollId.isNotEmpty) {
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _openDetailById(pollId));
+    }
+  }
+
+  Future<void> _openDetailById(String pollId) async {
+    final gid = _groupId;
+    if (gid == null || !mounted) return;
+    try {
+      final detail = await _ds.getPoll(gid, pollId);
+      if (!mounted) return;
+      await _showDetailSheet(detail);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Erro ao abrir: $e'),
+            backgroundColor: AppColors.rose500),
+      );
+    }
   }
 
   // Fallback: usa groupId do player ativo se activeGroupId não estiver persistido.

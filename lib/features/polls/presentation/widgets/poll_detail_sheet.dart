@@ -15,6 +15,7 @@ import '../../data/datasources/polls_remote_datasource.dart';
 import '../../domain/entities/poll_detail.dart';
 import '../providers/polls_provider.dart';
 import 'close_poll_sheet.dart';
+import '../../../../core/share/share_links.dart';
 
 class PollDetailSheet extends ConsumerStatefulWidget {
   final PollDetail poll;
@@ -489,11 +490,25 @@ class _PollDetailSheetState extends ConsumerState<PollDetailSheet>
                       const SizedBox(width: 8),
                       _StatusChip(isOpen: _poll.isOpen),
                       IconButton(
+                        tooltip: 'Compartilhar enquete',
+                        visualDensity: VisualDensity.compact,
+                        icon: Icon(Icons.share_outlined,
+                            size: 20,
+                            color: isDark
+                                ? AppColors.slate400
+                                : AppColors.slate500),
+                        onPressed: () => shareLink(
+                            context, ShareLinks.poll(_poll.id),
+                            text: _poll.title),
+                      ),
+                      IconButton(
                         tooltip: 'Denunciar enquete',
                         visualDensity: VisualDensity.compact,
                         icon: Icon(Icons.flag_outlined,
                             size: 20,
-                            color: isDark ? AppColors.slate400 : AppColors.slate500),
+                            color: isDark
+                                ? AppColors.slate400
+                                : AppColors.slate500),
                         onPressed: () => showReportSheet(context,
                             target: ReportTarget.poll,
                             targetId: _poll.id,

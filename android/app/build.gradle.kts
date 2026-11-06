@@ -90,11 +90,15 @@ android {
             dimension = "env"
             applicationIdSuffix = ".dev" // ID final: br.com.patotasapp.dev
             resValue("string", "app_name", "PatotasApp Dev") 
+            // Host dos links compartilhados (App Links). Igual a SHARE_URL em config/dev.json.
+            manifestPlaceholders["shareHost"] = "develop.app-frontend-web.pages.dev"
         }
         create("prod") {
             dimension = "env"
             // ID final: br.com.patotasapp
             resValue("string", "app_name", "PatotasApp") 
+            // Host dos links compartilhados (App Links). Igual a SHARE_URL em config/prod.json.
+            manifestPlaceholders["shareHost"] = "app-frontend-web.pages.dev"
         }
     }
 

@@ -40,6 +40,21 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Links compartilhados (App Links): o host vem do flavor (shareHost no
+                 build.gradle.kts) e precisa publicar /.well-known/assetlinks.json com o
+                 SHA-256 da chave que assina o app. Ver docs/compartilhamento.md. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https" android:host="${shareHost}"/>
+                <data android:pathPrefix="/perfil/"/>
+                <data android:pathPrefix="/patota/"/>
+                <data android:pathPrefix="/partida/"/>
+                <data android:pathPrefix="/votacao/"/>
+                <data android:pathPrefix="/campeonato/"/>
+                <data android:pathPrefix="/enquete/"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

@@ -10,6 +10,7 @@ import '../../domain/utils/match_participant_resolver.dart';
 import '../providers/match_provider.dart';
 import '../widgets/goal_entry_row.dart';
 import '../widgets/inline_goal_tracker.dart';
+import '../../../../core/share/share_links.dart';
 
 class Step6PosJogoPage extends ConsumerStatefulWidget {
   const Step6PosJogoPage({super.key});
@@ -245,9 +246,27 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),
-              child: _isAdmin
-                  ? _buildAdminView(context, s, icons)
-                  : _buildUserView(context, s, icons),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if ((s.matchId ?? '').isNotEmpty)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Builder(
+                        builder: (ctx) => TextButton.icon(
+                          onPressed: () => shareLink(
+                              ctx, ShareLinks.mvp(s.matchId!),
+                              text: 'Vote no MVP da partida'),
+                          icon: const Icon(Icons.share_outlined, size: 18),
+                          label: const Text('Compartilhar votação'),
+                        ),
+                      ),
+                    ),
+                  _isAdmin
+                      ? _buildAdminView(context, s, icons)
+                      : _buildUserView(context, s, icons),
+                ],
+              ),
             ),
           ),
         ),

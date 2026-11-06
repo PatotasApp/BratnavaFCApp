@@ -10,6 +10,7 @@ import '../../data/datasources/polls_remote_datasource.dart';
 import '../../domain/entities/poll_detail.dart';
 import '../providers/polls_provider.dart';
 import 'close_poll_sheet.dart';
+import '../../../../core/share/share_links.dart';
 
 class EventDetailSheet extends ConsumerStatefulWidget {
   final PollDetail poll;
@@ -622,6 +623,18 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
                         ),
                       ),
                       _StatusChip(isOpen: _poll.isOpen),
+                      IconButton(
+                        tooltip: 'Compartilhar evento',
+                        visualDensity: VisualDensity.compact,
+                        icon: Icon(Icons.share_outlined,
+                            size: 20,
+                            color: isDark
+                                ? AppColors.slate400
+                                : AppColors.slate500),
+                        onPressed: () => shareLink(
+                            context, ShareLinks.poll(_poll.id),
+                            text: _poll.title),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
