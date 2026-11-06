@@ -95,7 +95,7 @@ String matchStepLabel(String? stepOrStatus) {
   return switch (key) {
     'create' || 'created' || 'criacao' || 'criar' => 'Criação',
     'accept' || 'acceptation' || 'acceptance' || 'aceitacao' => 'Aceitação',
-    'teams' || 'matchmaking' || 'formacao' => 'Times',
+    'teams' || 'matchmaking' || 'formacao' => 'Montagem dos times',
     'playing' || 'live' || 'started' || 'emjogo' => 'Em jogo',
     'ended' || 'encerrada' || 'encerramento' => 'Encerrada',
     'post' || 'postgame' || 'posjogo' => 'Pós-jogo',

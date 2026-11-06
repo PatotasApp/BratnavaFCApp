@@ -191,7 +191,7 @@ class PlayerNameWithIcon extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        nameWidget,
+        Flexible(child: nameWidget),
         const SizedBox(width: 5),
         renderGroupIcon(
           icon,

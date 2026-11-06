@@ -151,7 +151,7 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: AppColors.onDark))
                       : const Icon(Icons.arrow_forward),
-                  label: const Text('Ir para MatchMaking'),
+                  label: const Text('Ir para montagem dos times'),
                 ),
               ),
             ),

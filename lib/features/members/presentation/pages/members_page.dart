@@ -98,7 +98,7 @@ class _AdminUsersPageState extends ConsumerState<_AdminUsersPage> {
                   fontSize: 14,
                 ),
                 decoration: InputDecoration(
-                  hintText: 'Buscar por nome, usuário ou email...',
+                  hintText: 'Buscar por nome, usuário ou e-mail...',
                   hintStyle: TextStyle(
                     color: isDark ? AppColors.slate500 : AppColors.slate400,
                     fontSize: 14,
