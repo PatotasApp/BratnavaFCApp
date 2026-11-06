@@ -59,6 +59,20 @@ class AppConstants {
   /// depois do arquivo: `--dart-define=API_URL=https://localhost:44356`.
   static String get apiUrl => _require(_apiUrl, 'API_URL');
 
+  static const String _shareUrl = String.fromEnvironment(
+    'SHARE_URL',
+    defaultValue: '',
+  );
+
+  /// Site do sistema (Cloudflare Pages), base dos links compartilhados
+  /// (/perfil, /patota, /partida, /votacao, /campeonato, /enquete). É o mesmo
+  /// host dos App Links do Android (shareHost no build.gradle.kts) e dos
+  /// Universal Links do iOS. Sem a chave, o site de produção.
+  static String get shareUrl => (_shareUrl.isEmpty
+          ? 'https://app-frontend-web.pages.dev'
+          : _shareUrl)
+      .replaceAll(RegExp(r'/+$'), '');
+
   /// Site público, usado para montar links compartilháveis de replay.
   static String get webUrl => _require(_webUrl, 'WEB_URL');
 
