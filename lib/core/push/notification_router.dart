@@ -74,6 +74,11 @@ String notificationRoute(String type, Map<String, dynamic> data) {
     case 'invite_accepted':
       return '/app/groups';
 
+    // ── Planilhas antigas (importação manual pela equipe) ─────────────────
+
+    case 'group_spreadsheet':
+      return _ok(groupId) ? '/app/spreadsheets?groupId=$groupId' : '/app/spreadsheets';
+
     // ── Outros ────────────────────────────────────────────────────────────
 
     case 'birthday':

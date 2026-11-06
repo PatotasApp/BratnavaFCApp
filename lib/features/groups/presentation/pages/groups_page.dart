@@ -18,6 +18,8 @@ import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../../shared/presentation/widgets/user_profile_link.dart';
+import '../../../group_spreadsheets/group_spreadsheets.dart';
+import '../../../group_spreadsheets/presentation/spreadsheet_widgets.dart';
 
 extension _FirstOrNullExt<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
@@ -608,21 +610,25 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     }
   }
 
-  void _showCreateGroup() {
+  Future<void> _showCreateGroup() async {
     final account = ref.read(accountStoreProvider).activeAccount;
     if (account == null) return;
-    showModalBottomSheet<void>(
+    String? createdId;
+    String createdName = '';
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.transparent,
       builder: (_) => _CreateGroupSheet(
         onSubmit: (name) async {
-          await _dio.post(ApiConstants.groups, data: {
+          final res = await _dio.post(ApiConstants.groups, data: {
             'name': name,
             'userAdminIds': [account.userId],
             'scheduleMatchDate': null,
             'createdByUserId': account.userId,
           });
+          createdId = createdGroupIdFrom(res.data);
+          createdName = name;
 
           await _loadMine();
           await _loadAdminGroups();
@@ -637,6 +643,13 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
         },
       ),
     );
+
+    // Logo depois de criar: a patota já tinha planilhas? Pular é normal — o
+    // envio também fica em Configurações > Planilhas antigas.
+    final id = createdId;
+    if (id != null && mounted) {
+      await showSpreadsheetOnboardingSheet(context, groupId: id, groupName: createdName);
+    }
   }
 
   /// Cria um convidado — jogador sem conta no sistema.
