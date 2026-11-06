@@ -324,7 +324,7 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
     final amount = amountText.isEmpty ? null : double.tryParse(amountText);
     if (amountText.isNotEmpty && amount == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Informe um valor valido.')),
+        const SnackBar(content: Text('Informe um valor válido.')),
       );
       return;
     }
@@ -477,7 +477,7 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
             minLines: 2,
             maxLines: 4,
             decoration: const InputDecoration(
-              labelText: 'Descricao',
+              labelText: 'Descrição',
               isDense: true,
             ),
           ),

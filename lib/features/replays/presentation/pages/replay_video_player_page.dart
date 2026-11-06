@@ -918,7 +918,7 @@ class _LikersSheet extends StatelessWidget {
                     if (snapshot.hasError) {
                       return const Center(
                         child: Text(
-                          'Nao foi possivel carregar as curtidas.',
+                          'Não foi possível carregar as curtidas.',
                           style: TextStyle(color: AppColors.onDark70),
                         ),
                       );
@@ -928,7 +928,7 @@ class _LikersSheet extends StatelessWidget {
                     if (likers.isEmpty) {
                       return const Center(
                         child: Text(
-                          'Ainda nao ha curtidas neste replay.',
+                          'Ainda não há curtidas neste replay.',
                           style: TextStyle(color: AppColors.onDark70),
                         ),
                       );

@@ -34,5 +34,10 @@ void main() {
         '/app/account',
       );
     });
+
+    test('não abre mais a funcionalidade removida de apostas', () {
+      expect(notificationRoute('bet_created', const {}), '/app');
+      expect(notificationRoute('bet_resolved', const {}), '/app');
+    });
   });
 }

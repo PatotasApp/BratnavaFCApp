@@ -364,7 +364,7 @@ class _PollDetailSheetState extends ConsumerState<PollDetailSheet>
     final confirm = await showConfirmDialog(
       context: context,
       title: 'Remover prazo',
-      message: 'Deseja remover o prazo de vencimento desta votacao?',
+      message: 'Deseja remover o prazo de vencimento desta votação?',
       confirmLabel: 'Remover',
       danger: true,
     );
@@ -391,7 +391,7 @@ class _PollDetailSheetState extends ConsumerState<PollDetailSheet>
   Future<void> _deletePoll() async {
     final confirm = await showConfirmDialog(
       context: context,
-      title: 'Excluir votacao',
+      title: 'Excluir votação',
       message: 'Deseja excluir "${_poll.title}"?',
       confirmLabel: 'Excluir',
       danger: true,

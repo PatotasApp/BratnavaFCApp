@@ -470,7 +470,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
       await _loadStepPayload(matchId, MatchStep.teams);
     } catch (e) {
       state = state.copyWith(
-          error: extractDioError(e, 'Falha ao avançar para matchmaking.'));
+          error: extractDioError(
+              e, 'Falha ao avançar para a montagem dos times.'));
     } finally {
       state = state.copyWith(mutating: false);
     }
