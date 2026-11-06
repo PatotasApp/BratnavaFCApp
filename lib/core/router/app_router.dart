@@ -2,6 +2,7 @@ import '../constants/replay_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../features/moderation/moderation.dart';
 import '../../features/auth/presentation/pages/email_login_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/forgot_password_page.dart';
@@ -24,7 +25,6 @@ import '../../features/polls/presentation/pages/polls_page.dart';
 import '../../features/matches/presentation/pages/matches_page.dart';
 import '../../features/payments/presentation/pages/payments_page.dart';
 import '../../features/absences/presentation/pages/absences_page.dart';
-import '../../features/bet/presentation/pages/bet_page.dart';
 import '../../features/replays/presentation/pages/replay_vault_page.dart';
 import '../../features/player_spotlight/presentation/pages/player_spotlight_page.dart';
 import '../../features/retrospective/presentation/pages/retrospective_page.dart';
@@ -263,10 +263,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const AbsencesPage(),
           ),
           GoRoute(
-            path: '/app/bet',
-            builder: (_, __) => const BetPage(),
-          ),
-          GoRoute(
             path: '/app/replays',
             redirect: (_, __) => groupHasReplays(
                     ref.read(accountStoreProvider).activeAccount?.activeGroupId)
@@ -293,6 +289,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/app/account',
             builder: (_, __) => const MyAccountPage(),
+          ),
+          GoRoute(
+            path: '/app/account/blocked',
+            builder: (_, __) => const BlockedUsersPage(),
           ),
           GoRoute(
             path: '/app/team-builder',

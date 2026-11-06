@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../widgets/legal_notice.dart';
 import '../../../../shared/presentation/widgets/app_button.dart';
 import '../../../../shared/presentation/widgets/app_text_field.dart';
 import '../providers/auth_provider.dart';
@@ -265,6 +266,11 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
               isLoading: isLoading,
               width: double.infinity,
             ),
+            const SizedBox(height: 16),
+            LegalNotice(
+                color: isDark
+                    ? AppColors.slate400
+                    : AppColors.lightTextSecondary),
           ],
         ),
       ),

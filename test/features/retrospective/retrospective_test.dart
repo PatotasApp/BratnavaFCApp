@@ -232,7 +232,7 @@ void main() {
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(body: RetroShareSheet(r: r, story: storiesFor(r).last)),
       ));
-      expect(find.text('Story do Instagram'), findsOneWidget);
+      expect(find.text('Story do Instagram'), findsNothing);
       expect(find.text('Copiar imagem'), findsOneWidget);
       expect(find.text('Mais opções'), findsOneWidget);
 

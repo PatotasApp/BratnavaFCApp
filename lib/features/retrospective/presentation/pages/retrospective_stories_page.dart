@@ -249,20 +249,6 @@ class _RetroShareSheetState extends State<RetroShareSheet> {
               const SizedBox(height: 16),
               Row(children: [
                 _Option(
-                  label: 'Story do Instagram',
-                  icon: Icons.camera_alt_outlined,
-                  gradient: RetroColors.instagram,
-                  busy: _busy,
-                  onTap: () => _run((png) async {
-                    final ok = await ImageShare.shareToInstagramStory(png,
-                        name: _name);
-                    if (ok) return null;
-                    await ImageShare.shareSystem(png, name: _name);
-                    return 'Instagram não encontrado: abrimos as outras opções.';
-                  }),
-                ),
-                const SizedBox(width: 10),
-                _Option(
                   label: 'Copiar imagem',
                   icon: Icons.copy_rounded,
                   gradient: const [RetroColors.greenB, RetroColors.greenB],

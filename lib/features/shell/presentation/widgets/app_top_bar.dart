@@ -331,10 +331,6 @@ class _NotificationSheetState extends ConsumerState<_NotificationSheet> {
       case 'player_removed_self':
         return Icons.person_remove_rounded;
 
-      case 'bet_resolved':
-      case 'bet_created':
-        return Icons.casino_rounded;
-
       case 'birthday':
         return Icons.cake_rounded;
 
@@ -389,10 +385,6 @@ class _NotificationSheetState extends ConsumerState<_NotificationSheet> {
       case 'player_removed':
       case 'player_removed_self':
         return AppColors.prototypeDanger; // red
-
-      case 'bet_resolved':
-      case 'bet_created':
-        return AppColors.prototypeDanger; // pink
 
       case 'birthday':
         return AppColors.prototypeDanger; // pink
