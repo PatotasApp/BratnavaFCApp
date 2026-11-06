@@ -18,6 +18,7 @@ import '../../domain/entities/match_details.dart';
 import '../widgets/match_goals_panel.dart';
 import '../widgets/match_replays_section.dart';
 import '../providers/history_provider.dart';
+import '../../../../core/share/share_links.dart';
 
 class MatchDetailsPage extends ConsumerStatefulWidget {
   final String groupId;
@@ -381,6 +382,17 @@ class _DetailsBody extends StatelessWidget {
                 ].join(' · '),
                 icon: Icons.sports_soccer_outlined,
                 onBack: onBack,
+                actions: [
+                  Builder(
+                    builder: (ctx) => AppPageHeaderAction(
+                      icon: Icons.share_outlined,
+                      tooltip: 'Compartilhar partida',
+                      onPressed: () => shareLink(
+                          ctx, ShareLinks.match(data.matchId),
+                          text: 'Partida no PatotasApp'),
+                    ),
+                  ),
+                ],
               ),
 
               // Hero score card

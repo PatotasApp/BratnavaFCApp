@@ -165,7 +165,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         return path == '/splash' ? null : '/splash';
       }
 
-      if (isAuthRoute || path == '/splash') return pendingShare.take() ?? '/app';
+      if (isAuthRoute || path == '/splash')
+        return pendingShare.take() ?? '/app';
 
       return null;
     },
@@ -174,7 +175,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Mesmos caminhos do site (lib/core/share/share_links.dart).
       GoRoute(
         path: '/perfil/:userId',
-        redirect: (_, state) => '/app/profile/${state.pathParameters['userId']}',
+        redirect: (_, state) =>
+            '/app/profile/${state.pathParameters['userId']}',
       ),
       GoRoute(
         path: '/patota/:groupId',
@@ -184,8 +186,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       for (final kind in ShareKind.values.where((k) => k.isInternal))
         GoRoute(
           path: '/${kind.path}/:id',
-          builder: (_, state) =>
-              SharedContentLinkPage(kind: kind, id: state.pathParameters['id']!),
+          builder: (_, state) => SharedContentLinkPage(
+              kind: kind, id: state.pathParameters['id']!),
         ),
       // ── Auth ──────────────────────────────────────────────────────
       GoRoute(

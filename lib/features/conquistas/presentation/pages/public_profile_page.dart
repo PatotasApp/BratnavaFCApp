@@ -13,6 +13,7 @@ import '../widgets/achievement_progress_sheet.dart';
 import '../widgets/conquistas_section.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../moderation/moderation.dart';
+import '../../../../core/share/share_links.dart';
 
 class PublicProfilePage extends ConsumerWidget {
   final String userId;
@@ -32,10 +33,28 @@ class PublicProfilePage extends ConsumerWidget {
             subtitle: 'Informações públicas do jogador',
             icon: Icons.person_outline_rounded,
             actions: [
+              Builder(
+                builder: (ctx) => AppPageHeaderAction(
+                  icon: Icons.share_outlined,
+                  tooltip: isOwner
+                      ? 'Compartilhar meu perfil'
+                      : 'Compartilhar perfil',
+                  onPressed: () => shareProfileLink(ctx, ref, userId,
+                      isOwner: isOwner,
+                      name: ref
+                          .read(publicProfileProvider(userId))
+                          .valueOrNull
+                          ?.name),
+                ),
+              ),
               if (!isOwner)
                 _ProfileModerationMenu(
                   userId: userId,
-                  name: ref.watch(publicProfileProvider(userId)).valueOrNull?.name ?? 'este jogador',
+                  name: ref
+                          .watch(publicProfileProvider(userId))
+                          .valueOrNull
+                          ?.name ??
+                      'este jogador',
                 ),
             ],
           ),
@@ -89,9 +108,11 @@ class _ProfileModerationMenu extends ConsumerWidget {
       icon: const Icon(Icons.more_vert_rounded),
       onSelected: (action) async {
         if (action == 'report') {
-          await showReportSheet(context, target: ReportTarget.user, targetId: userId);
+          await showReportSheet(context,
+              target: ReportTarget.user, targetId: userId);
         } else if (action == 'block') {
-          final blocked = await confirmBlockUser(context, ref, userId: userId, name: name);
+          final blocked =
+              await confirmBlockUser(context, ref, userId: userId, name: name);
           if (blocked && context.mounted) Navigator.of(context).maybePop();
         }
       },
@@ -99,12 +120,16 @@ class _ProfileModerationMenu extends ConsumerWidget {
         PopupMenuItem(
           value: 'report',
           child: ListTile(
-              leading: Icon(Icons.flag_outlined), title: Text('Denunciar perfil'), dense: true),
+              leading: Icon(Icons.flag_outlined),
+              title: Text('Denunciar perfil'),
+              dense: true),
         ),
         PopupMenuItem(
           value: 'block',
           child: ListTile(
-              leading: Icon(Icons.block_rounded), title: Text('Bloquear jogador'), dense: true),
+              leading: Icon(Icons.block_rounded),
+              title: Text('Bloquear jogador'),
+              dense: true),
         ),
       ],
     );
@@ -461,6 +486,10 @@ class _PrivacyCardState extends ConsumerState<_PrivacyCard> {
                         const InputDecoration(labelText: 'Quem pode ver'),
                     items: const [
                       DropdownMenuItem(
+                        value: 'Public',
+                        child: Text('Qualquer pessoa com o link'),
+                      ),
+                      DropdownMenuItem(
                         value: 'AuthenticatedUsers',
                         child: Text('Todos no PatotasApp'),
                       ),
@@ -560,4 +589,48 @@ class _PrivacyShell extends StatelessWidget {
         ),
         child: child,
       );
+}
+
+/// Compartilha o link do perfil. Quando é o próprio perfil e ele não está
+/// público, avisa que quem não tem conta não vai ver e oferece tornar público.
+Future<void> shareProfileLink(
+    BuildContext context, WidgetRef ref, String userId,
+    {required bool isOwner, String? name}) async {
+  final url = ShareLinks.profile(userId);
+  final text = name == null ? 'Perfil no PatotasApp' : '$name no PatotasApp';
+  if (isOwner) {
+    ProfilePrivacy? privacy;
+    try {
+      privacy = await ref.read(profilePrivacyProvider.future);
+    } catch (_) {}
+    if (!context.mounted) return;
+    if (privacy != null && privacy.visibility != 'Public') {
+      final makePublic = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Seu perfil não está público'),
+          content: const Text(
+              'Quem abrir o link sem conta no PatotasApp não vai ver seu perfil. '
+              'Quer deixá-lo visível para qualquer pessoa com o link? '
+              'Só aparece a vitrine: nome, foto, números de carreira e conquistas.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Compartilhar assim')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Tornar público')),
+          ],
+        ),
+      );
+      if (makePublic == null || !context.mounted) return;
+      if (makePublic) {
+        try {
+          await saveProfilePrivacy(ref, privacy.copyWith(visibility: 'Public'));
+        } catch (_) {}
+        if (!context.mounted) return;
+      }
+    }
+  }
+  await shareLink(context, url, text: text);
 }

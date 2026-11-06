@@ -27,8 +27,7 @@ enum ShareKind {
         ShareKind.profile || ShareKind.group => name,
       };
 
-  bool get isInternal =>
-      this != ShareKind.profile && this != ShareKind.group;
+  bool get isInternal => this != ShareKind.profile && this != ShareKind.group;
 
   static ShareKind? fromPath(String segment) {
     for (final kind in ShareKind.values) {

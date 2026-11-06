@@ -12,7 +12,7 @@ import '../providers/championship_provider.dart';
 
 /// Link público do modo cinema do campeonato (site).
 String championshipCinemaUrl(String championshipId) =>
-    '${AppConstants.webUrl}/public/championship/$championshipId/cinema';
+    '${AppConstants.shareUrl}/public/championship/$championshipId/cinema';
 
 /// Vídeos do campeonato separados por jogo, com a mesma seção de vídeos da
 /// partida (miniaturas, filtro e player). Cada jogo é uma partida: os vídeos

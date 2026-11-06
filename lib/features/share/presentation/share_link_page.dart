@@ -165,8 +165,8 @@ class _SharedGroupLinkPageState extends ConsumerState<SharedGroupLinkPage> {
               title: 'Não foi possível abrir o link',
               message: extractDioError(snap.error),
               action: FilledButton(
-                onPressed: () => setState(() => _future =
-                    ref.read(shareApiProvider).group(widget.groupId)),
+                onPressed: () => setState(() =>
+                    _future = ref.read(shareApiProvider).group(widget.groupId)),
                 child: const Text('Tentar de novo'),
               ),
             );

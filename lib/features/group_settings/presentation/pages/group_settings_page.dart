@@ -16,6 +16,7 @@ import '../providers/group_settings_provider.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/no_active_group_view.dart';
+import '../../../../core/share/share_links.dart';
 
 // ── Icon types ────────────────────────────────────────────────────────────────
 
@@ -365,6 +366,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
   // ── Show player stats toggle ──────────────────────────────────────────────
   bool _showPlayerStats = false;
   bool _showChampionshipsInHistory = false;
+  bool _publicPageEnabled = true;
   bool _showStatsGeneralTab = true;
   bool _showStatsPerMatchTab = true;
   bool _showStatsClassificationTab = true;
@@ -438,6 +440,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     _mvpMaxCtrl = TextEditingController(text: s.mvpTieMaxPlayers.toString());
     _showPlayerStats = s.showPlayerStats;
     _showChampionshipsInHistory = s.showChampionshipsInHistory;
+    _publicPageEnabled = s.publicPageEnabled;
     _showStatsGeneralTab = s.showStatsGeneralTab;
     _showStatsPerMatchTab = s.showStatsPerMatchTab;
     _showStatsClassificationTab = s.showStatsClassificationTab;
@@ -615,6 +618,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
         mvpTieMaxPlayers: _mvpTieRule == 2 ? _mvpTieMaxPlayers : null,
         showPlayerStats: _showPlayerStats,
         showChampionshipsInHistory: _showChampionshipsInHistory,
+        publicPageEnabled: _publicPageEnabled,
         showStatsGeneralTab: _showStatsGeneralTab,
         showStatsPerMatchTab: _showStatsPerMatchTab,
         showStatsClassificationTab: _showStatsClassificationTab,
@@ -1818,6 +1822,13 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 12),
+            _PublicPageCard(
+              value: _publicPageEnabled,
+              onChanged: (v) => setState(() => _publicPageEnabled = v),
+              groupId:
+                  ref.read(accountStoreProvider).activeAccount?.activeGroupId,
             ),
             const SizedBox(height: 12),
           ],
@@ -4372,6 +4383,48 @@ class _ErrorState extends StatelessWidget {
                 icon: const Icon(Icons.refresh_rounded, size: 16),
                 label: const Text('Tentar novamente'),
               ),
+            ],
+          ),
+        ),
+      );
+}
+
+/// Página pública da patota (link compartilhado) + botão de compartilhar.
+class _PublicPageCard extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final String? groupId;
+
+  const _PublicPageCard(
+      {required this.value, required this.onChanged, required this.groupId});
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SwitchListTile.adaptive(
+                title: const Text('Página pública da patota'),
+                subtitle: const Text(
+                    'Quem abrir o link vê nome, logo, desde quando existe, '
+                    'integrantes, jogos e gols, dia, horário e local. Partidas, '
+                    'enquetes, financeiro e presenças nunca aparecem.'),
+                value: value,
+                onChanged: onChanged,
+              ),
+              if (groupId != null && groupId!.isNotEmpty)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => shareLink(
+                        context, ShareLinks.group(groupId!),
+                        text: 'Conheça nossa patota no PatotasApp'),
+                    icon: const Icon(Icons.share_outlined, size: 18),
+                    label: const Text('Compartilhar patota'),
+                  ),
+                ),
             ],
           ),
         ),

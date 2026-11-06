@@ -23,6 +23,7 @@ import '../widgets/championship_replays_section.dart';
 import '../widgets/championship_stage_header.dart';
 import '../widgets/championship_swap_teams.dart';
 import '../widgets/championship_team_field.dart';
+import '../../../../core/share/share_links.dart';
 
 class ChampionshipDetailPage extends ConsumerStatefulWidget {
   const ChampionshipDetailPage({super.key, required this.championshipId});
@@ -81,6 +82,17 @@ class _ChampionshipDetailPageState
               : '${DateFormat('dd/MM · HH:mm').format(details.playedAt)} · '
                   '${details.placeName}',
           icon: Icons.emoji_events_outlined,
+          actions: [
+            Builder(
+              builder: (ctx) => AppPageHeaderAction(
+                icon: Icons.share_outlined,
+                tooltip: 'Compartilhar campeonato',
+                onPressed: () => shareLink(
+                    ctx, ShareLinks.championship(widget.championshipId),
+                    text: details?.name ?? 'Campeonato no PatotasApp'),
+              ),
+            ),
+          ],
         ),
         Expanded(
           child: state.loading && details == null
