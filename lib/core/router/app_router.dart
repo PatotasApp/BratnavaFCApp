@@ -37,6 +37,7 @@ import '../../features/championships/presentation/pages/championships_page.dart'
 import '../../features/championships/presentation/pages/championship_wizard_page.dart';
 import '../../features/championships/presentation/pages/championship_detail_page.dart';
 import '../../core/push/local_notifications.dart';
+import '../../features/group_spreadsheets/presentation/group_spreadsheets_page.dart';
 
 // ── Placeholder para rotas ainda não implementadas ────────────────────────────
 class _PlaceholderPage extends StatelessWidget {
@@ -253,6 +254,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/app/settings',
             builder: (_, __) => const GroupSettingsPage(),
+          ),
+          GoRoute(
+            path: '/app/spreadsheets',
+            builder: (_, state) => GroupSpreadsheetsPage(
+              groupId: state.uri.queryParameters['groupId'],
+            ),
           ),
           GoRoute(
             path: '/app/theme',
