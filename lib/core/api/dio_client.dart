@@ -8,7 +8,10 @@ import 'interceptors/retry_interceptor.dart';
 
 final _log = Logger(printer: PrettyPrinter(methodCount: 0));
 
-Dio buildDio({required AuthInterceptor authInterceptor}) {
+Dio buildDio({
+  required AuthInterceptor authInterceptor,
+  List<Interceptor> extraInterceptors = const [],
+}) {
   final dio = Dio(
     BaseOptions(
       baseUrl: AppConstants.apiUrl,
@@ -42,6 +45,7 @@ Dio buildDio({required AuthInterceptor authInterceptor}) {
   };
 
   dio.interceptors.add(authInterceptor);
+  dio.interceptors.addAll(extraInterceptors);
   dio.interceptors.add(
     RetryInterceptor(
       dio: dio,

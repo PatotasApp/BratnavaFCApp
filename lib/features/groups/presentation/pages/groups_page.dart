@@ -11,6 +11,7 @@ import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../billing/presentation/billing_widgets.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
@@ -729,7 +730,11 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     if (meuUserId == null || _group == null) return false;
 
     return !_group!.players.any(
-      (p) => p.userId != null && p.userId!.isNotEmpty && p.userId != meuUserId && !p.isGuest,
+      (p) =>
+          p.userId != null &&
+          p.userId!.isNotEmpty &&
+          p.userId != meuUserId &&
+          !p.isGuest,
     );
   }
 
@@ -1001,6 +1006,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
             roleLabels: _roleLabels(),
           ),
         ),
+        // Só admin e financeiro: para o jogador comum o card não existe.
+        GroupPlanCard(groupId: groupId),
       ],
     );
   }
@@ -1085,23 +1092,29 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
               onInvite: () => _showInvite(groupId),
               onLeave: _showLeaveConfirm,
               groupContent: isExpanded
-                  ? _GroupContent(
-                      group: _group,
-                      groupLoading: _groupLoading,
-                      groupError: _groupError,
-                      activePlayers: _sortedActivePlayers,
-                      guestPlayers: _guestPlayers,
-                      inactivePlayers: _inactivePlayers,
-                      activePlayerId: _activePlayerId,
-                      isAdminHere: isAdminHere,
-                      isFinanceiroHere: _canSeePaymentStatus(groupId),
-                      paymentMap: _paymentMap,
-                      icons: expandedIcons,
-                      isDark: isDark,
-                      onEditPlayer: _showEditPlayer,
-                      onEditRatings: (p) =>
-                          _showEditPlayer(p, section: _EditSection.ratings),
-                      roleLabels: _roleLabels(),
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _GroupContent(
+                          group: _group,
+                          groupLoading: _groupLoading,
+                          groupError: _groupError,
+                          activePlayers: _sortedActivePlayers,
+                          guestPlayers: _guestPlayers,
+                          inactivePlayers: _inactivePlayers,
+                          activePlayerId: _activePlayerId,
+                          isAdminHere: isAdminHere,
+                          isFinanceiroHere: _canSeePaymentStatus(groupId),
+                          paymentMap: _paymentMap,
+                          icons: expandedIcons,
+                          isDark: isDark,
+                          onEditPlayer: _showEditPlayer,
+                          onEditRatings: (p) =>
+                              _showEditPlayer(p, section: _EditSection.ratings),
+                          roleLabels: _roleLabels(),
+                        ),
+                        GroupPlanCard(groupId: groupId),
+                      ],
                     )
                   : null,
             ),
@@ -5014,8 +5027,8 @@ class _LeaveConfirmDialogState extends State<_LeaveConfirmDialog> {
       content: Text(
         widget.encerraAPatota
             ? 'Você é a última pessoa desta patota. Ao sair, ela será encerrada: '
-              'partidas, enquetes, mensalidades e lançamentos serão apagados. '
-              'Não há como desfazer.'
+                'partidas, enquetes, mensalidades e lançamentos serão apagados. '
+                'Não há como desfazer.'
             : 'Essa ação remove você da patota atual.',
         style: TextStyle(
           color: isDark
