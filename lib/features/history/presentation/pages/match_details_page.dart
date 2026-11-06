@@ -1,3 +1,4 @@
+import '../../../../core/constants/replay_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -158,6 +159,7 @@ class _MatchDetailsPageState extends ConsumerState<MatchDetailsPage> {
   }
 
   Future<void> _loadReplays() async {
+    if (!groupHasReplays(widget.groupId)) return;
     try {
       final ds = ref.read(historyDsProvider);
       final replays = await ds.fetchMatchReplays(
@@ -401,6 +403,7 @@ class _DetailsBody extends StatelessWidget {
                   onChanged: onTabChanged,
                   isDark: isDark,
                   canSeeStats: canSeeStats,
+                  showReplays: groupHasReplays(groupId),
                 ),
               ),
               const SizedBox(height: 12),
@@ -511,19 +514,21 @@ class _MatchDetailsTabs extends StatelessWidget {
   final ValueChanged<int> onChanged;
   final bool isDark;
   final bool canSeeStats;
+  final bool showReplays;
 
   const _MatchDetailsTabs({
     required this.activeTab,
     required this.onChanged,
     required this.isDark,
     required this.canSeeStats,
+    required this.showReplays,
   });
 
   List<(String, int)> get _tabs => [
         ('Resumo', 0),
         ('Escalação', 1),
         if (canSeeStats) ('Gols', 2),
-        ('Replays', 3),
+        if (showReplays) ('Replays', 3),
         ('MVP', 4),
       ];
 

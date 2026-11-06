@@ -458,6 +458,7 @@ class _MoreSheet extends ConsumerWidget {
                           isAdmin: isAdmin,
                           canSeeStats: canSeeStats,
                           requiresStatsPermission: item.statsPermission,
+                          groupId: groupId,
                         ))) ...[
                     Text(
                       group.label.toUpperCase(),
@@ -477,6 +478,7 @@ class _MoreSheet extends ConsumerWidget {
                             isAdmin: isAdmin,
                             canSeeStats: canSeeStats,
                             requiresStatsPermission: item.statsPermission,
+                            groupId: groupId,
                           );
                         });
 
