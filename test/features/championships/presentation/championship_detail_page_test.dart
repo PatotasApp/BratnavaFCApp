@@ -12,7 +12,7 @@ void main() {
   setUpAll(() => initializeDateFormatting('pt_BR'));
 
   Future<void> pump(WidgetTester tester, String id,
-      {ChampionshipMockDataSource? dataSource}) async {
+      {ChampionshipMockDataSource? dataSource, String groupId = 'g'}) async {
     tester.view.physicalSize = const Size(1080, 4000);
     tester.view.devicePixelRatio = 2.5;
     addTearDown(tester.view.reset);
@@ -20,7 +20,7 @@ void main() {
       overrides: [
         championshipDataSourceProvider
             .overrideWithValue(dataSource ?? ChampionshipMockDataSource()),
-        championshipGroupIdProvider.overrideWithValue('g'),
+        championshipGroupIdProvider.overrideWithValue(groupId),
         championshipIsAdminProvider.overrideWithValue(true),
       ],
       child: MaterialApp(
@@ -137,7 +137,9 @@ void main() {
 
   testWidgets('jogo em andamento: só o confronto, botões grandes e cronômetro',
       (tester) async {
-    await pump(tester, 'championship-3');
+    // Patota com câmeras (Bratnava): os botões de replay aparecem.
+    await pump(tester, 'championship-3',
+        groupId: '3f401edf-d309-4bae-97d8-28eae0da7a8a');
 
     expect(find.text('Presenças'), findsNothing);
     expect(find.text('Jogo'), findsOneWidget);

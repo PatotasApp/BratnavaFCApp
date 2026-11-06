@@ -7,6 +7,8 @@ import 'package:logger/logger.dart';
 import 'local_notifications.dart';
 import 'notification_router.dart';
 import 'push_token_api.dart';
+import '../../features/notifications/data/datasources/notifications_datasource.dart'
+    show isHiddenNotificationType;
 
 /// Handler de background — DEVE ser função top-level (fora de qualquer classe).
 /// Chamado quando o app está terminado ou em background.
@@ -296,6 +298,7 @@ class PushService {
   void _showForegroundNotification(RemoteMessage message) {
     final data = message.data;
     final type = data['type'] as String?;
+    if (isHiddenNotificationType(type)) return;
 
     // match_invite é data-only — exibe com botões SIM/NÃO
     if (type == 'match_invite') {

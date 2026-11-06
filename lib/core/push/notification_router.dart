@@ -74,12 +74,6 @@ String notificationRoute(String type, Map<String, dynamic> data) {
     case 'invite_accepted':
       return '/app/groups';
 
-    // ── Apostas ───────────────────────────────────────────────────────────
-
-    case 'bet_resolved':
-    case 'bet_created':
-      return '/app/bet';
-
     // ── Outros ────────────────────────────────────────────────────────────
 
     case 'birthday':

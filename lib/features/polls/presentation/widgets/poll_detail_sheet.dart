@@ -10,6 +10,7 @@ import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../matches/domain/entities/match_models.dart';
 import '../../../matches/presentation/providers/match_provider.dart';
+import '../../../moderation/moderation.dart';
 import '../../data/datasources/polls_remote_datasource.dart';
 import '../../domain/entities/poll_detail.dart';
 import '../providers/polls_provider.dart';
@@ -487,6 +488,17 @@ class _PollDetailSheetState extends ConsumerState<PollDetailSheet>
                       ),
                       const SizedBox(width: 8),
                       _StatusChip(isOpen: _poll.isOpen),
+                      IconButton(
+                        tooltip: 'Denunciar enquete',
+                        visualDensity: VisualDensity.compact,
+                        icon: Icon(Icons.flag_outlined,
+                            size: 20,
+                            color: isDark ? AppColors.slate400 : AppColors.slate500),
+                        onPressed: () => showReportSheet(context,
+                            target: ReportTarget.poll,
+                            targetId: _poll.id,
+                            groupId: widget.groupId),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),

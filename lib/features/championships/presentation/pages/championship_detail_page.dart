@@ -1,3 +1,4 @@
+import '../../../../core/constants/replay_access.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -258,7 +259,7 @@ class _ChampionshipDetailPageState
             _HighlightsSection(details: details, icons: icons),
           if (canSeeStats) goals,
           teamsByPosition,
-          replays,
+          if (groupHasReplays(groupId)) replays,
           if (admin != null) admin,
         ],
       ChampionshipStage.finalized => [
@@ -269,7 +270,7 @@ class _ChampionshipDetailPageState
           if (canSeeStats && hasHighlights)
             _HighlightsSection(details: details, icons: icons),
           if (canSeeStats) goals,
-          replays,
+          if (groupHasReplays(groupId)) replays,
           if (admin != null) admin,
         ],
       ChampionshipStage.cancelled => [_Overview(details: details)],

@@ -7,9 +7,9 @@ import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-/// Compartilhar uma imagem gerada no app: Story do Instagram, copiar imagem e
-/// o menu do sistema. Story e copiar são nativos (MainActivity.kt e
-/// AppDelegate.swift, canal `br.com.patotasapp/image_share`), com o PNG
+/// Compartilhar uma imagem gerada no app: copiar imagem e o menu do sistema.
+/// Copiar é nativo (MainActivity.kt e AppDelegate.swift, canal
+/// `br.com.patotasapp/image_share`), com o PNG
 /// gravado em `cache/share/` (pasta liberada no FileProvider do Android).
 class ImageShare {
   ImageShare._();
@@ -36,21 +36,6 @@ class ImageShare {
     final file = File('${dir.path}/$name.png');
     await file.writeAsBytes(png, flush: true);
     return file;
-  }
-
-  /// Abre o Instagram direto no story. false = Instagram não instalado (ou
-  /// plataforma sem suporte): quem chama decide o plano B.
-  static Future<bool> shareToInstagramStory(Uint8List png,
-      {String name = 'patotasapp'}) async {
-    if (!Platform.isAndroid && !Platform.isIOS) return false;
-    final file = await _save(png, name);
-    try {
-      return await _channel
-              .invokeMethod<bool>('instagramStory', {'path': file.path}) ??
-          false;
-    } on MissingPluginException {
-      return false;
-    }
   }
 
   /// Copia a imagem para a área de transferência. false = não deu.

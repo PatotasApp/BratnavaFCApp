@@ -9,7 +9,6 @@ import '../../../../core/api/interceptors/auth_interceptor.dart';
 import '../../../../core/auth/firebase_auth_service.dart';
 import '../../../../core/push/push_token_api.dart';
 import '../../../../core/push/local_notifications.dart';
-import '../../../../core/home_widget/match_home_widget_service.dart';
 import '../../data/datasources/auth_remote_datasource.dart';
 import 'account_store.dart';
 import 'session_provider.dart';
@@ -391,7 +390,6 @@ class AuthNotifier extends AsyncNotifier<void> {
       debugPrint('[Logout] Falha ao invalidar token FCM local: $error');
     }
     await LocalNotifications.plugin.cancelAll();
-    await MatchHomeWidgetService.clear();
     ref.invalidateSelf();
   }
 

@@ -14,8 +14,6 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
         </intent>
-        <!-- Compartilhar no Story: saber se o Instagram está instalado. -->
-        <package android:name="com.instagram.android" />
     </queries>
     <application
         android:label="@string/app_name"
@@ -42,24 +40,7 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="patotasapp" android:host="open" />
-            </intent-filter>
         </activity>
-        <receiver
-            android:name=".MatchHomeWidgetProvider"
-            android:exported="true"
-            android:label="@string/match_widget_name">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/match_home_widget_info" />
-        </receiver>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

@@ -259,13 +259,6 @@ class _ShareSheetState extends State<_ShareSheet> {
     }
   }
 
-  void _story() => _run((png) async {
-        if (await ImageShare.shareToInstagramStory(png, name: 'monte-seu-time'))
-          return null;
-        await ImageShare.shareSystem(png, name: 'monte-seu-time');
-        return 'Instagram não encontrado. Abrimos o menu de compartilhar.';
-      });
-
   void _copy() => _run((png) async =>
       await ImageShare.copyImage(png, name: 'monte-seu-time')
           ? 'Imagem copiada. É só colar no WhatsApp ou onde quiser.'
@@ -313,17 +306,6 @@ class _ShareSheetState extends State<_ShareSheet> {
           ),
           const SizedBox(height: 16),
           Row(children: [
-            _Option(
-              label: 'Story do Instagram',
-              icon: Icons.camera_alt_outlined,
-              gradient: const [
-                AppColors.instagramOrange,
-                AppColors.instagramPink,
-                AppColors.instagramPurple
-              ],
-              onTap: _busy ? null : _story,
-            ),
-            const SizedBox(width: 10),
             _Option(
                 label: 'Copiar imagem',
                 icon: Icons.copy_rounded,

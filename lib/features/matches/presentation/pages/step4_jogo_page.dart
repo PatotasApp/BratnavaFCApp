@@ -1,5 +1,7 @@
+import '../../../../core/constants/replay_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../auth/presentation/providers/account_store.dart';
@@ -231,6 +233,7 @@ class _Step4State extends ConsumerState<Step4JogoPage> {
                             ref.read(matchNotifierProvider.notifier).refresh(),
                       ),
                       const SizedBox(height: 16),
+                      if (groupHasReplays(gid)) ...[
                       _ReplaySection(
                         publishingType: _publishingReplayType,
                         teamAName: s.teamAColor?.name ?? 'Time A',
@@ -242,8 +245,26 @@ class _Step4State extends ConsumerState<Step4JogoPage> {
                         onJogada: () => _triggerReplay('Jogada'),
                       ),
                       const SizedBox(height: 16),
+                      ],
+                      // Gols ao vivo: aparece sempre, mesmo vazio, para quem
+                      // registra saber onde conferir e corrigir cada gol.
+                      PrototypeSectionTitle(
+                        title: 'Gols da partida',
+                        count: '${s.goals.length}',
+                      ),
+                      const SizedBox(height: 8),
+                      if (s.goals.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text(
+                            _isAdmin
+                                ? 'Nenhum gol registrado ainda. Toque na bola para registrar.'
+                                : 'Nenhum gol registrado ainda.',
+                            style: const TextStyle(
+                                fontSize: 13, color: AppColors.slate500),
+                          ),
+                        ),
                       if (s.goals.isNotEmpty) ...[
-                        const SizedBox(height: 12),
                         ...s.goals.map(
                           (g) => GoalEntryRow(
                             goal: g,

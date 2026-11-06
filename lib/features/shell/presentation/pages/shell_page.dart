@@ -350,11 +350,6 @@ class _MoreSheet extends ConsumerWidget {
           path: '/app/polls/votes',
         ),
         _MoreItem(
-          icon: Icons.monetization_on_outlined,
-          label: 'Bet',
-          path: '/app/bet',
-        ),
-        _MoreItem(
           icon: Icons.video_library_outlined,
           label: 'Replays',
           path: '/app/replays',
@@ -458,6 +453,7 @@ class _MoreSheet extends ConsumerWidget {
                           isAdmin: isAdmin,
                           canSeeStats: canSeeStats,
                           requiresStatsPermission: item.statsPermission,
+                          groupId: groupId,
                         ))) ...[
                     Text(
                       group.label.toUpperCase(),
@@ -477,6 +473,7 @@ class _MoreSheet extends ConsumerWidget {
                             isAdmin: isAdmin,
                             canSeeStats: canSeeStats,
                             requiresStatsPermission: item.statsPermission,
+                            groupId: groupId,
                           );
                         });
 
