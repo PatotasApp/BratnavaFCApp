@@ -60,7 +60,8 @@ MyPlayer? resolveActiveHistoryPlayer({
 class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
   _HistoryResultFilter _resultFilter = _HistoryResultFilter.all;
 
-  /// Temporada (padrão: a atual): o histórico vem inteiro e é filtrado pela data do jogo.
+  /// O histórico vem inteiro e é filtrado pela data do jogo. A seleção inicial
+  /// representa o ano completo da temporada atual.
   String _seasonKey(String groupId) => 'history:$groupId';
 
   void _onRefresh() {
@@ -174,13 +175,20 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
 
   Widget _buildSelectors(BuildContext context, String groupId) {
     final seasons = ref.watch(seasonsProvider(groupId)).valueOrNull;
+    final seasonKey = _seasonKey(groupId);
+    final storedSeason = ref.watch(seasonSelectionProvider(seasonKey));
+    final season = switch (storedSeason) {
+      CurrentSeason() when seasons?.current != null =>
+        YearPick(seasons!.current!.year, includePreSeason: true),
+      _ => storedSeason,
+    };
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: SeasonPicker(
+      child: SeasonYearPicker(
         overview: seasons,
-        value: ref.watch(seasonSelectionProvider(_seasonKey(groupId))),
+        value: season,
         onChanged: (next) =>
-            ref.read(seasonSelectionProvider(_seasonKey(groupId)).notifier).state = next,
+            ref.read(seasonSelectionProvider(seasonKey).notifier).state = next,
       ),
     );
   }
@@ -200,7 +208,13 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
     );
     final historyAsync = ref.watch(playerHistoryProvider(args));
     final seasons = ref.watch(seasonsProvider(groupId)).valueOrNull;
-    final selection = ref.watch(seasonSelectionProvider(_seasonKey(groupId)));
+    final storedSelection =
+        ref.watch(seasonSelectionProvider(_seasonKey(groupId)));
+    final selection = switch (storedSelection) {
+      CurrentSeason() when seasons?.current != null =>
+        YearPick(seasons!.current!.year, includePreSeason: true),
+      _ => storedSelection,
+    };
 
     return historyAsync.when(
       loading: () => const SliverToBoxAdapter(child: _SkeletonLoader()),
