@@ -1,0 +1,100 @@
+workflows:
+  ios-dev:
+    name: iOS Dev (TestFlight beta)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+
+    environment:
+      flutter: stable
+      groups:
+        - ios-dev
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: br.com.patotasapp.dev
+      app_store_connect:
+        auth: integration
+
+    scripts:
+      - name: Validar branch
+        script: |
+          if [[ "$CM_BRANCH" != "develop" ]]; then
+            echo "Este workflow deve rodar na branch develop. Branch atual: $CM_BRANCH"
+            exit 1
+          fi
+
+      - name: Get packages
+        script: flutter pub get
+
+      - name: Set build number
+        script: |
+          BUILD_NUMBER=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID" --platform=IOS | tail -1)
+          BUILD_NUMBER=$((BUILD_NUMBER + 1))
+          cd ios && agvtool new-version -all "$BUILD_NUMBER"
+
+      - name: Build IPA
+        script: flutter build ipa --release --dart-define=ENV=dev
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
+      email:
+        recipients:
+          - app.sports.infrastructure@gmail.com
+        notify:
+          success: true
+          failure: true
+
+  ios-release:
+    name: iOS Release (App Store)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+
+    environment:
+      flutter: stable
+      groups:
+        - ios-prod
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: br.com.patotasapp
+      app_store_connect:
+        auth: integration
+
+    scripts:
+      - name: Validar branch
+        script: |
+          if [[ "$CM_BRANCH" != "main" ]]; then
+            echo "Este workflow deve rodar na branch main. Branch atual: $CM_BRANCH"
+            exit 1
+          fi
+
+      - name: Get packages
+        script: flutter pub get
+
+      - name: Set build number
+        script: |
+          BUILD_NUMBER=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID" --platform=IOS | tail -1)
+          BUILD_NUMBER=$((BUILD_NUMBER + 1))
+          cd ios && agvtool new-version -all "$BUILD_NUMBER"
+
+      - name: Build IPA
+        script: flutter build ipa --release
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
+      email:
+        recipients:
+          - app.sports.infrastructure@gmail.com
+        notify:
+          success: true
+          failure: true
