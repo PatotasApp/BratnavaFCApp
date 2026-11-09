@@ -45,7 +45,10 @@ workflows:
           cd ios && agvtool new-version -all "$BUILD_NUMBER"
 
       - name: Build IPA
-        script: flutter build ipa --release --dart-define=ENV=dev
+        script: |
+          flutter build ipa --release \
+            --dart-define-from-file=config/dev.json \
+            --export-options-plist=ios/ExportOptions.plist
 
     artifacts:
       - build/ios/ipa/*.ipa
