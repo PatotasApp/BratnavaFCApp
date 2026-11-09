@@ -39,7 +39,8 @@ class Season {
   bool get hasEnded => endsAt != null && !endsAt!.isAfter(DateTime.now());
 
   bool contains(DateTime playedAt) =>
-      !playedAt.isBefore(startsAt) && (endsAt == null || playedAt.isBefore(endsAt!));
+      !playedAt.isBefore(startsAt) &&
+      (endsAt == null || playedAt.isBefore(endsAt!));
 
   factory Season.fromJson(Map<String, dynamic> json) => Season(
         id: json['id'] as String,
@@ -80,13 +81,42 @@ class SeasonsOverview {
 
   Season? get open => seasons.where((s) => s.isOpen).firstOrNull;
 
+  /// Número da temporada vivida pelo jogador, contando a partir da temporada
+  /// que contém sua primeira partida. Diferente de contar anos, isto avança
+  /// também quando a patota abre uma segunda temporada no mesmo ano.
+  int seasonOrdinalFor(DateTime? firstPlayedAt) {
+    final currentSeason = current;
+    if (firstPlayedAt == null || currentSeason == null || seasons.isEmpty) {
+      return 1;
+    }
+
+    final ordered = [...seasons]
+      ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+    var firstIndex = ordered.indexWhere((s) => s.contains(firstPlayedAt));
+    final currentIndex = ordered.indexWhere((s) => s.id == currentSeason.id);
+    if (currentIndex < 0) return 1;
+
+    // Histórico legado pode ter uma partida anterior ao primeiro período
+    // materializado. Nesse caso, começa a contagem pela primeira temporada.
+    if (firstIndex < 0) {
+      firstIndex = firstPlayedAt.isBefore(ordered.first.startsAt)
+          ? 0
+          : ordered.lastIndexWhere(
+              (s) => !s.startsAt.isAfter(firstPlayedAt),
+            );
+    }
+    if (firstIndex < 0 || firstIndex > currentIndex) return 1;
+    return currentIndex - firstIndex + 1;
+  }
+
   /// Temporada aberta de um ano que já passou: aviso para o admin abrir a próxima.
   bool get openSeasonFromPastYear {
     final o = open;
     return o != null && manualMode && o.year < DateTime.now().year;
   }
 
-  factory SeasonsOverview.fromJson(Map<String, dynamic> json) => SeasonsOverview(
+  factory SeasonsOverview.fromJson(Map<String, dynamic> json) =>
+      SeasonsOverview(
         seasons: _list(json['seasons'], Season.fromJson),
         currentSeasonId: json['currentSeasonId'] as String?,
         manualMode: json['manualMode'] as bool? ?? false,
@@ -117,12 +147,14 @@ class SeasonClosePreview {
     required this.movedChampionships,
   });
 
-  factory SeasonClosePreview.fromJson(Map<String, dynamic> json) => SeasonClosePreview(
+  factory SeasonClosePreview.fromJson(Map<String, dynamic> json) =>
+      SeasonClosePreview(
         closingDisplayName: json['closingDisplayName'] as String? ?? '',
         closingStartsAt: DateTime.parse(json['closingStartsAt'] as String),
         cutAt: DateTime.parse(json['cutAt'] as String),
         closingMatches: (json['closingMatches'] as num?)?.toInt() ?? 0,
-        closingChampionships: (json['closingChampionships'] as num?)?.toInt() ?? 0,
+        closingChampionships:
+            (json['closingChampionships'] as num?)?.toInt() ?? 0,
         nextYear: (json['nextYear'] as num).toInt(),
         nextDefaultName: json['nextDefaultName'] as String? ?? '',
         movedMatches: (json['movedMatches'] as num?)?.toInt() ?? 0,
@@ -151,7 +183,8 @@ class SeasonSummary {
   });
 
   factory SeasonSummary.fromJson(Map<String, dynamic> json) => SeasonSummary(
-        season: Season.fromJson((json['season'] as Map).cast<String, dynamic>()),
+        season:
+            Season.fromJson((json['season'] as Map).cast<String, dynamic>()),
         matches: (json['matches'] as num?)?.toInt() ?? 0,
         championships: (json['championships'] as num?)?.toInt() ?? 0,
         goals: (json['goals'] as num?)?.toInt() ?? 0,
@@ -176,7 +209,8 @@ class SeasonRanking {
     required this.rows,
   });
 
-  String format(int value) => category == 'Aproveitamento' ? '$value%' : '$value';
+  String format(int value) =>
+      category == 'Aproveitamento' ? '$value%' : '$value';
 
   factory SeasonRanking.fromJson(Map<String, dynamic> json) => SeasonRanking(
         category: json['category'] as String? ?? '',
@@ -205,7 +239,8 @@ class SeasonRankingRow {
     required this.isGuest,
   });
 
-  factory SeasonRankingRow.fromJson(Map<String, dynamic> json) => SeasonRankingRow(
+  factory SeasonRankingRow.fromJson(Map<String, dynamic> json) =>
+      SeasonRankingRow(
         position: (json['position'] as num).toInt(),
         playerId: json['playerId'] as String,
         playerName: json['playerName'] as String? ?? '',
@@ -263,7 +298,8 @@ extension SeasonSelectionX on SeasonSelection {
   /// Temporada concreta (atual ou escolhida); null para ano e "todas".
   Season? seasonIn(SeasonsOverview? overview) => switch (this) {
         CurrentSeason() => overview?.current,
-        SeasonPick(:final id) => overview?.seasons.where((s) => s.id == id).firstOrNull,
+        SeasonPick(:final id) =>
+          overview?.seasons.where((s) => s.id == id).firstOrNull,
         _ => null,
       };
 
@@ -274,7 +310,9 @@ extension SeasonSelectionX on SeasonSelection {
             'includePreSeason': '$includePreSeason',
           },
         AllSeasons() => const {},
-        _ => seasonIn(overview) == null ? const {} : {'seasonId': seasonIn(overview)!.id},
+        _ => seasonIn(overview) == null
+            ? const {}
+            : {'seasonId': seasonIn(overview)!.id},
       };
 
   /// Filtro local pela data do jogo, igual ao da API.
@@ -282,8 +320,11 @@ extension SeasonSelectionX on SeasonSelection {
     if (overview == null) return true;
     return switch (this) {
       AllSeasons() => true,
-      YearPick(:final year, :final includePreSeason) => overview.seasons.any((s) =>
-          s.year == year && (includePreSeason || !s.isPreSeason) && s.contains(playedAt)),
+      YearPick(:final year, :final includePreSeason) => overview.seasons.any(
+          (s) =>
+              s.year == year &&
+              (includePreSeason || !s.isPreSeason) &&
+              s.contains(playedAt)),
       _ => seasonIn(overview)?.contains(playedAt) ?? true,
     };
   }
@@ -296,7 +337,10 @@ extension SeasonSelectionX on SeasonSelection {
       };
 }
 
-DateTime? _date(dynamic value) => value is String ? DateTime.parse(value) : null;
+DateTime? _date(dynamic value) =>
+    value is String ? DateTime.parse(value) : null;
 
-List<T> _list<T>(dynamic value, T Function(Map<String, dynamic>) map) =>
-    value is List ? value.whereType<Map>().map((e) => map(e.cast<String, dynamic>())).toList() : <T>[];
+List<T> _list<T>(dynamic value, T Function(Map<String, dynamic>) map) => value
+        is List
+    ? value.whereType<Map>().map((e) => map(e.cast<String, dynamic>())).toList()
+    : <T>[];

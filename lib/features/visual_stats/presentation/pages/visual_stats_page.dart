@@ -347,11 +347,17 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
       );
     }
 
-    // Temporada (padrão: a atual); espera as temporadas para saber qual é a atual.
+    // Estatísticas abrem no ano completo da temporada atual. O usuário pode
+    // então restringir para uma temporada específica dentro daquele ano.
     final seasonsAsync = ref.watch(seasonsProvider(groupId));
     final seasons = seasonsAsync.valueOrNull;
     final seasonKey = 'stats:$groupId';
-    final season = ref.watch(seasonSelectionProvider(seasonKey));
+    final storedSeason = ref.watch(seasonSelectionProvider(seasonKey));
+    final season = switch (storedSeason) {
+      CurrentSeason() when seasons?.current != null =>
+        YearPick(seasons!.current!.year, includePreSeason: true),
+      _ => storedSeason,
+    };
     final statsArgs = (
       groupId: groupId,
       includeGuests: !_onlyMonthly,
@@ -407,15 +413,14 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
                   child: _ErrorState(message: extractDioError(e))),
               data: (report) {
                 final sorted = _sorted(report.players);
-                final isDark =
-                    Theme.of(context).brightness == Brightness.dark;
+                final isDark = Theme.of(context).brightness == Brightness.dark;
                 return SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        SeasonPicker(
+                        SeasonYearPicker(
                           overview: seasons,
                           value: season,
                           onChanged: (next) => ref
@@ -425,46 +430,46 @@ class _VisualStatsPageState extends ConsumerState<VisualStatsPage> {
                         _buildOnlyMonthlyToggle(isDark),
                         const SizedBox(height: 12),
                         _viewMode != _StatsViewMode.perMatch
-                        ? _RankingsContent(
-                            report: report,
-                            sorted: sorted,
-                            sortKey: _sortKey,
-                            search: _search,
-                            searchCtrl: _searchCtrl,
-                            icons: icons,
-                            classificationMode:
-                                _viewMode == _StatsViewMode.classification,
-                            onSort: (k) => setState(() => _sortKey = k),
-                            onSearch: (v) => setState(() => _search = v),
-                            onPlayerTap: (id) {
-                              final player = report.players.firstWhere(
-                                (p) => p.playerId == id,
-                                orElse: () => sorted.first,
-                              );
-                              final isDark = Theme.of(context).brightness ==
-                                  Brightness.dark;
-                              showModalBottomSheet(
-                                context: context,
-                                isScrollControlled: true,
-                                backgroundColor: AppColors.transparent,
-                                builder: (_) => _PlayerDetailSheet(
-                                  player: player,
-                                  icons: icons,
-                                  isDark: isDark,
-                                ),
-                              );
-                            },
-                          )
-                        : _PlayersContent(
-                            report: report,
-                            sorted: sorted,
-                            sortKey: _sortKey,
-                            search: _search,
-                            searchCtrl: _searchCtrl,
-                            icons: icons,
-                            onSort: (k) => setState(() => _sortKey = k),
-                            onSearch: (v) => setState(() => _search = v),
-                          ),
+                            ? _RankingsContent(
+                                report: report,
+                                sorted: sorted,
+                                sortKey: _sortKey,
+                                search: _search,
+                                searchCtrl: _searchCtrl,
+                                icons: icons,
+                                classificationMode:
+                                    _viewMode == _StatsViewMode.classification,
+                                onSort: (k) => setState(() => _sortKey = k),
+                                onSearch: (v) => setState(() => _search = v),
+                                onPlayerTap: (id) {
+                                  final player = report.players.firstWhere(
+                                    (p) => p.playerId == id,
+                                    orElse: () => sorted.first,
+                                  );
+                                  final isDark = Theme.of(context).brightness ==
+                                      Brightness.dark;
+                                  showModalBottomSheet(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    backgroundColor: AppColors.transparent,
+                                    builder: (_) => _PlayerDetailSheet(
+                                      player: player,
+                                      icons: icons,
+                                      isDark: isDark,
+                                    ),
+                                  );
+                                },
+                              )
+                            : _PlayersContent(
+                                report: report,
+                                sorted: sorted,
+                                sortKey: _sortKey,
+                                search: _search,
+                                searchCtrl: _searchCtrl,
+                                icons: icons,
+                                onSort: (k) => setState(() => _sortKey = k),
+                                onSearch: (v) => setState(() => _search = v),
+                              ),
                       ],
                     ),
                   ),
@@ -1205,7 +1210,8 @@ class _RankingListItem extends StatelessWidget {
                                     horizontal: 5, vertical: 1),
                                 decoration: BoxDecoration(
                                   color: isDark
-                                      ? AppColors.amber500.withValues(alpha: .18)
+                                      ? AppColors.amber500
+                                          .withValues(alpha: .18)
                                       : AppColors.amber50,
                                   borderRadius: BorderRadius.circular(5),
                                 ),
