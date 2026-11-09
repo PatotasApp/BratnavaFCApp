@@ -77,7 +77,9 @@ String notificationRoute(String type, Map<String, dynamic> data) {
     // ── Planilhas antigas (importação manual pela equipe) ─────────────────
 
     case 'group_spreadsheet':
-      return _ok(groupId) ? '/app/spreadsheets?groupId=$groupId' : '/app/spreadsheets';
+      return _ok(groupId)
+          ? '/app/spreadsheets?groupId=$groupId'
+          : '/app/spreadsheets';
 
     // ── Temporadas ────────────────────────────────────────────────────────
 
