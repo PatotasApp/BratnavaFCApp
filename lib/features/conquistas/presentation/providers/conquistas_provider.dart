@@ -7,10 +7,13 @@ final _conquistasDataSourceProvider = Provider<ConquistasRemoteDataSource>(
   (ref) => ConquistasRemoteDataSource(ref.watch(dioProvider)),
 );
 
+typedef GroupConquistasArgs = ({String groupId, String? seasonId});
+
 final groupConquistasProvider =
-    FutureProvider.autoDispose.family<GroupConquistas, String>(
-  (ref, groupId) =>
-      ref.watch(_conquistasDataSourceProvider).fetchGroup(groupId),
+    FutureProvider.autoDispose.family<GroupConquistas, GroupConquistasArgs>(
+  (ref, args) => ref
+      .watch(_conquistasDataSourceProvider)
+      .fetchGroup(args.groupId, seasonId: args.seasonId),
 );
 
 final publicProfileProvider =

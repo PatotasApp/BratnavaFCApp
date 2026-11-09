@@ -15,6 +15,7 @@ import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../groups/presentation/providers/group_invites_provider.dart';
 import '../../../notifications/domain/entities/app_notification.dart';
 import '../../../notifications/presentation/providers/notifications_provider.dart';
+import '../../../replays/presentation/providers/replay_access_provider.dart';
 
 class AppTopBar extends ConsumerWidget implements PreferredSizeWidget {
   const AppTopBar({super.key});
@@ -180,10 +181,21 @@ class _NotificationBell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Tenta o endpoint unificado; fallback para convites de grupo se falhar.
     final unreadAsync = ref.watch(notifUnreadCountProvider);
+    final notificationsAsync = ref.watch(myNotificationsProvider);
+    final canSeeReplays = ref.watch(activeGroupReplayUiProvider);
     final fallback = ref.watch(myGroupInviteCountProvider).valueOrNull ?? 0;
-    final count = unreadAsync.maybeWhen(
-      data: (n) => n > 0 ? n : fallback,
-      orElse: () => fallback,
+    final count = notificationsAsync.maybeWhen(
+      data: (notifications) {
+        final unread = notifications
+            .where((n) => canSeeReplays || n.type != 'replay')
+            .where((n) => !n.isRead)
+            .length;
+        return unread > 0 ? unread : fallback;
+      },
+      orElse: () => unreadAsync.maybeWhen(
+        data: (n) => n > 0 ? n : fallback,
+        orElse: () => fallback,
+      ),
     );
 
     return IconButton(
@@ -418,6 +430,11 @@ class _NotificationSheetState extends ConsumerState<_NotificationSheet> {
     final divCol = isDark ? AppColors.slate800 : AppColors.slate100;
 
     final notifsAsync = ref.watch(myNotificationsProvider);
+    final canSeeReplays = ref.watch(activeGroupReplayUiProvider);
+    List<AppNotification> visible(List<AppNotification> notifications) =>
+        notifications
+            .where((n) => canSeeReplays || n.type != 'replay')
+            .toList();
 
     return Container(
       constraints: BoxConstraints(
@@ -457,12 +474,13 @@ class _NotificationSheetState extends ConsumerState<_NotificationSheet> {
                 const Spacer(),
                 notifsAsync.maybeWhen(
                   data: (list) {
-                    final hasUnread = list.any(
+                    final visibleList = visible(list);
+                    final hasUnread = visibleList.any(
                       (n) => !(_readOverlay[n.id] ?? n.isRead),
                     );
                     if (!hasUnread) return const SizedBox.shrink();
                     return TextButton(
-                      onPressed: () => _markAllRead(list),
+                      onPressed: () => _markAllRead(visibleList),
                       child: const Text(
                         'Marcar tudo como lido',
                         style: TextStyle(fontSize: 12),
@@ -490,7 +508,8 @@ class _NotificationSheetState extends ConsumerState<_NotificationSheet> {
                 label: 'Não foi possível carregar as notificações.',
               ),
               data: (notifs) {
-                if (notifs.isEmpty) {
+                final visibleNotifs = visible(notifs);
+                if (visibleNotifs.isEmpty) {
                   return _EmptyNotifs(
                     isDark: isDark,
                     icon: Icons.notifications_off_outlined,
@@ -501,14 +520,14 @@ class _NotificationSheetState extends ConsumerState<_NotificationSheet> {
                 return ListView.separated(
                   shrinkWrap: true,
                   padding: const EdgeInsets.only(bottom: 24),
-                  itemCount: notifs.length,
+                  itemCount: visibleNotifs.length,
                   separatorBuilder: (_, __) => Divider(
                     height: 1,
                     indent: 72,
                     color: divCol,
                   ),
                   itemBuilder: (ctx, i) {
-                    final n = notifs[i];
+                    final n = visibleNotifs[i];
                     final read = _readOverlay[n.id] ?? n.isRead;
                     final col = _colorFor(n.type);
 

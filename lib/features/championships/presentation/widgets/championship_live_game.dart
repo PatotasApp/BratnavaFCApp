@@ -1,4 +1,3 @@
-import '../../../../core/constants/replay_access.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
+import '../../../replays/presentation/providers/replay_access_provider.dart';
 import '../../domain/entities/championship_models.dart';
 import '../providers/championship_provider.dart';
 
@@ -190,8 +190,7 @@ class _ChampionshipLiveGameState extends ConsumerState<ChampionshipLiveGame> {
         ),
         // Botões das câmeras: só na patota com replay. Nas outras o gol entra
         // pela bolinha no canto, como na partida.
-        if (widget.isAdmin &&
-            groupHasReplays(ref.watch(championshipGroupIdProvider))) ...[
+        if (widget.isAdmin && ref.watch(activeGroupReplayUiProvider)) ...[
           const SizedBox(height: 12),
           Row(
             children: [

@@ -17,6 +17,7 @@ import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../../core/share/share_links.dart';
+import '../../../group_spreadsheets/presentation/group_spreadsheets_page.dart';
 
 // ── Icon types ────────────────────────────────────────────────────────────────
 
@@ -1336,6 +1337,24 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
   Widget _buildTabGeral(bool isDark, GroupDetail? detail) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Temporadas: tela própria (as ações valem na hora, sem o Salvar).
+          _subCard(
+            isDark: isDark,
+            accentBg: AppColors.emerald50,
+            accentFg: AppColors.emerald500,
+            icon: Icons.date_range_outlined,
+            title: 'Temporadas',
+            subtitle: 'Fechar, renomear e pré-temporada',
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: () => context.push('/app/seasons'),
+                icon: const Icon(Icons.chevron_right_rounded),
+                label: const Text('Gerenciar temporadas'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
           _subCard(
             isDark: isDark,
             accentBg: AppColors.emerald50,
@@ -1383,6 +1402,26 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _subCard(
+            isDark: isDark,
+            accentBg: AppColors.green50,
+            accentFg: AppColors.green600,
+            icon: Icons.table_chart_outlined,
+            title: 'Planilhas antigas',
+            subtitle: 'Histórico de jogos e pagamentos para importar',
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: const Key('settings-spreadsheets'),
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => GroupSpreadsheetsPage(groupId: widget.groupId),
+                )),
+                icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+                label: const Text('Enviar ou acompanhar planilhas'),
+              ),
             ),
           ),
           const SizedBox(height: 12),

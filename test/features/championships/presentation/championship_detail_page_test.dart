@@ -6,6 +6,7 @@ import 'package:patotas_app/core/theme/app_theme.dart';
 import 'package:patotas_app/features/championships/data/datasources/championship_mock_datasource.dart';
 import 'package:patotas_app/features/championships/presentation/pages/championship_detail_page.dart';
 import 'package:patotas_app/features/championships/presentation/providers/championship_provider.dart';
+import 'package:patotas_app/features/replays/presentation/providers/replay_access_provider.dart';
 import 'package:patotas_app/shared/presentation/widgets/prototype_ui.dart';
 
 void main() {
@@ -22,6 +23,7 @@ void main() {
             .overrideWithValue(dataSource ?? ChampionshipMockDataSource()),
         championshipGroupIdProvider.overrideWithValue(groupId),
         championshipIsAdminProvider.overrideWithValue(true),
+        activeGroupReplayUiProvider.overrideWithValue(true),
       ],
       child: MaterialApp(
         theme: AppTheme.light,

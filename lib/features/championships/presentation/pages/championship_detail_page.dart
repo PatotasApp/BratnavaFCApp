@@ -1,4 +1,3 @@
-import '../../../../core/constants/replay_access.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +9,7 @@ import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../matches/presentation/pages/matches_page.dart'
     show LinkedPollStrip;
+import '../../../replays/presentation/providers/replay_access_provider.dart';
 import '../../../team_colors/domain/entities/team_color.dart';
 import '../../../team_colors/presentation/providers/team_colors_provider.dart';
 import '../../domain/entities/championship_enums.dart';
@@ -65,6 +65,7 @@ class _ChampionshipDetailPageState
     final state = ref.watch(provider);
     final isAdmin = ref.watch(championshipIsAdminProvider);
     final groupId = ref.watch(championshipGroupIdProvider);
+    final canSeeReplays = ref.watch(activeGroupReplayUiProvider);
     final icons =
         GroupIcons.from(ref.watch(groupSettingsProvider(groupId)).valueOrNull);
     final notifier = ref.read(provider.notifier);
@@ -121,6 +122,7 @@ class _ChampionshipDetailPageState
                                 notifier: notifier,
                                 icons: icons,
                                 groupId: groupId,
+                                canSeeReplays: canSeeReplays,
                               ),
                             ]),
                           ),
@@ -164,6 +166,7 @@ class _ChampionshipDetailPageState
     required ChampionshipDetailsNotifier notifier,
     required GroupIcons icons,
     required String groupId,
+    required bool canSeeReplays,
   }) {
     final admin = isAdmin
         ? _AdminActions(
@@ -271,7 +274,7 @@ class _ChampionshipDetailPageState
             _HighlightsSection(details: details, icons: icons),
           if (canSeeStats) goals,
           teamsByPosition,
-          if (groupHasReplays(groupId)) replays,
+          if (canSeeReplays) replays,
           if (admin != null) admin,
         ],
       ChampionshipStage.finalized => [
@@ -282,7 +285,7 @@ class _ChampionshipDetailPageState
           if (canSeeStats && hasHighlights)
             _HighlightsSection(details: details, icons: icons),
           if (canSeeStats) goals,
-          if (groupHasReplays(groupId)) replays,
+          if (canSeeReplays) replays,
           if (admin != null) admin,
         ],
       ChampionshipStage.cancelled => [_Overview(details: details)],

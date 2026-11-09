@@ -1,9 +1,9 @@
-import '../../../../core/constants/replay_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../replays/domain/entities/replay_clip.dart';
+import '../../../replays/presentation/providers/replay_access_provider.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
@@ -156,11 +156,21 @@ class _MatchDetailsPageState extends ConsumerState<MatchDetailsPage> {
   @override
   void initState() {
     super.initState();
-    _loadReplays();
+    ref.listenManual(
+      activeGroupReplayUiProvider,
+      (_, canSeeReplays) {
+        if (canSeeReplays) {
+          _loadReplays();
+        } else if (_replays.isNotEmpty && mounted) {
+          setState(() => _replays = []);
+        }
+      },
+      fireImmediately: true,
+    );
   }
 
   Future<void> _loadReplays() async {
-    if (!groupHasReplays(widget.groupId)) return;
+    if (!ref.read(activeGroupReplayUiProvider)) return;
     try {
       final ds = ref.read(historyDsProvider);
       final replays = await ds.fetchMatchReplays(
@@ -213,6 +223,7 @@ class _MatchDetailsPageState extends ConsumerState<MatchDetailsPage> {
     final settings =
         ref.watch(groupSettingsProvider(widget.groupId)).valueOrNull;
     final icons = GroupIcons.from(settings);
+    final canSeeReplays = ref.watch(activeGroupReplayUiProvider);
 
     return async.when(
       loading: () => _LoadingSkeleton(isDark: isDark),
@@ -247,6 +258,7 @@ class _MatchDetailsPageState extends ConsumerState<MatchDetailsPage> {
         isDark: isDark,
         isAdmin: isAdmin,
         canSeeStats: isAdmin || (settings?.showPlayerStats ?? false),
+        showReplays: canSeeReplays,
         goalsTab: _goalsTab,
         activeTab: _detailsTab,
         icons: icons,
@@ -276,6 +288,7 @@ class _DetailsBody extends StatelessWidget {
   final bool isDark;
   final bool isAdmin;
   final bool canSeeStats;
+  final bool showReplays;
   final int goalsTab;
   final int activeTab;
   final void Function(int) onGoalsTab;
@@ -298,6 +311,7 @@ class _DetailsBody extends StatelessWidget {
     required this.isDark,
     required this.isAdmin,
     required this.canSeeStats,
+    required this.showReplays,
     required this.goalsTab,
     required this.activeTab,
     required this.onGoalsTab,
@@ -325,7 +339,10 @@ class _DetailsBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedTab = activeTab == 2 && !canSeeStats ? 0 : activeTab;
+    final selectedTab = (activeTab == 2 && !canSeeStats) ||
+            (activeTab == 3 && !showReplays)
+        ? 0
+        : activeTab;
     // Build sorted goals with team info
     final byMatchPlayerId = <String, String>{};
     final byPlayerId = <String, String>{};
@@ -415,7 +432,7 @@ class _DetailsBody extends StatelessWidget {
                   onChanged: onTabChanged,
                   isDark: isDark,
                   canSeeStats: canSeeStats,
-                  showReplays: groupHasReplays(groupId),
+                  showReplays: showReplays,
                 ),
               ),
               const SizedBox(height: 12),

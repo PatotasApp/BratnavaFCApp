@@ -1,3 +1,6 @@
+import '../../../seasons/domain/season_models.dart';
+import '../../../seasons/presentation/providers/seasons_provider.dart';
+import '../../../seasons/presentation/widgets/season_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -55,14 +58,11 @@ MyPlayer? resolveActiveHistoryPlayer({
 }
 
 class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
-  late int _selectedYear;
   _HistoryResultFilter _resultFilter = _HistoryResultFilter.all;
 
-  @override
-  void initState() {
-    super.initState();
-    _selectedYear = DateTime.now().year;
-  }
+  /// O histórico vem inteiro e é filtrado pela data do jogo. A seleção inicial
+  /// representa o ano completo da temporada atual.
+  String _seasonKey(String groupId) => 'history:$groupId';
 
   void _onRefresh() {
     final account = ref.read(accountStoreProvider).activeAccount;
@@ -77,8 +77,9 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
       ref.invalidate(playerHistoryProvider((
         groupId: groupId,
         playerId: player.playerId,
-        year: _selectedYear,
+        year: null,
       )));
+      ref.invalidate(seasonsProvider(groupId));
     }
   }
 
@@ -130,7 +131,7 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
 
             // ── Selectors ───────────────────────────────────────────
             SliverToBoxAdapter(
-              child: _buildSelectors(context),
+              child: _buildSelectors(context, groupId),
             ),
 
             // ── History content ──────────────────────────────────────
@@ -172,67 +173,22 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
 
   // ── Selectors row ─────────────────────────────────────────────────────────
 
-  Widget _buildSelectors(
-    BuildContext context,
-  ) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final currentYear = DateTime.now().year;
-    final years = List.generate(4, (i) => currentYear - i);
-
+  Widget _buildSelectors(BuildContext context, String groupId) {
+    final seasons = ref.watch(seasonsProvider(groupId)).valueOrNull;
+    final seasonKey = _seasonKey(groupId);
+    final storedSeason = ref.watch(seasonSelectionProvider(seasonKey));
+    final season = switch (storedSeason) {
+      CurrentSeason() when seasons?.current != null =>
+        YearPick(seasons!.current!.year, includePreSeason: true),
+      _ => storedSeason,
+    };
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          _buildYearDropdown(context, years, isDark),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildYearDropdown(
-    BuildContext context,
-    List<int> years,
-    bool isDark,
-  ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.slate800 : AppColors.onDark,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: isDark ? AppColors.slate700 : AppColors.slate200,
-        ),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<int>(
-          value: _selectedYear,
-          isDense: true,
-          dropdownColor: isDark ? AppColors.slate800 : AppColors.onDark,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: isDark ? AppColors.onDark : AppColors.slate900,
-          ),
-          icon: Icon(Icons.expand_more_rounded,
-              size: 18,
-              color: isDark ? AppColors.slate400 : AppColors.slate500),
-          items: years
-              .map((y) => DropdownMenuItem<int>(
-                    value: y,
-                    child: Text(
-                      '$y',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isDark ? AppColors.onDark : AppColors.slate900,
-                      ),
-                    ),
-                  ))
-              .toList(),
-          onChanged: (y) {
-            if (y != null) setState(() => _selectedYear = y);
-          },
-        ),
+      child: SeasonYearPicker(
+        overview: seasons,
+        value: season,
+        onChanged: (next) =>
+            ref.read(seasonSelectionProvider(seasonKey).notifier).state = next,
       ),
     );
   }
@@ -248,9 +204,17 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
     final args = (
       groupId: groupId,
       playerId: player.playerId,
-      year: _selectedYear,
+      year: null,
     );
     final historyAsync = ref.watch(playerHistoryProvider(args));
+    final seasons = ref.watch(seasonsProvider(groupId)).valueOrNull;
+    final storedSelection =
+        ref.watch(seasonSelectionProvider(_seasonKey(groupId)));
+    final selection = switch (storedSelection) {
+      CurrentSeason() when seasons?.current != null =>
+        YearPick(seasons!.current!.year, includePreSeason: true),
+      _ => storedSelection,
+    };
 
     return historyAsync.when(
       loading: () => const SliverToBoxAdapter(child: _SkeletonLoader()),
@@ -269,7 +233,11 @@ class _PlayerHistoryPageState extends ConsumerState<PlayerHistoryPage> {
           child: _ErrorState(message: extractDioError(e)),
         );
       },
-      data: (items) {
+      data: (all) {
+        final items = all.where((item) {
+          final playedAt = DateTime.tryParse(item.date);
+          return playedAt == null || selection.contains(seasons, playedAt);
+        }).toList();
         if (items.isEmpty) {
           return const SliverToBoxAdapter(child: _EmptyState());
         }
