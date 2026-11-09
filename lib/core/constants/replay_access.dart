@@ -10,3 +10,10 @@ const _replayGroupIds = <String>{
 
 bool groupHasReplays(String? groupId) =>
     groupId != null && _replayGroupIds.contains(groupId.toLowerCase());
+
+/// O atalho global de Replays é exclusivo da patota Bratnava FC. O nome é
+/// usado de propósito: o ID técnico legado também existe em bases onde a
+/// patota foi renomeada (por exemplo, Resenha FC).
+bool isBratnavaFcGroup(String? groupName) =>
+    groupName?.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ') ==
+    'bratnava fc';

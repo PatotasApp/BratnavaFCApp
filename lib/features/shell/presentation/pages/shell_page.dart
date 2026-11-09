@@ -402,6 +402,7 @@ class _MoreSheet extends ConsumerWidget {
     // para uma patota sem jogador nosso, e aí toda rota por grupo
     // responde 403. Ver dashboard_page para o diagnóstico completo.
     final groupId = account?.activeGroupId ?? activePlayer?.groupId;
+    final groupName = activePlayer?.groupName;
 
     final isAdmin = groupId != null &&
         groupId.isNotEmpty &&
@@ -454,6 +455,7 @@ class _MoreSheet extends ConsumerWidget {
                           canSeeStats: canSeeStats,
                           requiresStatsPermission: item.statsPermission,
                           groupId: groupId,
+                          groupName: groupName,
                         ))) ...[
                     Text(
                       group.label.toUpperCase(),
@@ -474,6 +476,7 @@ class _MoreSheet extends ConsumerWidget {
                             canSeeStats: canSeeStats,
                             requiresStatsPermission: item.statsPermission,
                             groupId: groupId,
+                            groupName: groupName,
                           );
                         });
 

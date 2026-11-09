@@ -12,15 +12,22 @@ void main() {
     expect(groupHasReplays(null), isFalse);
   });
 
+  test('identifica Bratnava FC pelo nome normalizado', () {
+    expect(isBratnavaFcGroup('Bratnava FC'), isTrue);
+    expect(isBratnavaFcGroup('  BRATNAVA   FC '), isTrue);
+    expect(isBratnavaFcGroup('Resenha FC'), isFalse);
+    expect(isBratnavaFcGroup(null), isFalse);
+  });
+
   test('menu Replays some fora da patota com câmeras', () {
-    bool visible(String? groupId) => isShellMenuItemVisible(
+    bool visible(String? groupName) => isShellMenuItemVisible(
         path: '/app/replays',
         isAdmin: true,
         canSeeStats: true,
-        groupId: groupId);
+        groupName: groupName);
 
-    expect(visible(bratnava), isTrue);
-    expect(visible('00000000-0000-0000-0000-000000000001'), isFalse);
+    expect(visible('Bratnava FC'), isTrue);
+    expect(visible('Resenha FC'), isFalse);
     expect(visible(null), isFalse);
   });
 }

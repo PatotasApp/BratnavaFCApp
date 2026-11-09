@@ -32,9 +32,10 @@ bool isShellMenuItemVisible({
   required bool canSeeStats,
   bool requiresStatsPermission = false,
   String? groupId,
+  String? groupName,
 }) {
   if (shellAdminOnlyMenuPaths.contains(path) && !isAdmin) return false;
-  if (path == '/app/replays' && !groupHasReplays(groupId)) return false;
+  if (path == '/app/replays' && !isBratnavaFcGroup(groupName)) return false;
   if (requiresStatsPermission && !canSeeStats) return false;
   return true;
 }
