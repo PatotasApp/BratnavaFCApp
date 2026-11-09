@@ -36,10 +36,10 @@ class _ShellPageState extends ConsumerState<ShellPage>
         label: 'Partidas',
         path: '/app/matches'),
     _TabItem(
-        icon: Icons.group_outlined,
-        activeIcon: Icons.group,
-        label: 'Minha patota',
-        path: '/app/groups'),
+        icon: Icons.search_outlined,
+        activeIcon: Icons.search,
+        label: 'Buscar',
+        path: '/app/search'),
     _TabItem(
         icon: Icons.history_outlined,
         activeIcon: Icons.history,
@@ -361,6 +361,16 @@ class _MoreSheet extends ConsumerWidget {
       label: 'Gestão',
       items: [
         _MoreItem(
+          icon: Icons.groups_outlined,
+          label: 'Minha patota',
+          path: '/app/groups',
+        ),
+        _MoreItem(
+          icon: Icons.person_search_outlined,
+          label: 'Interessados',
+          path: '/app/applicants',
+        ),
+        _MoreItem(
           icon: Icons.payments_outlined,
           label: 'Pagamentos',
           path: '/app/payments',
@@ -389,6 +399,11 @@ class _MoreSheet extends ConsumerWidget {
           icon: Icons.mail_outline_rounded,
           label: 'Convites',
           path: '/app/invites',
+        ),
+        _MoreItem(
+          icon: Icons.sports_soccer_outlined,
+          label: 'Convites para jogar',
+          path: '/app/match-invitations',
         ),
       ],
     ),

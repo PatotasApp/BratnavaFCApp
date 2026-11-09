@@ -4,13 +4,14 @@ const shellAdminOnlyMenuPaths = <String>{
   '/app/settings',
   '/app/conquistas',
   '/app/retrospectiva',
+  '/app/applicants',
 };
 
 int shellNavigationIndexForPath(String location) {
   const mainPaths = <String>[
     '/app',
     '/app/matches',
-    '/app/groups',
+    '/app/search',
     '/app/history',
   ];
 

@@ -14,6 +14,10 @@ import '../../features/team_colors/presentation/pages/team_colors_page.dart';
 import '../../features/history/presentation/pages/history_page.dart';
 import '../../features/history/presentation/pages/match_details_page.dart';
 import '../../features/groups/presentation/pages/groups_page.dart';
+import '../../features/discovery/presentation/pages/discovery_search_page.dart';
+import '../../features/discovery/presentation/pages/discovery_group_profile_page.dart';
+import '../../features/discovery/presentation/pages/discovery_applicants_page.dart';
+import '../../features/discovery/presentation/pages/discovery_invitations_page.dart';
 import '../../features/group_settings/presentation/pages/group_settings_page.dart';
 import '../../features/birthdays/presentation/pages/birthday_page.dart';
 import '../../features/shell/presentation/pages/shell_page.dart';
@@ -235,6 +239,24 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, state) => GroupsPage(
               openCreateSheet: state.uri.queryParameters['create'] == 'true',
             ),
+          ),
+          GoRoute(
+            path: '/app/search',
+            builder: (_, __) => const DiscoverySearchPage(),
+          ),
+          GoRoute(
+            path: '/app/discover/groups/:groupId',
+            builder: (_, state) => DiscoveryGroupProfilePage(
+              groupId: state.pathParameters['groupId'] ?? '',
+            ),
+          ),
+          GoRoute(
+            path: '/app/applicants',
+            builder: (_, __) => const DiscoveryApplicantsPage(),
+          ),
+          GoRoute(
+            path: '/app/match-invitations',
+            builder: (_, __) => const DiscoveryInvitationsPage(),
           ),
           GoRoute(
             path: '/app/history',

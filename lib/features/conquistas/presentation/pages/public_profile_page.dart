@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
+import '../../../../shared/presentation/widgets/image_lightbox.dart';
 import '../../../account/presentation/widgets/editable_profile_avatar.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../domain/entities/conquista_models.dart';
@@ -173,11 +174,23 @@ class _ProfileBody extends StatelessWidget {
                   avatarBorderRadius: 26,
                 )
               else
-                AvatarWidget(
-                  name: p.name,
-                  photoUrl: p.photoUrl,
-                  size: 84,
-                  borderRadius: 26,
+                GestureDetector(
+                  onTap: p.photoUrl == null
+                      ? null
+                      : () => showImageLightbox(
+                            context,
+                            imageUrl: p.photoUrl!,
+                            heroTag: 'player-profile-${p.userId}',
+                          ),
+                  child: Hero(
+                    tag: 'player-profile-${p.userId}',
+                    child: AvatarWidget(
+                      name: p.name,
+                      photoUrl: p.photoUrl,
+                      size: 84,
+                      borderRadius: 26,
+                    ),
+                  ),
                 ),
               const SizedBox(height: 14),
               Text(

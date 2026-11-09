@@ -18,6 +18,7 @@ import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../../core/share/share_links.dart';
 import '../../../group_spreadsheets/presentation/group_spreadsheets_page.dart';
+import '../../../discovery/presentation/widgets/group_discovery_settings_card.dart';
 
 // ── Icon types ────────────────────────────────────────────────────────────────
 
@@ -1031,6 +1032,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  GroupDiscoverySettingsCard(groupId: widget.groupId),
+                  const SizedBox(height: 16),
                   _buildTabbedSettings(
                     isDark,
                     detail: detail,

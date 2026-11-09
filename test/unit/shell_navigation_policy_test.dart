@@ -6,13 +6,13 @@ void main() {
     test('seleciona as quatro áreas principais', () {
       expect(shellNavigationIndexForPath('/app'), 0);
       expect(shellNavigationIndexForPath('/app/matches'), 1);
-      expect(shellNavigationIndexForPath('/app/groups'), 2);
+      expect(shellNavigationIndexForPath('/app/search'), 2);
       expect(shellNavigationIndexForPath('/app/history'), 3);
     });
 
     test('mantém a área pai selecionada em uma rota interna', () {
       expect(shellNavigationIndexForPath('/app/matches/partida-1'), 1);
-      expect(shellNavigationIndexForPath('/app/groups/patota-1'), 2);
+      expect(shellNavigationIndexForPath('/app/search/patota-1'), 2);
       expect(shellNavigationIndexForPath('/app/history/g-1/m-1'), 3);
     });
 
