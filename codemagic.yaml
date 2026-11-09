@@ -76,8 +76,6 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: br.com.patotasapp
-        certificate: ios_distribution_prod
-        provisioning_profile: patotas_app_store_prod
 
     scripts:
       - name: Validar branch
