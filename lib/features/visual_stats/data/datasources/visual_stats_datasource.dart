@@ -8,12 +8,16 @@ class VisualStatsDatasource {
 
   // GET /api/TeamGeneration/visual-stats/{groupId}?includeGuests=
   // A regra de convidados é do backend; aqui só repassamos o parâmetro.
+  // Temporada: seasonId, ou year (+ includePreSeason); sem nada = tudo.
   Future<PlayerVisualStatsReport> fetchVisualStats(
     String groupId, {
     bool includeGuests = true,
+    Map<String, String> period = const {},
   }) async {
-    final res = await _dio
-        .get(ApiConstants.visualStats(groupId, includeGuests: includeGuests));
+    final res = await _dio.get(
+      ApiConstants.visualStats(groupId, includeGuests: includeGuests),
+      queryParameters: period.isEmpty ? null : period,
+    );
     final body = res.data;
     // Response may be { data: { ... } } or the report directly
     if (body is Map<String, dynamic>) {

@@ -5,8 +5,10 @@ class ConquistasRemoteDataSource {
   final Dio _dio;
   const ConquistasRemoteDataSource(this._dio);
 
-  Future<GroupConquistas> fetchGroup(String groupId) async {
-    final response = await _dio.get('/api/Conquistas/group/$groupId');
+  /// [seasonId]: temporada do "na temporada" (padrão da API: a atual).
+  Future<GroupConquistas> fetchGroup(String groupId, {String? seasonId}) async {
+    final response = await _dio.get('/api/Conquistas/group/$groupId',
+        queryParameters: seasonId == null ? null : {'seasonId': seasonId});
     return GroupConquistas.fromJson(_unwrap(response.data));
   }
 

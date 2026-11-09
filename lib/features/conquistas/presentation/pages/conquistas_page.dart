@@ -1,3 +1,6 @@
+import '../../../seasons/domain/season_models.dart';
+import '../../../seasons/presentation/providers/seasons_provider.dart';
+import '../../../seasons/presentation/widgets/season_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -31,6 +34,13 @@ class _ConquistasPageState extends ConsumerState<ConquistasPage> {
     final isAdmin =
         groupId != null && (account?.isGroupAdmin(groupId) ?? false);
 
+    // "Na temporada": a atual por padrão; dá para ver uma que já passou.
+    final seasons = groupId == null ? null : ref.watch(seasonsProvider(groupId)).valueOrNull;
+    final seasonKey = 'conquistas:$groupId';
+    final selection = ref.watch(seasonSelectionProvider(seasonKey));
+    final chosen = selection.seasonIn(seasons);
+    final args = (groupId: groupId ?? '', seasonId: chosen?.id);
+
     return Scaffold(
       body: Column(
         children: [
@@ -57,8 +67,8 @@ class _ConquistasPageState extends ConsumerState<ConquistasPage> {
                   )
                 : RefreshIndicator(
                     onRefresh: () async =>
-                        ref.invalidate(groupConquistasProvider(groupId)),
-                    child: ref.watch(groupConquistasProvider(groupId)).when(
+                        ref.invalidate(groupConquistasProvider(args)),
+                    child: ref.watch(groupConquistasProvider(args)).when(
                           loading: () => const Center(
                             child: CircularProgressIndicator(),
                           ),
@@ -83,10 +93,29 @@ class _ConquistasPageState extends ConsumerState<ConquistasPage> {
                                   const EdgeInsets.fromLTRB(16, 16, 16, 36),
                               children: [
                                 _HeroCard(
-                                  season: data.season,
+                                  season: data.seasonName,
                                   player: own,
                                   groupName: activePlayer?.groupName,
                                 ),
+                                const SizedBox(height: 8),
+                                SeasonPicker(
+                                  overview: seasons,
+                                  value: selection,
+                                  seasonsOnly: true,
+                                  onChanged: (next) => ref
+                                      .read(seasonSelectionProvider(seasonKey).notifier)
+                                      .state = next,
+                                ),
+                                if (chosen != null && chosen.hasEnded)
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: TextButton.icon(
+                                      onPressed: () =>
+                                          context.push('/app/seasons/${chosen.id}'),
+                                      icon: const Icon(Icons.emoji_events_outlined),
+                                      label: Text('Retrospectiva de ${chosen.displayName}'),
+                                    ),
+                                  ),
                                 if (isAdmin) ...[
                                   const SizedBox(height: 14),
                                   SegmentedButton<bool>(
@@ -140,7 +169,7 @@ class _ConquistasPageState extends ConsumerState<ConquistasPage> {
 }
 
 class _HeroCard extends StatelessWidget {
-  final int season;
+  final String season;
   final PlayerConquistas? player;
   final String? groupName;
   const _HeroCard({this.player, required this.season, this.groupName});

@@ -32,6 +32,7 @@ import '../../../player_history/domain/entities/player_history_models.dart';
 import '../../../player_history/presentation/providers/player_history_provider.dart'
     as player_history;
 import '../../../polls/presentation/providers/polls_provider.dart';
+import '../../../seasons/presentation/providers/seasons_provider.dart';
 import '../providers/dashboard_provider.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
@@ -54,6 +55,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     ref.invalidate(myPaymentSummaryProvider(groupId));
     ref.invalidate(pendingPollsCountProvider(groupId));
     ref.invalidate(dashboardChampionshipsProvider(groupId));
+    ref.invalidate(seasonsProvider(groupId));
     if (playerId != null) {
       ref.invalidate(
         player_history.playerHistoryProvider(
@@ -414,6 +416,7 @@ class _PlayerIdentityCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(groupSettingsProvider(groupId)).valueOrNull;
+    final seasons = ref.watch(seasonsProvider(groupId)).valueOrNull;
     final icons = GroupIcons.from(settings);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -549,12 +552,11 @@ class _PlayerIdentityCard extends ConsumerWidget {
                               color: AppColors.accentBgOf(theme.brightness),
                               borderRadius: BorderRadius.circular(999),
                             ),
-                            // Protótipo: "3ª temporada". A contagem sai da
-                            // primeira partida disputada — não existe data de
-                            // entrada na patota, e a primeira partida é na
-                            // prática quando a pessoa começou.
+                            // Conta os períodos reais da patota desde a primeira
+                            // partida do jogador. Assim, uma segunda temporada
+                            // no mesmo ano avança corretamente o ordinal.
                             child: Text(
-                              '${summary?.seasonNumber ?? 1}ª temporada',
+                              '${seasons?.seasonOrdinalFor(summary?.firstPlayedAt) ?? summary?.seasonNumber ?? 1}ª temporada',
                               style: TextStyle(
                                 color: AppColors.accentTextOf(theme.brightness),
                                 fontSize: 11,

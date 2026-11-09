@@ -79,6 +79,12 @@ String notificationRoute(String type, Map<String, dynamic> data) {
     case 'group_spreadsheet':
       return _ok(groupId) ? '/app/spreadsheets?groupId=$groupId' : '/app/spreadsheets';
 
+    // ── Temporadas ────────────────────────────────────────────────────────
+
+    case 'season_closed':
+      final seasonId = data['seasonId'] as String?;
+      return _ok(seasonId) ? '/app/seasons/$seasonId' : '/app/conquistas';
+
     // ── Outros ────────────────────────────────────────────────────────────
 
     case 'birthday':

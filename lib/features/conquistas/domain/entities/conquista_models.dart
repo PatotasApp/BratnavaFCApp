@@ -153,21 +153,34 @@ class PlayerConquistas {
 
 class GroupConquistas {
   final String groupId;
+
+  /// Ano da temporada exibida.
   final int season;
+
+  /// Temporada do "na temporada" (padrão: a atual) e o nome dela ("2026/1").
+  final String? seasonId;
+  final String seasonName;
   final List<PlayerConquistas> players;
 
   const GroupConquistas({
     required this.groupId,
     required this.season,
+    this.seasonId,
+    required this.seasonName,
     required this.players,
   });
 
-  factory GroupConquistas.fromJson(Map<String, dynamic> json) =>
-      GroupConquistas(
-        groupId: json['groupId']?.toString() ?? '',
-        season: (json['season'] as num?)?.toInt() ?? DateTime.now().year,
-        players: _list(json['players'], PlayerConquistas.fromJson),
-      );
+  factory GroupConquistas.fromJson(Map<String, dynamic> json) {
+    final season = (json['season'] as num?)?.toInt() ?? DateTime.now().year;
+    final name = json['seasonName'] as String?;
+    return GroupConquistas(
+      groupId: json['groupId']?.toString() ?? '',
+      season: season,
+      seasonId: json['seasonId'] as String?,
+      seasonName: name == null || name.isEmpty ? '$season' : name,
+      players: _list(json['players'], PlayerConquistas.fromJson),
+    );
+  }
 }
 
 class PatotaProfile {

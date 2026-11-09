@@ -26,8 +26,10 @@ class MatchHistoryItem extends Equatable {
   final String? championshipId;
   final String? championshipName;
   final String? playerResult;
+
   /// Pódio do campeonato consolidado (até 3º), mostrado no lugar do placar.
   final List<HistoryPodiumTeam> podium;
+
   /// Campeonato: gols/assistências/MVP do item são os de fato; estes dizem
   /// se entram nos totais (regras de contagem do campeonato). Nulo = conta.
   final bool? goalsCountInStats;
@@ -183,8 +185,8 @@ class PlayerHistorySummary {
   final int totalAssists;
   final int totalMvps;
 
-  /// Ano da primeira partida disputada. `null` quando não há histórico.
-  final int? firstSeasonYear;
+  /// Data da primeira partida disputada. `null` quando não há histórico.
+  final DateTime? firstPlayedAt;
 
   const PlayerHistorySummary({
     required this.totalMatches,
@@ -194,16 +196,14 @@ class PlayerHistorySummary {
     required this.totalGoals,
     required this.totalAssists,
     required this.totalMvps,
-    this.firstSeasonYear,
+    this.firstPlayedAt,
   });
 
-  /// Em qual temporada o jogador está, contando a partir da primeira partida.
-  ///
-  /// O protótipo mostra "3ª temporada" no card do jogador. Como não existe data
-  /// de entrada na patota, a referência é a primeira partida disputada — que na
-  /// prática é quando a pessoa começou a jogar. Sem histórico, é a 1ª.
+  /// Fallback usado enquanto os períodos da patota ainda estão carregando.
+  /// A contagem correta, inclusive para duas temporadas no mesmo ano, é feita
+  /// por `SeasonsOverview.seasonOrdinalFor` no dashboard.
   int get seasonNumber {
-    final first = firstSeasonYear;
+    final first = firstPlayedAt?.year;
     if (first == null) return 1;
     final diff = DateTime.now().year - first;
     return diff < 0 ? 1 : diff + 1;
@@ -211,7 +211,7 @@ class PlayerHistorySummary {
 
   factory PlayerHistorySummary.from(List<MatchHistoryItem> items) {
     int wins = 0, losses = 0, draws = 0, goals = 0, assists = 0, mvps = 0;
-    int? firstYear;
+    DateTime? firstPlayedAt;
 
     for (final m in items) {
       if (m.isWin) {
@@ -229,9 +229,10 @@ class PlayerHistorySummary {
       }
       if (m.isMvp && m.mvpCountsInStats != false) mvps++;
 
-      final year = AppDateUtils.parse(m.date)?.year;
-      if (year != null && (firstYear == null || year < firstYear)) {
-        firstYear = year;
+      final playedAt = AppDateUtils.parse(m.date);
+      if (playedAt != null &&
+          (firstPlayedAt == null || playedAt.isBefore(firstPlayedAt))) {
+        firstPlayedAt = playedAt;
       }
     }
 
@@ -243,7 +244,7 @@ class PlayerHistorySummary {
       totalGoals: goals,
       totalAssists: assists,
       totalMvps: mvps,
-      firstSeasonYear: firstYear,
+      firstPlayedAt: firstPlayedAt,
     );
   }
 }
