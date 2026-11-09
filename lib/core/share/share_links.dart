@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../constants/app_constants.dart';
@@ -84,12 +85,78 @@ class ShareLinks {
   static String poll(String pollId) => build(ShareKind.poll, pollId);
 }
 
-/// Abre a folha de compartilhamento do sistema com o texto e o link.
+enum _ShareLinkAction { copy, system }
+
+/// Mostra as ações de compartilhamento e, quando solicitado, abre a folha do
+/// sistema. A opção de copiar fica disponível em qualquer versão do Android/iOS.
 Future<void> shareLink(BuildContext context, String url, {String? text}) async {
   final box = context.findRenderObject() as RenderBox?;
-  await Share.share(
-    text == null || text.isEmpty ? url : '$text\n$url',
-    sharePositionOrigin:
-        box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+  final origin = box == null ? null : box.localToGlobal(Offset.zero) & box.size;
+  final action = await showModalBottomSheet<_ShareLinkAction>(
+    context: context,
+    showDragHandle: true,
+    useSafeArea: true,
+    builder: (sheetContext) => Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              'Compartilhar',
+              style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.link_outlined),
+            title: const Text('Copiar link'),
+            subtitle: const Text('Copiar para colar onde quiser'),
+            onTap: () => Navigator.pop(sheetContext, _ShareLinkAction.copy),
+          ),
+          ListTile(
+            leading: const Icon(Icons.ios_share_outlined),
+            title: const Text('Compartilhar em…'),
+            subtitle: const Text('WhatsApp e outros aplicativos'),
+            onTap: () => Navigator.pop(sheetContext, _ShareLinkAction.system),
+          ),
+        ],
+      ),
+    ),
   );
+
+  if (action == null || !context.mounted) return;
+
+  if (action == _ShareLinkAction.copy) {
+    try {
+      await Clipboard.setData(ClipboardData(text: url));
+      if (context.mounted) _showShareMessage(context, 'Link copiado!');
+    } catch (_) {
+      if (context.mounted) {
+        _showShareMessage(context, 'Não foi possível copiar o link.');
+      }
+    }
+    return;
+  }
+
+  try {
+    await Share.share(
+      text == null || text.isEmpty ? url : '$text\n$url',
+      sharePositionOrigin: origin,
+    );
+  } catch (_) {
+    if (context.mounted) {
+      _showShareMessage(context, 'Não foi possível abrir o compartilhamento.');
+    }
+  }
+}
+
+void _showShareMessage(BuildContext context, String message) {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  messenger
+    ?..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(message)));
 }

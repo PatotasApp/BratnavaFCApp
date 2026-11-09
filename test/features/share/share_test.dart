@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:patotas_app/core/share/pending_share_link.dart';
@@ -63,6 +64,48 @@ void main() {
       pending.remember(Uri.parse('/enquete/$_id'));
       expect(pending.take(), '/enquete/$_id');
       expect(pending.take(), isNull);
+    });
+
+    testWidgets('oferece copiar o link ou compartilhar em outro app',
+        (tester) async {
+      MethodCall? clipboardCall;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') clipboardCall = call;
+        return null;
+      });
+      addTearDown(() => TestDefaultBinaryMessengerBinding
+          .instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => shareLink(
+                context,
+                'https://site.test/partida/$_id',
+                text: 'Partida no PatotasApp',
+              ),
+              child: const Text('Compartilhar'),
+            ),
+          ),
+        ),
+      ));
+
+      await tester.tap(find.text('Compartilhar'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Copiar link'), findsOneWidget);
+      expect(find.text('Compartilhar em…'), findsOneWidget);
+
+      await tester.tap(find.text('Copiar link'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(clipboardCall?.arguments, {
+        'text': 'https://site.test/partida/$_id',
+      });
+      expect(find.text('Link copiado!'), findsOneWidget);
     });
   });
 
