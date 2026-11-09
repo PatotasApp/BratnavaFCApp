@@ -73,6 +73,11 @@ workflows:
       flutter: stable
       groups:
         - ios-prod
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: br.com.patotasapp
+        certificate: ios_distribution_prod
+        provisioning_profile: patotas_app_store_prod
 
     scripts:
       - name: Validar branch
@@ -81,22 +86,6 @@ workflows:
             echo "Este workflow deve rodar na branch main. Branch atual: $CM_BRANCH"
             exit 1
           fi
-
-      - name: Inicializar keychain
-        script: keychain initialize
-
-      - name: Buscar certificado e provisioning profile
-        script: |
-          app-store-connect fetch-signing-files br.com.patotasapp \
-            --type IOS_APP_STORE \
-            --certificate-key @env:CERTIFICATE_PRIVATE_KEY \
-            --create
-
-      - name: Adicionar certificado ao keychain
-        script: keychain add-certificates
-
-      - name: Configurar signing no projeto Xcode
-        script: xcode-project use-profiles
 
       - name: Get packages
         script: flutter pub get
