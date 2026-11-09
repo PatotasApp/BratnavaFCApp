@@ -10,6 +10,7 @@ import '../widgets/auth_option_button.dart';
 import '../widgets/auth_page_scaffold.dart';
 import '../widgets/auth_result_feedback.dart';
 import '../widgets/google_sign_in_button.dart';
+import '../widgets/legal_notice.dart';
 
 /// Escolha do método de login: Apple, Google ou e-mail.
 ///
@@ -100,6 +101,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               color: AppColors.lightText,
             ),
           ),
+          const SizedBox(height: 20),
+          const LegalNotice(),
         ],
       ),
     );

@@ -210,6 +210,12 @@ class AppColors {
   static const orange200 = Color(0xFFFED7AA);
   static const orange700 = Color(0xFFE9A700);
 
+  // Monte seu Time – campo listrado, goleiro e imagem de compartilhar
+  static const pitchStripe = Color(0xFF15803D);
+  static const pitchStripeAlt = Color(0xFF166534);
+  static const goalkeeperYellow = Color(0xFFFDE047);
+  static const shareCardMid = Color(0xFF10261A);
+
   // Gradientes de avatar (determinísticos por nome)
   static const List<List<Color>> avatarGradients = [
     [Color(0xFF8B5CF6), Color(0xFF6366F1)], // violet → indigo

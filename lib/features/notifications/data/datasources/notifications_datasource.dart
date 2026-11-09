@@ -2,6 +2,11 @@ import 'package:dio/dio.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../domain/entities/app_notification.dart';
 
+/// Avisos que a API ainda manda mas o app não mostra: as apostas (Bet) saíram
+/// do app e continuam só no site.
+bool isHiddenNotificationType(String? type) =>
+    type != null && type.startsWith('bet_');
+
 class NotificationsDatasource {
   final Dio _dio;
   const NotificationsDatasource(this._dio);
@@ -20,6 +25,7 @@ class NotificationsDatasource {
     final list = d is List ? d : <dynamic>[];
     return list
         .map((e) => AppNotification.fromJson(e as Map<String, dynamic>))
+        .where((n) => !isHiddenNotificationType(n.type))
         .toList();
   }
 

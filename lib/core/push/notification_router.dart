@@ -76,10 +76,6 @@ String notificationRoute(String type, Map<String, dynamic> data) {
 
     // ── Apostas ───────────────────────────────────────────────────────────
 
-    case 'bet_resolved':
-    case 'bet_created':
-      return '/app/bet';
-
     // ── Temporadas ────────────────────────────────────────────────────────
 
     case 'season_closed':

@@ -1,6 +1,8 @@
 import 'package:equatable/equatable.dart';
 
 import '../../../../core/utils/date_utils.dart';
+import '../../../history/domain/entities/history_match.dart'
+    show HistoryPodiumTeam;
 
 // ── Match history item (per-player view) ──────────────────────────────────────
 
@@ -24,6 +26,12 @@ class MatchHistoryItem extends Equatable {
   final String? championshipId;
   final String? championshipName;
   final String? playerResult;
+  /// Pódio do campeonato consolidado (até 3º), mostrado no lugar do placar.
+  final List<HistoryPodiumTeam> podium;
+  /// Campeonato: gols/assistências/MVP do item são os de fato; estes dizem
+  /// se entram nos totais (regras de contagem do campeonato). Nulo = conta.
+  final bool? goalsCountInStats;
+  final bool? mvpCountsInStats;
 
   const MatchHistoryItem({
     required this.matchId,
@@ -45,6 +53,9 @@ class MatchHistoryItem extends Equatable {
     this.championshipId,
     this.championshipName,
     this.playerResult,
+    this.podium = const [],
+    this.goalsCountInStats,
+    this.mvpCountsInStats,
   });
 
   /// Nomes do payload de `/player-history`, conferidos contra o site.
@@ -86,6 +97,18 @@ class MatchHistoryItem extends Equatable {
       championshipId: j['championshipId']?.toString(),
       championshipName: j['championshipName'] as String?,
       playerResult: playerResult,
+      podium: (j['podium'] as List?)
+              ?.whereType<Map>()
+              .map((item) => HistoryPodiumTeam(
+                    position: (item['position'] as num?)?.toInt() ?? 0,
+                    teamName: (item['teamName'] as String?) ?? 'Time',
+                    colorHex: item['colorHex'] as String?,
+                  ))
+              .where((item) => item.position > 0)
+              .toList(growable: false) ??
+          const [],
+      goalsCountInStats: j['goalsCountInStats'] as bool?,
+      mvpCountsInStats: j['mvpCountsInStats'] as bool?,
     );
   }
 
@@ -143,6 +166,9 @@ class MatchHistoryItem extends Equatable {
         championshipId,
         championshipName,
         playerResult,
+        podium,
+        goalsCountInStats,
+        mvpCountsInStats,
       ];
 }
 
@@ -195,9 +221,13 @@ class PlayerHistorySummary {
       } else if (m.isDraw) {
         draws++;
       }
-      goals += m.goals;
-      assists += m.assists;
-      if (m.isMvp) mvps++;
+      // Regra do campeonato: o item mostra o que aconteceu, mas só soma se a
+      // regra deixar (mesma conta do site).
+      if (m.goalsCountInStats != false) {
+        goals += m.goals;
+        assists += m.assists;
+      }
+      if (m.isMvp && m.mvpCountsInStats != false) mvps++;
 
       final year = AppDateUtils.parse(m.date)?.year;
       if (year != null && (firstYear == null || year < firstYear)) {

@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/realtime/realtime_provider.dart';
-import '../../../../core/home_widget/match_home_widget_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/football_pitch.dart';
@@ -283,20 +282,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     );
     final matchesAsync = ref.watch(upcomingMatchesFullProvider(groupId));
 
-    ref.listen<AsyncValue<List<UpcomingMatchDetails>>>(
-      upcomingMatchesFullProvider(groupId),
-      (_, next) {
-        next.whenData(
-          (matches) => unawaited(
-            MatchHomeWidgetService.sync(
-              match: matches.firstOrNull,
-              playerId: activePlayer.playerId,
-              groupName: activePlayer.groupName,
-            ),
-          ),
-        );
-      },
-    );
     final paymentAsync = ref.watch(myPaymentSummaryProvider(groupId));
     final pollsAsync = ref.watch(pendingPollsCountProvider(groupId));
     final eventsAsync = ref.watch(upcomingEventsProvider(groupId));

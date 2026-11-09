@@ -1,3 +1,4 @@
+import '../../../../core/constants/replay_access.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +17,7 @@ import '../../domain/entities/championship_models.dart';
 import '../championship_ui_text.dart';
 import '../providers/championship_provider.dart';
 import '../widgets/championship_draw_panel.dart';
+import '../widgets/championship_goals_section.dart';
 import '../widgets/championship_live_game.dart';
 import '../widgets/championship_replays_section.dart';
 import '../widgets/championship_stage_header.dart';
@@ -173,6 +175,18 @@ class _ChampionshipDetailPageState
       icons: icons,
     );
     final teamsByPosition = _TeamsByPosition(details: details, icons: icons);
+    // Artilharia, assistências e gols seguem a opção "Exibir gols e
+    // assistências" da patota; o admin sempre vê.
+    final settings = ref.watch(groupSettingsProvider(groupId)).valueOrNull;
+    final canSeeStats = isAdmin || (settings?.showPlayerStats ?? false);
+    final hasHighlights =
+        details.topScorers.isNotEmpty || details.topAssists.isNotEmpty;
+    final goals = ChampionshipGoalsSection(
+      details: details,
+      isAdmin: isAdmin,
+      notifier: notifier,
+      icons: icons,
+    );
     final replays = ChampionshipReplaysSection(
       details: details,
       groupId: groupId,
@@ -227,9 +241,10 @@ class _ChampionshipDetailPageState
           else ...[
             if (details.standings.isNotEmpty)
               _StandingsSection(details: details),
-            if (details.topScorers.isNotEmpty || details.topAssists.isNotEmpty)
+            if (canSeeStats && hasHighlights)
               _HighlightsSection(details: details, icons: icons),
             _GamesList(details: details),
+            if (canSeeStats) goals,
             // Depois do início os times ficam travados (API v9.1): só leitura.
             teamsByPosition,
           ],
@@ -240,10 +255,11 @@ class _ChampionshipDetailPageState
           if (details.standings.isNotEmpty) _StandingsSection(details: details),
           if (details.rules.mvpMode != ChampionshipMvpMode.none)
             _MvpSection(details: details, notifier: notifier),
-          if (details.topScorers.isNotEmpty || details.topAssists.isNotEmpty)
+          if (canSeeStats && hasHighlights)
             _HighlightsSection(details: details, icons: icons),
+          if (canSeeStats) goals,
           teamsByPosition,
-          replays,
+          if (groupHasReplays(groupId)) replays,
           if (admin != null) admin,
         ],
       ChampionshipStage.finalized => [
@@ -251,9 +267,10 @@ class _ChampionshipDetailPageState
           if (details.standings.isNotEmpty) _StandingsSection(details: details),
           if (details.rules.mvpMode != ChampionshipMvpMode.none)
             _MvpSection(details: details, notifier: notifier),
-          if (details.topScorers.isNotEmpty || details.topAssists.isNotEmpty)
+          if (canSeeStats && hasHighlights)
             _HighlightsSection(details: details, icons: icons),
-          replays,
+          if (canSeeStats) goals,
+          if (groupHasReplays(groupId)) replays,
           if (admin != null) admin,
         ],
       ChampionshipStage.cancelled => [_Overview(details: details)],

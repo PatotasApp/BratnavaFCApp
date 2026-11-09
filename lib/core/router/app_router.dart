@@ -1,10 +1,13 @@
+import '../constants/replay_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../features/moderation/moderation.dart';
 import '../../features/auth/presentation/pages/email_login_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/forgot_password_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
+import '../../features/auth/presentation/providers/account_store.dart';
 import '../../features/auth/presentation/providers/session_provider.dart';
 import '../../features/account/presentation/pages/my_account_page.dart';
 import '../../features/calendar/presentation/pages/calendar_page.dart';
@@ -22,9 +25,9 @@ import '../../features/polls/presentation/pages/polls_page.dart';
 import '../../features/matches/presentation/pages/matches_page.dart';
 import '../../features/payments/presentation/pages/payments_page.dart';
 import '../../features/absences/presentation/pages/absences_page.dart';
-import '../../features/bet/presentation/pages/bet_page.dart';
 import '../../features/replays/presentation/pages/replay_vault_page.dart';
 import '../../features/player_spotlight/presentation/pages/player_spotlight_page.dart';
+import '../../features/retrospective/presentation/pages/retrospective_page.dart';
 import '../../features/player_history/presentation/pages/player_history_page.dart';
 import '../../features/groups/presentation/pages/group_invites_page.dart';
 import '../../features/team_builder/presentation/pages/team_builder_page.dart';
@@ -33,7 +36,6 @@ import '../../features/conquistas/presentation/pages/public_profile_page.dart';
 import '../../features/championships/presentation/pages/championships_page.dart';
 import '../../features/championships/presentation/pages/championship_wizard_page.dart';
 import '../../features/championships/presentation/pages/championship_detail_page.dart';
-import '../../core/constants/app_constants.dart';
 import '../../features/seasons/presentation/pages/season_summary_page.dart';
 import '../../features/seasons/presentation/pages/seasons_settings_page.dart';
 import '../../core/push/local_notifications.dart';
@@ -263,16 +265,20 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const AbsencesPage(),
           ),
           GoRoute(
-            path: '/app/bet',
-            builder: (_, __) => const BetPage(),
-          ),
-          GoRoute(
             path: '/app/replays',
+            redirect: (_, __) => groupHasReplays(
+                    ref.read(accountStoreProvider).activeAccount?.activeGroupId)
+                ? null
+                : '/app',
             builder: (_, __) => const ReplayVaultPage(),
           ),
           GoRoute(
             path: '/app/spotlight',
             builder: (_, __) => const PlayerSpotlightPage(),
+          ),
+          GoRoute(
+            path: '/app/retrospectiva',
+            builder: (_, __) => const RetrospectivePage(),
           ),
           GoRoute(
             path: '/app/player-history',
@@ -285,6 +291,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/app/account',
             builder: (_, __) => const MyAccountPage(),
+          ),
+          GoRoute(
+            path: '/app/account/blocked',
+            builder: (_, __) => const BlockedUsersPage(),
           ),
           GoRoute(
             path: '/app/team-builder',
@@ -304,23 +314,20 @@ final routerProvider = Provider<GoRouter>((ref) {
               seasonId: state.pathParameters['seasonId']!,
             ),
           ),
-          if (AppConstants.championshipsEnabled)
-            GoRoute(
-              path: '/app/championships',
-              builder: (_, __) => const ChampionshipsPage(),
+          GoRoute(
+            path: '/app/championships',
+            builder: (_, __) => const ChampionshipsPage(),
+          ),
+          GoRoute(
+            path: '/app/championships/new',
+            builder: (_, __) => const ChampionshipWizardPage(),
+          ),
+          GoRoute(
+            path: '/app/championships/:championshipId',
+            builder: (_, state) => ChampionshipDetailPage(
+              championshipId: state.pathParameters['championshipId']!,
             ),
-          if (AppConstants.championshipsEnabled)
-            GoRoute(
-              path: '/app/championships/new',
-              builder: (_, __) => const ChampionshipWizardPage(),
-            ),
-          if (AppConstants.championshipsEnabled)
-            GoRoute(
-              path: '/app/championships/:championshipId',
-              builder: (_, state) => ChampionshipDetailPage(
-                championshipId: state.pathParameters['championshipId']!,
-              ),
-            ),
+          ),
           GoRoute(
             path: '/app/profile/:userId',
             builder: (_, state) => PublicProfilePage(

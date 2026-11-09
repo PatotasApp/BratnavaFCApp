@@ -97,6 +97,16 @@ abstract interface class ChampionshipDataSource {
     required bool isOwnGoal,
     int? timeSeconds,
   });
+  Future<void> updateGoal(
+    String groupId,
+    String id,
+    String gameId,
+    String goalId, {
+    required String scorerPlayerId,
+    String? assistPlayerId,
+    required bool isOwnGoal,
+    int? timeSeconds,
+  });
   Future<void> deleteGoal(
     String groupId,
     String id,

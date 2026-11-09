@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/errors/app_exception.dart';
-import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/entities/account.dart';
 import '../../../auth/presentation/providers/account_store.dart';
@@ -469,7 +468,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     if (!nextGeneral && !nextPerMatch && !nextClassification) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Deixe pelo menos uma aba de estatisticas ativa.'),
+          content: Text('Deixe pelo menos uma aba de estatísticas ativa.'),
         ),
       );
       return;
@@ -875,7 +874,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Isso altera a partida criada. Nao altera as regras de recorrencia.',
+                      'Isso altera a partida criada. Não altera as regras de recorrência.',
                       style: TextStyle(
                         fontSize: 11,
                         color: isDark ? AppColors.slate400 : AppColors.slate500,
@@ -1478,7 +1477,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
               accentBg: AppColors.blue50,
               accentFg: AppColors.infoLight,
               icon: Icons.event_repeat_outlined,
-              title: 'Agendar inicio das partidas',
+              title: 'Agendar início das partidas',
               subtitle: 'Manual ou recorrente',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1497,7 +1496,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                       ),
                     ),
                     subtitle: Text(
-                      'Cria partidas usando os padroes de local, dia e horario.',
+                      'Cria partidas usando os padrões de local, dia e horário.',
                       style: TextStyle(
                         fontSize: 11,
                         color: isDark ? AppColors.slate500 : AppColors.slate400,
@@ -1531,7 +1530,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: _TimeField(
-                              label: 'Horario',
+                              label: 'Horário',
                               value: _manualScheduleTime,
                               isDark: isDark,
                               onTap: _pickManualTime,
@@ -1632,8 +1631,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                                       ),
                                       Text(
                                         item.created
-                                            ? 'Partida criada. Remover aqui nao exclui a partida.'
-                                            : 'Aguardando horario',
+                                            ? 'Partida criada. Remover aqui não exclui a partida.'
+                                            : 'Aguardando horário',
                                         style: TextStyle(
                                           fontSize: 10,
                                           color: isDark
@@ -1692,7 +1691,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: _TimeField(
-                              label: 'Horario',
+                              label: 'Horário',
                               value: _matchScheduleTime,
                               isDark: isDark,
                               onTap: _pickScheduleTime,
@@ -1702,7 +1701,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'No horario configurado, o sistema cria a proxima partida usando os padroes acima.',
+                        'No horário configurado, o sistema cria a próxima partida usando os padrões acima.',
                         style: TextStyle(
                           fontSize: 11,
                           color:
@@ -1778,7 +1777,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
             ),
           ),
           const SizedBox(height: 12),
-          if (AppConstants.championshipsEnabled) ...[
+          ...[
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
@@ -3955,7 +3954,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
                   color: isDark ? AppColors.slate100 : AppColors.slate800,
                 ),
                 decoration: InputDecoration(
-                  hintText: 'Buscar por nome ou username...',
+                  hintText: 'Buscar por nome ou nome de usuário...',
                   hintStyle: TextStyle(
                       color: isDark ? AppColors.slate500 : AppColors.slate400,
                       fontSize: 13),

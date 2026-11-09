@@ -23,13 +23,6 @@ class AppConstants {
 
   static bool get isProduction => environmentName == 'production';
 
-  /// Feature flag do Modo Campeonato. O arquivo de produção a mantém
-  /// desligada até o backend estar disponível.
-  static const bool championshipsEnabled = bool.fromEnvironment(
-    'CHAMPIONSHIPS_ENABLED',
-    defaultValue: false,
-  );
-
   /// Troca centralizada entre dados falsos e o contrato HTTP real.
   static const bool championshipsUseMock = bool.fromEnvironment(
     'CHAMPIONSHIPS_USE_MOCK',
@@ -78,6 +71,9 @@ class AppConstants {
   /// Derivada de webUrl para seguir o ambiente: não faz sentido o app de
   /// desenvolvimento apontar para um domínio diferente do que ele mesmo usa.
   static String get privacyPolicyUrl => '$webUrl/privacidade.html';
+
+  /// Termos de uso, aceitos no login e no cadastro (App Store, regra 1.2).
+  static String get termsOfUseUrl => '$webUrl/termos.html';
 
   /// Falha explícita em vez de cair num padrão silencioso.
   ///

@@ -41,7 +41,7 @@ Future<bool> showConfirmDialog({
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                title ?? 'Confirmar acao',
+                title ?? 'Confirmar ação',
                 style: theme.textTheme.titleLarge,
               ),
             ),

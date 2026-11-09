@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/constants/app_constants.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -291,15 +290,30 @@ class _MoreSheet extends ConsumerWidget {
         ),
       ],
     ),
+    // Ferramentas do evento de encerramento (só admin da patota).
+    _MoreGroup(
+      label: 'Evento',
+      items: [
+        _MoreItem(
+          icon: Icons.auto_awesome_outlined,
+          label: 'Retrospectiva',
+          path: '/app/retrospectiva',
+        ),
+        _MoreItem(
+          icon: Icons.people_alt_outlined,
+          label: 'Monte seu Time',
+          path: '/app/team-builder',
+        ),
+      ],
+    ),
     _MoreGroup(
       label: 'Organização',
       items: [
-        if (AppConstants.championshipsEnabled)
-          _MoreItem(
-            icon: Icons.emoji_events_outlined,
-            label: 'Campeonatos',
-            path: '/app/championships',
-          ),
+        _MoreItem(
+          icon: Icons.emoji_events_outlined,
+          label: 'Campeonatos',
+          path: '/app/championships',
+        ),
         _MoreItem(
           icon: Icons.calendar_month_outlined,
           label: 'Calendário',
@@ -320,11 +334,6 @@ class _MoreSheet extends ConsumerWidget {
           label: 'Uniformes',
           path: '/app/team-colors',
         ),
-        _MoreItem(
-          icon: Icons.people_alt_outlined,
-          label: 'Monte seu Time',
-          path: '/app/team-builder',
-        ),
       ],
     ),
     _MoreGroup(
@@ -339,11 +348,6 @@ class _MoreSheet extends ConsumerWidget {
           icon: Icons.how_to_vote_outlined,
           label: 'Votações',
           path: '/app/polls/votes',
-        ),
-        _MoreItem(
-          icon: Icons.monetization_on_outlined,
-          label: 'Bet',
-          path: '/app/bet',
         ),
         _MoreItem(
           icon: Icons.video_library_outlined,
@@ -443,7 +447,14 @@ class _MoreSheet extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final group in _groups) ...[
+                  for (final group in _groups)
+                    if (group.items.any((item) => isShellMenuItemVisible(
+                          path: item.path,
+                          isAdmin: isAdmin,
+                          canSeeStats: canSeeStats,
+                          requiresStatsPermission: item.statsPermission,
+                          groupId: groupId,
+                        ))) ...[
                     Text(
                       group.label.toUpperCase(),
                       style: theme.textTheme.labelSmall,
@@ -462,6 +473,7 @@ class _MoreSheet extends ConsumerWidget {
                             isAdmin: isAdmin,
                             canSeeStats: canSeeStats,
                             requiresStatsPermission: item.statsPermission,
+                            groupId: groupId,
                           );
                         });
 

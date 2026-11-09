@@ -4,6 +4,7 @@ import 'core/push/push_providers.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_mode_provider.dart';
+import 'core/update/app_update.dart';
 import 'features/auth/presentation/providers/session_provider.dart';
 import 'features/auth/presentation/providers/account_store.dart';
 
@@ -72,6 +73,8 @@ class _AppState extends ConsumerState<App> {
       themeMode: themeMode,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
+      builder: (context, child) =>
+          AppUpdateGate(child: child ?? const SizedBox.shrink()),
     );
   }
 }

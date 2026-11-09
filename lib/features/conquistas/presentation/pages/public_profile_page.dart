@@ -12,6 +12,7 @@ import '../widgets/achievement_info_sheet.dart';
 import '../widgets/achievement_progress_sheet.dart';
 import '../widgets/conquistas_section.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../moderation/moderation.dart';
 
 class PublicProfilePage extends ConsumerWidget {
   final String userId;
@@ -26,10 +27,17 @@ class PublicProfilePage extends ConsumerWidget {
     return Scaffold(
       body: Column(
         children: [
-          const AppPageHeader(
+          AppPageHeader(
             title: 'Perfil',
             subtitle: 'Informações públicas do jogador',
             icon: Icons.person_outline_rounded,
+            actions: [
+              if (!isOwner)
+                _ProfileModerationMenu(
+                  userId: userId,
+                  name: ref.watch(publicProfileProvider(userId)).valueOrNull?.name ?? 'este jogador',
+                ),
+            ],
           ),
           Expanded(
             child: RefreshIndicator(
@@ -63,6 +71,42 @@ class PublicProfilePage extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Denunciar e bloquear o dono do perfil (App Store, regra 1.2).
+class _ProfileModerationMenu extends ConsumerWidget {
+  const _ProfileModerationMenu({required this.userId, required this.name});
+
+  final String userId;
+  final String name;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return PopupMenuButton<String>(
+      tooltip: 'Mais opções',
+      icon: const Icon(Icons.more_vert_rounded),
+      onSelected: (action) async {
+        if (action == 'report') {
+          await showReportSheet(context, target: ReportTarget.user, targetId: userId);
+        } else if (action == 'block') {
+          final blocked = await confirmBlockUser(context, ref, userId: userId, name: name);
+          if (blocked && context.mounted) Navigator.of(context).maybePop();
+        }
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(
+          value: 'report',
+          child: ListTile(
+              leading: Icon(Icons.flag_outlined), title: Text('Denunciar perfil'), dense: true),
+        ),
+        PopupMenuItem(
+          value: 'block',
+          child: ListTile(
+              leading: Icon(Icons.block_rounded), title: Text('Bloquear jogador'), dense: true),
+        ),
+      ],
     );
   }
 }

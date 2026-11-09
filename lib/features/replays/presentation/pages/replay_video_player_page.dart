@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
+import '../../../moderation/moderation.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -449,6 +450,12 @@ class _ReplayVideoPlayerPageState extends ConsumerState<ReplayVideoPlayerPage> {
                 onLike: _clip.clipId.isNotEmpty ? _toggleLike : null,
                 onFavorite: _clip.clipId.isNotEmpty ? _toggleFavorite : null,
                 onCopy: _copyUrl,
+                onReport: _clip.clipId.isNotEmpty
+                    ? () => showReportSheet(context,
+                        target: ReportTarget.replay,
+                        targetId: _clip.clipId,
+                        groupId: widget.groupId)
+                    : null,
                 onShowLikers: _clip.likeCount > 0 ? _openLikersSheet : null,
                 busy: _actionBusy,
               ),
@@ -590,6 +597,7 @@ class _SocialDock extends StatelessWidget {
   final VoidCallback? onLike;
   final VoidCallback? onFavorite;
   final VoidCallback onCopy;
+  final VoidCallback? onReport;
   final VoidCallback? onShowLikers;
   final bool busy;
 
@@ -598,6 +606,7 @@ class _SocialDock extends StatelessWidget {
     this.onLike,
     this.onFavorite,
     required this.onCopy,
+    this.onReport,
     this.onShowLikers,
     required this.busy,
   });
@@ -647,6 +656,16 @@ class _SocialDock extends StatelessWidget {
                 active: false,
                 activeColor: AppColors.info,
                 onTap: onCopy,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _SocialPill(
+                icon: Icons.flag_outlined,
+                label: 'Denunciar',
+                active: false,
+                activeColor: AppColors.prototypeDanger,
+                onTap: onReport,
               ),
             ),
           ]),
@@ -899,7 +918,7 @@ class _LikersSheet extends StatelessWidget {
                     if (snapshot.hasError) {
                       return const Center(
                         child: Text(
-                          'Nao foi possivel carregar as curtidas.',
+                          'Não foi possível carregar as curtidas.',
                           style: TextStyle(color: AppColors.onDark70),
                         ),
                       );
@@ -909,7 +928,7 @@ class _LikersSheet extends StatelessWidget {
                     if (likers.isEmpty) {
                       return const Center(
                         child: Text(
-                          'Ainda nao ha curtidas neste replay.',
+                          'Ainda não há curtidas neste replay.',
                           style: TextStyle(color: AppColors.onDark70),
                         ),
                       );

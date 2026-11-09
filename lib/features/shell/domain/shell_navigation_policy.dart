@@ -1,8 +1,11 @@
+import '../../../core/constants/replay_access.dart';
+
 const shellAdminOnlyMenuPaths = <String>{
   '/app/birthdays',
   '/app/team-builder',
   '/app/settings',
   '/app/conquistas',
+  '/app/retrospectiva',
 };
 
 int shellNavigationIndexForPath(String location) {
@@ -28,8 +31,10 @@ bool isShellMenuItemVisible({
   required bool isAdmin,
   required bool canSeeStats,
   bool requiresStatsPermission = false,
+  String? groupId,
 }) {
   if (shellAdminOnlyMenuPaths.contains(path) && !isAdmin) return false;
+  if (path == '/app/replays' && !groupHasReplays(groupId)) return false;
   if (requiresStatsPermission && !canSeeStats) return false;
   return true;
 }

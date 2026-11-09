@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../../../core/api/api_response.dart';
-import '../../../../core/constants/app_constants.dart';
 import '../../../dashboard/domain/entities/my_player.dart';
 import '../../domain/entities/player_history_models.dart';
 
@@ -32,7 +31,7 @@ class PlayerHistoryRemoteDataSource {
       queryParameters: {
         'playerId': playerId,
         if (year != null) 'year': year,
-        if (AppConstants.championshipsEnabled) 'includeChampionships': true,
+        'includeChampionships': true,
       },
     );
     return unwrapList(res.data)

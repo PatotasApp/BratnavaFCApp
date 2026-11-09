@@ -246,7 +246,7 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600)),
                               Text(
-                                  'Quem confirmar presenca pode adicionar acompanhantes',
+                                  'Quem confirmar presença pode adicionar acompanhantes',
                                   style: TextStyle(
                                       fontSize: 12,
                                       color: isDark

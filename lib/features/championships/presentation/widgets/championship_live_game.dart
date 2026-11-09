@@ -1,3 +1,4 @@
+import '../../../../core/constants/replay_access.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -187,7 +188,10 @@ class _ChampionshipLiveGameState extends ConsumerState<ChampionshipLiveGame> {
           defaultMinutes: details.rules.gameEnd.timeLimitMinutes ?? 10,
           canControl: widget.isAdmin,
         ),
-        if (widget.isAdmin) ...[
+        // Botões das câmeras: só na patota com replay. Nas outras o gol entra
+        // pela bolinha no canto, como na partida.
+        if (widget.isAdmin &&
+            groupHasReplays(ref.watch(championshipGroupIdProvider))) ...[
           const SizedBox(height: 12),
           Row(
             children: [

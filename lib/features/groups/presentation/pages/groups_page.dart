@@ -8,7 +8,6 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../../../core/api/api_response.dart';
 import '../../../../core/errors/app_exception.dart';
-import '../../../../core/home_widget/match_home_widget_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -543,8 +542,6 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     final leavingGroupId = _expandedGroupId;
     try {
       await _dio.post(ApiConstants.playerLeaveGroup(_activePlayerId));
-      unawaited(MatchHomeWidgetService.clearActiveGroup());
-
       // A saída já foi confirmada pelo servidor. Revoga imediatamente o
       // contexto anterior para nenhuma tela continuar exibindo seus dados.
       await ref.read(accountStoreProvider.notifier).patchActive(
