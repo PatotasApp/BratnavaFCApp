@@ -3,6 +3,8 @@ workflows:
     name: iOS Dev (TestFlight beta)
     instance_type: mac_mini_m2
     max_build_duration: 60
+    integrations:
+      app_store_connect: Codemagic
 
     environment:
       flutter: stable
@@ -11,8 +13,6 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: br.com.patotasapp.dev
-      app_store_connect:
-        auth: integration
 
     scripts:
       - name: Validar branch
@@ -53,6 +53,8 @@ workflows:
     name: iOS Release (App Store)
     instance_type: mac_mini_m2
     max_build_duration: 60
+    integrations:
+      app_store_connect: Codemagic
 
     environment:
       flutter: stable
@@ -61,8 +63,6 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: br.com.patotasapp
-      app_store_connect:
-        auth: integration
 
     scripts:
       - name: Validar branch
