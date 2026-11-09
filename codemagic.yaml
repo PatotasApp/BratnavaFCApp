@@ -85,6 +85,9 @@ workflows:
             exit 1
           fi
 
+      - name: Configurar signing no projeto Xcode
+        script: xcode-project use-profiles
+
       - name: Get packages
         script: flutter pub get
 
