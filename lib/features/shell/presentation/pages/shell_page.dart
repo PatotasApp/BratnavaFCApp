@@ -9,6 +9,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/widgets/email_verification_banner.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
+import '../../../replays/presentation/providers/replay_access_provider.dart';
 import '../../domain/shell_navigation_policy.dart';
 import '../widgets/app_top_bar.dart';
 
@@ -402,7 +403,7 @@ class _MoreSheet extends ConsumerWidget {
     // para uma patota sem jogador nosso, e aí toda rota por grupo
     // responde 403. Ver dashboard_page para o diagnóstico completo.
     final groupId = account?.activeGroupId ?? activePlayer?.groupId;
-    final groupName = activePlayer?.groupName;
+    final canSeeReplays = ref.watch(activeGroupReplayUiProvider);
 
     final isAdmin = groupId != null &&
         groupId.isNotEmpty &&
@@ -455,7 +456,7 @@ class _MoreSheet extends ConsumerWidget {
                           canSeeStats: canSeeStats,
                           requiresStatsPermission: item.statsPermission,
                           groupId: groupId,
-                          groupName: groupName,
+                          canSeeReplays: canSeeReplays,
                         ))) ...[
                     Text(
                       group.label.toUpperCase(),
@@ -476,7 +477,7 @@ class _MoreSheet extends ConsumerWidget {
                             canSeeStats: canSeeStats,
                             requiresStatsPermission: item.statsPermission,
                             groupId: groupId,
-                            groupName: groupName,
+                            canSeeReplays: canSeeReplays,
                           );
                         });
 

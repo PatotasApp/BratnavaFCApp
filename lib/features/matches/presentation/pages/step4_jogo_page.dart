@@ -1,4 +1,3 @@
-import '../../../../core/constants/replay_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
@@ -6,6 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
+import '../../../replays/presentation/providers/replay_access_provider.dart';
 import '../../domain/entities/match_models.dart';
 import '../providers/match_provider.dart';
 import '../widgets/goal_entry_row.dart';
@@ -198,6 +198,7 @@ class _Step4State extends ConsumerState<Step4JogoPage> {
     final s = ref.watch(matchNotifierProvider);
     final acc = ref.watch(accountStoreProvider).activeAccount;
     final gid = acc?.activeGroupId ?? '';
+    final canSeeReplays = ref.watch(activeGroupReplayUiProvider);
     final icons =
         GroupIcons.from(ref.watch(groupSettingsProvider(gid)).valueOrNull);
 
@@ -233,7 +234,7 @@ class _Step4State extends ConsumerState<Step4JogoPage> {
                             ref.read(matchNotifierProvider.notifier).refresh(),
                       ),
                       const SizedBox(height: 16),
-                      if (groupHasReplays(gid)) ...[
+                      if (canSeeReplays) ...[
                       _ReplaySection(
                         publishingType: _publishingReplayType,
                         teamAName: s.teamAColor?.name ?? 'Time A',

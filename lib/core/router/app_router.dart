@@ -1,4 +1,3 @@
-import '../constants/replay_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,7 +6,6 @@ import '../../features/auth/presentation/pages/email_login_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/forgot_password_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
-import '../../features/auth/presentation/providers/account_store.dart';
 import '../../features/auth/presentation/providers/session_provider.dart';
 import '../../features/account/presentation/pages/my_account_page.dart';
 import '../../features/calendar/presentation/pages/calendar_page.dart';
@@ -26,6 +24,7 @@ import '../../features/matches/presentation/pages/matches_page.dart';
 import '../../features/payments/presentation/pages/payments_page.dart';
 import '../../features/absences/presentation/pages/absences_page.dart';
 import '../../features/replays/presentation/pages/replay_vault_page.dart';
+import '../../features/replays/presentation/providers/replay_access_provider.dart';
 import '../../features/player_spotlight/presentation/pages/player_spotlight_page.dart';
 import '../../features/retrospective/presentation/pages/retrospective_page.dart';
 import '../../features/player_history/presentation/pages/player_history_page.dart';
@@ -266,8 +265,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/app/replays',
-            redirect: (_, __) => groupHasReplays(
-                    ref.read(accountStoreProvider).activeAccount?.activeGroupId)
+            redirect: (_, __) => ref.read(activeGroupReplayUiProvider)
                 ? null
                 : '/app',
             builder: (_, __) => const ReplayVaultPage(),
