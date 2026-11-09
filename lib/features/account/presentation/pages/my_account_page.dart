@@ -385,8 +385,7 @@ class _SecurityTab extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
-            onPressed: () =>
-                openLegalPage(context, AppConstants.termsOfUseUrl),
+            onPressed: () => openLegalPage(context, AppConstants.termsOfUseUrl),
             icon: const Icon(Icons.gavel_rounded),
             label: const Text('Termos de uso'),
           ),
@@ -424,7 +423,8 @@ Future<void> _abrirPoliticaDePrivacidade(BuildContext context) async {
   if (!abriu && context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Não foi possível abrir ${AppConstants.privacyPolicyUrl}'),
+        content:
+            Text('Não foi possível abrir ${AppConstants.privacyPolicyUrl}'),
       ),
     );
   }

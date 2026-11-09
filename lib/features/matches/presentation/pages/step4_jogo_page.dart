@@ -235,17 +235,17 @@ class _Step4State extends ConsumerState<Step4JogoPage> {
                       ),
                       const SizedBox(height: 16),
                       if (canSeeReplays) ...[
-                      _ReplaySection(
-                        publishingType: _publishingReplayType,
-                        teamAName: s.teamAColor?.name ?? 'Time A',
-                        teamBName: s.teamBColor?.name ?? 'Time B',
-                        teamAColor: s.teamAColor?.color,
-                        teamBColor: s.teamBColor?.color,
-                        onGolA: () => _triggerReplay('GolTimeA'),
-                        onGolB: () => _triggerReplay('GolTimeB'),
-                        onJogada: () => _triggerReplay('Jogada'),
-                      ),
-                      const SizedBox(height: 16),
+                        _ReplaySection(
+                          publishingType: _publishingReplayType,
+                          teamAName: s.teamAColor?.name ?? 'Time A',
+                          teamBName: s.teamBColor?.name ?? 'Time B',
+                          teamAColor: s.teamAColor?.color,
+                          teamBColor: s.teamBColor?.color,
+                          onGolA: () => _triggerReplay('GolTimeA'),
+                          onGolB: () => _triggerReplay('GolTimeB'),
+                          onJogada: () => _triggerReplay('Jogada'),
+                        ),
+                        const SizedBox(height: 16),
                       ],
                       // Gols ao vivo: aparece sempre, mesmo vazio, para quem
                       // registra saber onde conferir e corrigir cada gol.

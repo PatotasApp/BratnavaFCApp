@@ -30,12 +30,16 @@ class _SeasonSummaryPageState extends ConsumerState<SeasonSummaryPage> {
 
   Future<void> _shareImage(SeasonSummary data) async {
     try {
-      final boundary = _cardKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final boundary =
+          _cardKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
       final image = await boundary.toImage(pixelRatio: 3);
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
       if (bytes == null) return;
       await Share.shareXFiles(
-        [XFile.fromData(bytes.buffer.asUint8List(), mimeType: 'image/png', name: 'temporada.png')],
+        [
+          XFile.fromData(bytes.buffer.asUint8List(),
+              mimeType: 'image/png', name: 'temporada.png')
+        ],
         text: _shareText(data),
       );
     } catch (_) {
@@ -46,7 +50,8 @@ class _SeasonSummaryPageState extends ConsumerState<SeasonSummaryPage> {
   String _shareText(SeasonSummary data) {
     final champions = data.rankings
         .where((r) => r.rows.isNotEmpty)
-        .map((r) => '${r.icon} ${r.name}: ${r.rows.where((row) => row.position == 1).map((row) => '${row.playerName} (${r.format(row.value)})').join(', ')}')
+        .map((r) =>
+            '${r.icon} ${r.name}: ${r.rows.where((row) => row.position == 1).map((row) => '${row.playerName} (${r.format(row.value)})').join(', ')}')
         .join('\n');
     return 'Temporada ${data.season.displayName} encerrada!\n$champions';
   }
@@ -61,15 +66,23 @@ class _SeasonSummaryPageState extends ConsumerState<SeasonSummaryPage> {
             title: 'Retrospectiva',
             subtitle: 'Campeões e classificação da temporada',
             icon: Icons.emoji_events_outlined,
-            onBack: () => context.canPop() ? context.pop() : context.go('/app/conquistas'),
+            onBack: () => context.canPop()
+                ? context.pop()
+                : context.go('/app/conquistas'),
           ),
           Expanded(
             child: groupId.isEmpty
                 ? const NoActiveGroupView(message: 'Selecione uma patota.')
-                : ref.watch(seasonSummaryProvider((groupId: groupId, seasonId: widget.seasonId))).when(
-                      loading: () => const Center(child: CircularProgressIndicator()),
+                : ref
+                    .watch(seasonSummaryProvider(
+                        (groupId: groupId, seasonId: widget.seasonId)))
+                    .when(
+                      loading: () =>
+                          const Center(child: CircularProgressIndicator()),
                       error: (e, _) => Center(
-                        child: Padding(padding: const EdgeInsets.all(24), child: Text(extractDioError(e))),
+                        child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text(extractDioError(e))),
                       ),
                       data: (data) => _body(context, data),
                     ),
@@ -90,20 +103,27 @@ class _SeasonSummaryPageState extends ConsumerState<SeasonSummaryPage> {
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(18),
-              gradient: const LinearGradient(colors: [AppColors.slate900, AppColors.slate800]),
+              gradient: const LinearGradient(
+                  colors: [AppColors.slate900, AppColors.slate800]),
             ),
             child: DefaultTextStyle(
               style: const TextStyle(color: AppColors.onDark),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('RETROSPECTIVA', style: TextStyle(fontSize: 11, color: AppColors.slate400, letterSpacing: 1.5)),
+                  const Text('RETROSPECTIVA',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.slate400,
+                          letterSpacing: 1.5)),
                   Text('Temporada ${season.displayName}',
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+                      style: const TextStyle(
+                          fontSize: 22, fontWeight: FontWeight.w900)),
                   Text(
                     '${_fmt.format(season.startsAt.toLocal())} → ${season.endsAt == null ? '…' : _fmt.format(season.endsAt!.toLocal())}'
                     '${season.isPreSeason ? ' · pré-temporada' : ''}',
-                    style: const TextStyle(fontSize: 12, color: AppColors.slate400),
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.slate400),
                   ),
                   const SizedBox(height: 12),
                   Wrap(
@@ -117,7 +137,8 @@ class _SeasonSummaryPageState extends ConsumerState<SeasonSummaryPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  for (final ranking in data.rankings.where((r) => r.rows.isNotEmpty))
+                  for (final ranking
+                      in data.rankings.where((r) => r.rows.isNotEmpty))
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Text(
@@ -142,12 +163,14 @@ class _SeasonSummaryPageState extends ConsumerState<SeasonSummaryPage> {
         if (season.isPreSeason)
           const Padding(
             padding: EdgeInsets.only(top: 8),
-            child: Text('Pré-temporada não gera títulos: a classificação abaixo é só para conferir.'),
+            child: Text(
+                'Pré-temporada não gera títulos: a classificação abaixo é só para conferir.'),
           )
         else if (!data.titlesSealed)
           const Padding(
             padding: EdgeInsets.only(top: 8),
-            child: Text('Os títulos saem quando a temporada tem pelo menos 4 jogadores com jogos.'),
+            child: Text(
+                'Os títulos saem quando a temporada tem pelo menos 4 jogadores com jogos.'),
           ),
         const SizedBox(height: 8),
         for (final ranking in data.rankings) _RankingCard(ranking: ranking),
@@ -164,12 +187,20 @@ class _Total extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(color: AppColors.onDark.withValues(alpha: .12), borderRadius: BorderRadius.circular(12)),
+        decoration: BoxDecoration(
+            color: AppColors.onDark.withValues(alpha: .12),
+            borderRadius: BorderRadius.circular(12)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label.toUpperCase(), style: const TextStyle(fontSize: 10, color: AppColors.slate400)),
-            Text('$value', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.onDark)),
+            Text(label.toUpperCase(),
+                style:
+                    const TextStyle(fontSize: 10, color: AppColors.slate400)),
+            Text('$value',
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.onDark)),
           ],
         ),
       );
@@ -202,15 +233,19 @@ class _RankingCardState extends State<_RankingCard> {
             Row(
               children: [
                 Text('${ranking.icon} ', style: const TextStyle(fontSize: 18)),
-                Expanded(child: Text(ranking.name, style: const TextStyle(fontWeight: FontWeight.w700))),
+                Expanded(
+                    child: Text(ranking.name,
+                        style: const TextStyle(fontWeight: FontWeight.w700))),
                 if (ranking.minGames > 0)
-                  Text('mín. ${ranking.minGames} jogos', style: Theme.of(context).textTheme.bodySmall),
+                  Text('mín. ${ranking.minGames} jogos',
+                      style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
             if (ranking.rows.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
-                child: Text('Ninguém nesta categoria.', style: Theme.of(context).textTheme.bodySmall),
+                child: Text('Ninguém nesta categoria.',
+                    style: Theme.of(context).textTheme.bodySmall),
               ),
             for (final row in shown)
               ListTile(
@@ -218,16 +253,23 @@ class _RankingCardState extends State<_RankingCard> {
                 contentPadding: EdgeInsets.zero,
                 leading: SizedBox(
                   width: 36,
-                  child: Center(child: Text(row.position <= 3 ? _medals[row.position - 1] : '${row.position}º')),
+                  child: Center(
+                      child: Text(row.position <= 3
+                          ? _medals[row.position - 1]
+                          : '${row.position}º')),
                 ),
-                title: Text('${row.playerName}${row.isGuest ? ' · convidado' : ''}', overflow: TextOverflow.ellipsis),
+                title: Text(
+                    '${row.playerName}${row.isGuest ? ' · convidado' : ''}',
+                    overflow: TextOverflow.ellipsis),
                 trailing: Text('${row.games} j   ${ranking.format(row.value)}',
                     style: const TextStyle(fontWeight: FontWeight.w700)),
               ),
             if (rest.isNotEmpty)
               TextButton(
                 onPressed: () => setState(() => _open = !_open),
-                child: Text(_open ? 'Mostrar só o pódio' : 'Classificação completa (${ranking.rows.length})'),
+                child: Text(_open
+                    ? 'Mostrar só o pódio'
+                    : 'Classificação completa (${ranking.rows.length})'),
               ),
           ],
         ),

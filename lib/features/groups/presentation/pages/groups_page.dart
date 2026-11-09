@@ -649,7 +649,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     // envio também fica em Configurações > Planilhas antigas.
     final id = createdId;
     if (id != null && mounted) {
-      await showSpreadsheetOnboardingSheet(context, groupId: id, groupName: createdName);
+      await showSpreadsheetOnboardingSheet(context,
+          groupId: id, groupName: createdName);
     }
   }
 

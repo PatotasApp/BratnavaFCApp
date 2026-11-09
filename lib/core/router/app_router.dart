@@ -305,9 +305,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/app/replays',
-            redirect: (_, __) => ref.read(activeGroupReplayUiProvider)
-                ? null
-                : '/app',
+            redirect: (_, __) =>
+                ref.read(activeGroupReplayUiProvider) ? null : '/app',
             builder: (_, __) => const ReplayVaultPage(),
           ),
           GoRoute(

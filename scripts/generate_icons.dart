@@ -22,8 +22,8 @@ void main() {
   // Fundo transparente — o adaptive_icon_background fornece o branco no Android.
   final hires = img.copyResize(
     src,
-    width:         targetSize,
-    height:        targetSize,
+    width: targetSize,
+    height: targetSize,
     interpolation: img.Interpolation.cubic,
     maintainAspect: true,
   );
@@ -34,14 +34,14 @@ void main() {
   // ── 2. logo_icon.png ─────────────────────────────────────────────────────
   // Versão com fundo branco para o ícone legado (Android < 26 / iOS).
   // Logo ocupa 80% do canvas para caber com margem e boa legibilidade.
-  const logoRatio  = 0.80;
-  final logoSize   = (targetSize * logoRatio).round();
-  final offset     = ((targetSize - logoSize) / 2).round();
+  const logoRatio = 0.80;
+  final logoSize = (targetSize * logoRatio).round();
+  final offset = ((targetSize - logoSize) / 2).round();
 
   final logoResized = img.copyResize(
     src,
-    width:         logoSize,
-    height:        logoSize,
+    width: logoSize,
+    height: logoSize,
     interpolation: img.Interpolation.cubic,
     maintainAspect: true,
   );
@@ -51,5 +51,6 @@ void main() {
   img.compositeImage(canvas, logoResized, dstX: offset, dstY: offset);
 
   File('assets/images/logo_icon.png').writeAsBytesSync(img.encodePng(canvas));
-  print('✅ logo_icon.png   — ${canvas.width}x${canvas.height}px (white bg, logo 80%)');
+  print(
+      '✅ logo_icon.png   — ${canvas.width}x${canvas.height}px (white bg, logo 80%)');
 }
