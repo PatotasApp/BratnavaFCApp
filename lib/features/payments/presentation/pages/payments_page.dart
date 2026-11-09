@@ -1579,12 +1579,12 @@ class _UserMonthlyView extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(_months[cell.month - 1],
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
-                              color: isDark
-                                  ? AppColors.slate200
-                                  : AppColors.slate700,
+                              // O card usa fundo claro também no tema escuro.
+                              // Manter o texto escuro garante contraste nos dois temas.
+                              color: AppColors.slate700,
                             )),
                         const SizedBox(height: 4),
                         Icon(
@@ -1598,11 +1598,9 @@ class _UserMonthlyView extends StatelessWidget {
                           const SizedBox(height: 2),
                           Text(
                             'R\$ ${cell.amount.toStringAsFixed(2)}',
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 10,
-                              color: isDark
-                                  ? AppColors.slate400
-                                  : AppColors.slate500,
+                              color: AppColors.slate600,
                             ),
                           ),
                         ],
