@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import FirebaseMessaging
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -8,6 +9,16 @@ import UIKit
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  // Firebase não consegue sempre capturar o APNs token via swizzling (especialmente
+  // em iOS 26+). Encaminhar explicitamente garante que getAPNSToken() funcione.
+  override func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    Messaging.messaging().apnsToken = deviceToken
+    super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {

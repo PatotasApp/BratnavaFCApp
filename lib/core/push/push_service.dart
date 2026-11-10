@@ -136,12 +136,12 @@ class PushService {
   Future<void> _waitForApnsToken() async {
     if (!Platform.isIOS) return;
 
-    for (var attempt = 0; attempt < 10; attempt++) {
+    for (var attempt = 0; attempt < 20; attempt++) {
       if (await _fcm.getAPNSToken() != null) return;
       await Future<void>.delayed(const Duration(seconds: 1));
     }
 
-    _log.w('[Push] Token APNs não chegou em 10 s — notificações podem '
+    _log.w('[Push] Token APNs não chegou em 20 s — notificações podem '
         'não estar habilitadas neste aparelho.');
   }
 
