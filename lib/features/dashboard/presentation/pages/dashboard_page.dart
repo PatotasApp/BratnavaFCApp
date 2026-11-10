@@ -189,7 +189,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     // existe um; nesse caso os dois valores coincidem e nada muda. Quando não
     // existe, é o jogador que está certo: é dele que vêm as permissões.
     final playerGroupId = activePlayer?.groupId.trim() ?? '';
-    final accountGroupId = account?.activeGroupId.trim() ?? '';
+    final accountGroupId = account?.activeGroupId?.trim() ?? '';
     final groupId = playerGroupId.isNotEmpty ? playerGroupId : accountGroupId;
     final playerId = activePlayer?.playerId;
 

@@ -17,19 +17,25 @@ import '../../../notifications/domain/entities/app_notification.dart';
 import '../../../notifications/presentation/providers/notifications_provider.dart';
 import '../../../replays/presentation/providers/replay_access_provider.dart';
 
-class AppTopBar extends ConsumerWidget implements PreferredSizeWidget {
+class AppTopBar extends ConsumerStatefulWidget implements PreferredSizeWidget {
   const AppTopBar({super.key});
 
   @override
   Size get preferredSize => const Size.fromHeight(72);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AppTopBar> createState() => _AppTopBarState();
+}
+
+class _AppTopBarState extends ConsumerState<AppTopBar> {
+  @override
+  void initState() {
+    super.initState();
     // Bootstrap: igual ao site — quando players carregam e o account não tem
     // activePlayerId/activeGroupId, persiste o primeiro player automaticamente.
     // Também atualiza activeGroupIsAdmin/Financeiro na inicialização, para que
     // os menus de admin apareçam corretamente sem precisar trocar de patota.
-    ref.listen(myPlayersProvider, (_, next) {
+    ref.listenManual(myPlayersProvider, (_, next) {
       next.whenData((list) {
         if (list.isEmpty) return;
         final acc = ref.read(accountStoreProvider).activeAccount;
@@ -76,7 +82,10 @@ class AppTopBar extends ConsumerWidget implements PreferredSizeWidget {
         }
       });
     }, fireImmediately: true);
+  }
 
+  @override
+  Widget build(BuildContext context) {
     return AppBar(
       automaticallyImplyLeading: false,
       titleSpacing: 12,
