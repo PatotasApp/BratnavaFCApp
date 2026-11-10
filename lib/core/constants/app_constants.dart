@@ -23,12 +23,6 @@ class AppConstants {
 
   static bool get isProduction => environmentName == 'production';
 
-  /// Troca centralizada entre dados falsos e o contrato HTTP real.
-  static const bool championshipsUseMock = bool.fromEnvironment(
-    'CHAMPIONSHIPS_USE_MOCK',
-    defaultValue: true,
-  );
-
   /// Rótulo curto do ambiente para o selo no topbar. Vazio em produção — lá o
   /// app não deve ostentar nada; a ausência do selo já significa "produção".
   /// Qualquer ambiente não-produção aparece para evitar mexer em dados reais
