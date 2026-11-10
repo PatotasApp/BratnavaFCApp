@@ -15,7 +15,7 @@ class App extends ConsumerStatefulWidget {
   ConsumerState<App> createState() => _AppState();
 }
 
-class _AppState extends ConsumerState<App> {
+class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
   /// true após os listeners FCM (foreground, background, tokenRefresh) serem
   /// configurados. Diferente do registro de token, que deve ocorrer a cada
   /// novo usuário que faz login.
@@ -24,8 +24,25 @@ class _AppState extends ConsumerState<App> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Inicializa push se o usuário já estiver logado ao abrir o app
     WidgetsBinding.instance.addPostFrameCallback((_) => _tryInitPush());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Re-tenta registrar o token ao voltar ao foreground. Cobre o caso em que
+    // o APNs token chegou enquanto o app estava em background e o onTokenRefresh
+    // não pôde executar no isolate suspenso.
+    if (state == AppLifecycleState.resumed) {
+      _tryInitPush();
+    }
   }
 
   void _tryInitPush() {
