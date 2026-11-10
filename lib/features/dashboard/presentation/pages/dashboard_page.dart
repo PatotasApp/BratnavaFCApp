@@ -188,7 +188,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     // `activePlayerProvider` já escolhe o jogador do grupo da conta quando
     // existe um; nesse caso os dois valores coincidem e nada muda. Quando não
     // existe, é o jogador que está certo: é dele que vêm as permissões.
-    final groupId = account?.activeGroupId ?? activePlayer?.groupId ?? '';
+    final playerGroupId = activePlayer?.groupId.trim() ?? '';
+    final accountGroupId = account?.activeGroupId.trim() ?? '';
+    final groupId = playerGroupId.isNotEmpty ? playerGroupId : accountGroupId;
     final playerId = activePlayer?.playerId;
 
     if (groupId.isNotEmpty) {

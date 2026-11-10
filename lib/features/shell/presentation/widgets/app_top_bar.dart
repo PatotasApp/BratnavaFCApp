@@ -35,7 +35,8 @@ class AppTopBar extends ConsumerWidget implements PreferredSizeWidget {
         final acc = ref.read(accountStoreProvider).activeAccount;
         if (acc == null) return;
 
-        String? groupId = acc.activeGroupId;
+        String? groupId = acc.activeGroupId?.trim();
+        if (groupId?.isEmpty ?? false) groupId = null;
         final normalizedGroupId = groupId?.trim().toLowerCase();
         final activePlayerBelongsToGroup = groupId != null &&
             list.any(
@@ -74,7 +75,7 @@ class AppTopBar extends ConsumerWidget implements PreferredSizeWidget {
           ref.read(authNotifierProvider.notifier).refreshMyGroupRoles(groupId);
         }
       });
-    });
+    }, fireImmediately: true);
 
     return AppBar(
       automaticallyImplyLeading: false,

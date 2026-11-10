@@ -52,6 +52,11 @@ class Account extends Equatable {
   static String _normalizeId(String? id) =>
       (id ?? '').trim().toLowerCase().replaceAll(RegExp(r'[{}]'), '');
 
+  static String? _optionalId(Object? value) {
+    final id = value is String ? value.trim() : '';
+    return id.isEmpty ? null : id;
+  }
+
   static bool _containsId(List<String> ids, String groupId) {
     final target = _normalizeId(groupId);
     if (target.isEmpty) return false;
@@ -119,8 +124,8 @@ class Account extends Equatable {
         roles: List<String>.from(json['roles'] as List? ?? [])
             .where((role) => role.trim().toLowerCase() != 'godmode')
             .toList(growable: false),
-        activeGroupId: json['activeGroupId'] as String?,
-        activePlayerId: json['activePlayerId'] as String?,
+        activeGroupId: _optionalId(json['activeGroupId']),
+        activePlayerId: _optionalId(json['activePlayerId']),
         groupAdminIds: List<String>.from(json['groupAdminIds'] as List? ?? []),
         groupFinanceiroIds:
             List<String>.from(json['groupFinanceiroIds'] as List? ?? []),

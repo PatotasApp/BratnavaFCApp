@@ -33,4 +33,18 @@ void main() {
     expect(updated.isActiveGroupAdmin, isFalse);
     expect(updated.isActiveGroupFinanceiro, isFalse);
   });
+
+  test('desserialização trata IDs vazios como seleção ausente', () {
+    final restored = Account.fromJson({
+      'userId': 'user-1',
+      'name': 'Usuário',
+      'email': 'usuario@teste.com',
+      'roles': <String>[],
+      'activeGroupId': '  ',
+      'activePlayerId': '',
+    });
+
+    expect(restored.activeGroupId, isNull);
+    expect(restored.activePlayerId, isNull);
+  });
 }
