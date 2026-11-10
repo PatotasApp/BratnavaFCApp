@@ -36,8 +36,13 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
     super.dispose();
   }
 
-  void _onQueryChanged(String _) {
+  void _onQueryChanged(String value) {
     _timer?.cancel();
+    setState(() {});
+    if (value.trim().isEmpty) {
+      _search();
+      return;
+    }
     _timer = Timer(const Duration(milliseconds: 280), _search);
   }
 
@@ -145,6 +150,7 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final hasQuery = _query.text.trim().isNotEmpty;
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: _search,
@@ -154,12 +160,12 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
               padding: const EdgeInsets.fromLTRB(18, 22, 18, 10),
               sliver: SliverToBoxAdapter(child: _header(context, colors)),
             ),
-            if (_loading)
+            if (hasQuery && _loading)
               const SliverFillRemaining(
                 hasScrollBody: false,
                 child: Center(child: CircularProgressIndicator()),
               )
-            else
+            else if (hasQuery)
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(18, 8, 18, 32),
                 sliver: _showGroups ? _groupList() : _playerList(colors),
