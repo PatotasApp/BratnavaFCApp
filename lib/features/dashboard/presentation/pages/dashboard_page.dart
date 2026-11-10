@@ -225,6 +225,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       if (playersAsync.isLoading) {
         return PrototypeScrollView(
           onRefresh: () => _refresh(groupId, playerId),
+          fillViewport: true,
           child: const _DashboardLoadingState(),
         );
       }
@@ -251,6 +252,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
       return PrototypeScrollView(
         onRefresh: () => _refresh(groupId, playerId),
+        fillViewport: true,
         child: const _DashboardEmptyState(),
       );
     }
@@ -258,6 +260,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     if (groupId.isEmpty) {
       return PrototypeScrollView(
         onRefresh: () => _refresh(groupId, playerId),
+        fillViewport: true,
         child: const _DashboardEmptyState(),
       );
     }
@@ -1871,11 +1874,8 @@ class _DashboardEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox(
-      height: 360,
-      child: NoActiveGroupView(
-        message: 'Selecione uma patota para acessar o dashboard.',
-      ),
+    return const NoActiveGroupView(
+      message: 'Selecione uma patota para acessar o dashboard.',
     );
   }
 }
@@ -1885,19 +1885,17 @@ class _DashboardLoadingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.only(top: 96),
-      child: Column(
-        children: [
-          SizedBox(
-            width: 28,
-            height: 28,
-            child: CircularProgressIndicator(strokeWidth: 2.5),
-          ),
-          SizedBox(height: 16),
-          Text('Carregando sua patota...'),
-        ],
-      ),
+    return const Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(strokeWidth: 2.5),
+        ),
+        SizedBox(height: 16),
+        Text('Carregando sua patota...'),
+      ],
     );
   }
 }
