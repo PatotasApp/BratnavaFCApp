@@ -50,12 +50,13 @@ class _DiscoveryGroupProfilePageState
         await load();
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Não foi possível enviar a candidatura.'),
           ),
         );
+      }
     } finally {
       if (mounted) setState(() => busy = null);
     }
@@ -63,13 +64,15 @@ class _DiscoveryGroupProfilePageState
 
   @override
   Widget build(BuildContext context) {
-    if (loading)
+    if (loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     final p = data;
-    if (p == null)
+    if (p == null) {
       return const Scaffold(
         body: Center(child: Text('Patota não encontrada.')),
       );
+    }
     final account = ref.watch(accountStoreProvider).activeAccount;
     final isAdmin = account?.activeGroupId == widget.groupId &&
         (account?.isGroupAdmin(widget.groupId) ?? false);
@@ -133,23 +136,24 @@ class _DiscoveryGroupProfilePageState
                       ),
                       if (p.city != null)
                         _Pill(icon: Icons.location_on_outlined, text: p.city!),
-                      if (p.accepting)
+                      if (p.defaultDayOfWeek != null &&
+                          p.defaultKickoffTime != null)
                         _Pill(
+                          icon: Icons.schedule_rounded,
+                          text: _scheduleLabel(p),
+                        ),
+                      if (p.accepting)
+                        const _Pill(
                           icon: Icons.sports_soccer_rounded,
                           text: 'Aceitando jogadores',
                           accent: true,
                         ),
                     ],
                   ),
-                  if (p.description != null) ...[
-                    const SizedBox(height: 18),
-                    Text(
-                      p.description!,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodyLarge?.copyWith(height: 1.45),
-                    ),
-                  ],
+                  const SizedBox(height: 22),
+                  _SectionLabel(text: 'SOBRE A PATOTA', color: c.primary),
+                  const SizedBox(height: 10),
+                  _AboutCard(profile: p),
                   if (p.accepting) ...[
                     const SizedBox(height: 26),
                     Text(
@@ -177,33 +181,42 @@ class _DiscoveryGroupProfilePageState
                           ),
                         ),
                       ),
-                  ],
-                  if (p.people.isNotEmpty) ...[
+                  ] else ...[
                     const SizedBox(height: 22),
-                    Text(
-                      'INTEGRANTES',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.5,
-                          ),
-                    ),
+                    _SectionLabel(text: 'NOVOS JOGADORES', color: c.primary),
                     const SizedBox(height: 10),
-                    ...p.people.map(
-                      (x) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: AvatarWidget(
-                          name: x.name,
-                          photoUrl: x.photoUrl,
-                          size: 44,
-                          borderRadius: 14,
-                        ),
-                        title: Text(
-                          x.name,
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                        subtitle: Text('@${x.userName}'),
-                      ),
+                    const _InfoCard(
+                      icon: Icons.lock_clock_outlined,
+                      text:
+                          'Esta patota não está aceitando novos jogadores no momento.',
                     ),
+                  ],
+                  if (p.people.isNotEmpty || !p.showMembers) ...[
+                    const SizedBox(height: 22),
+                    const _SectionLabel(text: 'INTEGRANTES'),
+                    const SizedBox(height: 10),
+                    if (p.people.isEmpty)
+                      const _InfoCard(
+                        icon: Icons.visibility_off_outlined,
+                        text: 'A lista de integrantes desta patota é privada.',
+                      )
+                    else
+                      ...p.people.map(
+                        (x) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: AvatarWidget(
+                            name: x.name,
+                            photoUrl: x.photoUrl,
+                            size: 44,
+                            borderRadius: 14,
+                          ),
+                          title: Text(
+                            x.name,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          subtitle: Text('@${x.userName}'),
+                        ),
+                      ),
                   ],
                 ],
               ),
@@ -212,6 +225,22 @@ class _DiscoveryGroupProfilePageState
         ),
       ),
     );
+  }
+
+  String _scheduleLabel(DiscoveryGroupProfile profile) {
+    const days = [
+      'Domingo',
+      'Segunda',
+      'Terça',
+      'Quarta',
+      'Quinta',
+      'Sexta',
+      'Sábado',
+    ];
+    final day = profile.defaultDayOfWeek!;
+    final time = profile.defaultKickoffTime!;
+    final shortTime = time.length >= 5 ? time.substring(0, 5) : time;
+    return '${day >= 0 && day < days.length ? days[day] : 'Dia definido'} às $shortTime';
   }
 
   Future<void> _manageOpening(DiscoveryMatch match) async {
@@ -259,7 +288,7 @@ class _DiscoveryGroupProfilePageState
               ),
               const SizedBox(height: 20),
               DropdownButtonFormField<int>(
-                value: position,
+                initialValue: position,
                 decoration: const InputDecoration(labelText: 'Preferência'),
                 items: const [
                   DropdownMenuItem(value: 1, child: Text('Qualquer posição')),
@@ -297,6 +326,75 @@ class _DiscoveryGroupProfilePageState
   Future<void> _deleteOpening(String id) async {
     await api.deleteOpening(widget.groupId, id);
     await load();
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({required this.text, this.color});
+  final String text;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) => Text(
+        text,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.5,
+            ),
+      );
+}
+
+class _AboutCard extends StatelessWidget {
+  const _AboutCard({required this.profile});
+  final DiscoveryGroupProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final description = profile.description?.trim();
+    final hasDescription = description != null && description.isNotEmpty;
+    return _InfoCard(
+      icon: Icons.groups_2_outlined,
+      text: hasDescription
+          ? description
+          : 'Esta patota ainda não adicionou uma descrição ao perfil.',
+    );
+  }
+}
+
+class _InfoCard extends StatelessWidget {
+  const _InfoCard({required this.icon, required this.text});
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLow,
+        border: Border.all(color: colors.outlineVariant),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: colors.onSurfaceVariant),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                height: 1.4,
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

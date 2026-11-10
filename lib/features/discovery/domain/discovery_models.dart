@@ -99,6 +99,8 @@ class DiscoveryGroupProfile {
     this.logoUrl,
     this.description,
     this.city,
+    this.defaultDayOfWeek,
+    this.defaultKickoffTime,
     required this.members,
     required this.isPublic,
     required this.accepting,
@@ -108,6 +110,8 @@ class DiscoveryGroupProfile {
   });
   final String id, name, code;
   final String? logoUrl, description, city;
+  final int? defaultDayOfWeek;
+  final String? defaultKickoffTime;
   final int members;
   final bool isPublic, accepting, showMembers;
   final List<DiscoveryMatch> matches;
@@ -120,6 +124,8 @@ class DiscoveryGroupProfile {
         logoUrl: j['logoUrl'] as String?,
         description: j['description'] as String?,
         city: j['city'] as String?,
+        defaultDayOfWeek: (j['defaultDayOfWeek'] as num?)?.toInt(),
+        defaultKickoffTime: j['defaultKickoffTime'] as String?,
         members: (j['memberCount'] as num?)?.toInt() ?? 0,
         isPublic: j['isPublic'] != false,
         accepting: j['isAcceptingPlayers'] == true,

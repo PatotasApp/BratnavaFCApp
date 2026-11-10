@@ -252,6 +252,8 @@ extension on DiscoveryGroupProfile {
         logoUrl: logoUrl,
         description: description,
         city: city,
+        defaultDayOfWeek: defaultDayOfWeek,
+        defaultKickoffTime: defaultKickoffTime,
         members: members,
         isPublic: isPublic,
         accepting: accepting,
