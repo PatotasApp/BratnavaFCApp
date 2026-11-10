@@ -11,7 +11,9 @@ import '../../data/discovery_datasource.dart';
 import '../../domain/discovery_models.dart';
 
 class DiscoverySearchPage extends ConsumerStatefulWidget {
-  const DiscoverySearchPage({super.key});
+  const DiscoverySearchPage({super.key, this.preferredMatchId, this.openingId});
+  final String? preferredMatchId;
+  final String? openingId;
 
   @override
   ConsumerState<DiscoverySearchPage> createState() =>
@@ -26,6 +28,12 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
   int _searchVersion = 0;
   List<DiscoveryGroupItem> _groups = [];
   List<DiscoveryPlayerItem> _players = [];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.preferredMatchId != null) _showGroups = false;
+  }
 
   DiscoveryDataSource get _api => DiscoveryDataSource(ref.read(dioProvider));
 
@@ -100,7 +108,16 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
       );
       return;
     }
-    final match = await showModalBottomSheet<DiscoveryMatch>(
+    DiscoveryMatch? match;
+    if (widget.preferredMatchId != null) {
+      for (final candidate in profile.matches) {
+        if (candidate.id == widget.preferredMatchId) {
+          match = candidate;
+          break;
+        }
+      }
+    }
+    match ??= await showModalBottomSheet<DiscoveryMatch>(
       context: context,
       useSafeArea: true,
       builder: (sheetContext) => Padding(
@@ -137,7 +154,49 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
       ),
     );
     if (match == null) return;
-    await _api.invite(groupId, match.id, player.id);
+    if (!mounted) return;
+    final message = TextEditingController();
+    final send = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            20, 20, 20, 20 + MediaQuery.viewInsetsOf(ctx).bottom),
+        child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Convidar ${player.name}',
+                  style: Theme.of(ctx)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 6),
+              const Text(
+                  'A mensagem será exibida junto com os dados da partida.'),
+              const SizedBox(height: 16),
+              TextField(
+                  controller: message,
+                  maxLength: 500,
+                  maxLines: 3,
+                  decoration:
+                      const InputDecoration(labelText: 'Mensagem (opcional)')),
+              FilledButton.icon(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  icon: const Icon(Icons.send_rounded),
+                  label: const Text('Enviar convite')),
+            ]),
+      ),
+    );
+    if (send != true) {
+      message.dispose();
+      return;
+    }
+    await _api.invite(groupId, match.id, player.id,
+        openingId: widget.openingId,
+        message: message.text.trim().isEmpty ? null : message.text.trim());
+    message.dispose();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -189,7 +248,9 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
           ),
           const SizedBox(height: 5),
           Text(
-            'Encontre sua próxima partida',
+            widget.preferredMatchId == null
+                ? 'Encontre sua próxima partida'
+                : 'Buscar jogador para a vaga',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w900,
                   letterSpacing: -.7,
@@ -197,37 +258,40 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
           ),
           const SizedBox(height: 5),
           Text(
-            'Conheça patotas públicas e jogadores do Patotas.',
+            widget.preferredMatchId == null
+                ? 'Conheça patotas públicas e jogadores do Patotas.'
+                : 'Pesquise um perfil e envie um convite para esta partida.',
             style: TextStyle(color: colors.onSurfaceVariant),
           ),
           const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(5),
-            decoration: BoxDecoration(
-              color: colors.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _SearchTab(
-                    label: 'Patotas',
-                    icon: Icons.groups_rounded,
-                    selected: _showGroups,
-                    onTap: () => _selectTab(true),
+          if (widget.preferredMatchId == null)
+            Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: colors.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _SearchTab(
+                      label: 'Patotas',
+                      icon: Icons.groups_rounded,
+                      selected: _showGroups,
+                      onTap: () => _selectTab(true),
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: _SearchTab(
-                    label: 'Jogadores',
-                    icon: Icons.person_search_rounded,
-                    selected: !_showGroups,
-                    onTap: () => _selectTab(false),
+                  Expanded(
+                    child: _SearchTab(
+                      label: 'Jogadores',
+                      icon: Icons.person_search_rounded,
+                      selected: !_showGroups,
+                      onTap: () => _selectTab(false),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
           const SizedBox(height: 12),
           TextField(
             controller: _query,

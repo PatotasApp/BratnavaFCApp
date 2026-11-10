@@ -183,6 +183,17 @@ class _InvitationCard extends StatelessWidget {
                 color: needsAnswer ? colors.primary : colors.onSurfaceVariant,
               ),
             ),
+            if ((item.decisionReason ?? item.message)?.trim().isNotEmpty ==
+                true) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                    color: colors.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(14)),
+                child: Text((item.decisionReason ?? item.message)!.trim()),
+              ),
+            ],
             if (needsAnswer) ...[
               const SizedBox(height: 16),
               Row(

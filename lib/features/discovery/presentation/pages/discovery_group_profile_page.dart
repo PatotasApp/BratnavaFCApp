@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../auth/presentation/providers/account_store.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../../shared/presentation/widgets/image_lightbox.dart';
 import '../../data/discovery_datasource.dart';
@@ -37,10 +37,53 @@ class _DiscoveryGroupProfilePageState
     }
   }
 
-  Future<void> apply(MatchOpening o) async {
-    setState(() => busy = o.id);
+  Future<void> apply(DiscoveryMatch match) async {
+    final controller = TextEditingController();
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(
+            20, 20, 20, 20 + MediaQuery.viewInsetsOf(ctx).bottom),
+        child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Solicitar para jogar',
+                  style: Theme.of(ctx)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 6),
+              Text(DateFormat("EEEE, dd/MM 'às' HH:mm", 'pt_BR')
+                  .format(match.playedAt)),
+              const SizedBox(height: 16),
+              TextField(
+                  controller: controller,
+                  maxLength: 500,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                      labelText: 'Mensagem (opcional)',
+                      hintText:
+                          'Conte um pouco sobre você ou sua disponibilidade')),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  icon: const Icon(Icons.sports_soccer_rounded),
+                  label: const Text('Enviar solicitação')),
+            ]),
+      ),
+    );
+    if (confirmed != true) {
+      controller.dispose();
+      return;
+    }
+    setState(() => busy = match.id);
     try {
-      await api.apply(widget.groupId, o.id);
+      await api.apply(widget.groupId, match.id,
+          message:
+              controller.text.trim().isEmpty ? null : controller.text.trim());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -58,6 +101,7 @@ class _DiscoveryGroupProfilePageState
         );
       }
     } finally {
+      controller.dispose();
       if (mounted) setState(() => busy = null);
     }
   }
@@ -73,9 +117,7 @@ class _DiscoveryGroupProfilePageState
         body: Center(child: Text('Patota não encontrada.')),
       );
     }
-    final account = ref.watch(accountStoreProvider).activeAccount;
-    final isAdmin = account?.activeGroupId == widget.groupId &&
-        (account?.isGroupAdmin(widget.groupId) ?? false);
+    final isOwnGroup = ref.watch(accountStoreProvider).activeAccount?.activeGroupId == widget.groupId;
     final c = Theme.of(context).colorScheme;
     return Scaffold(
       body: RefreshIndicator(
@@ -173,11 +215,9 @@ class _DiscoveryGroupProfilePageState
                           padding: const EdgeInsets.only(bottom: 12),
                           child: _MatchCard(
                             match: m,
-                            isAdmin: isAdmin,
+                            canApply: !isOwnGroup,
                             busy: busy,
                             onApply: apply,
-                            onManage: () => _manageOpening(m),
-                            onDelete: (id) => _deleteOpening(id),
                           ),
                         ),
                       ),
@@ -241,91 +281,6 @@ class _DiscoveryGroupProfilePageState
     final time = profile.defaultKickoffTime!;
     final shortTime = time.length >= 5 ? time.substring(0, 5) : time;
     return '${day >= 0 && day < days.length ? days[day] : 'Dia definido'} às $shortTime';
-  }
-
-  Future<void> _manageOpening(DiscoveryMatch match) async {
-    var slots = 1, position = 1;
-    final ok = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModal) => Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            18,
-            20,
-            20 + MediaQuery.viewInsetsOf(ctx).bottom,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                width: 42,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(
-                  color: Theme.of(ctx).colorScheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              Text(
-                'Publicar vagas',
-                style: Theme.of(
-                  ctx,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                DateFormat(
-                  "EEEE, dd/MM 'às' HH:mm",
-                  'pt_BR',
-                ).format(match.playedAt),
-                style: TextStyle(
-                  color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 20),
-              DropdownButtonFormField<int>(
-                initialValue: position,
-                decoration: const InputDecoration(labelText: 'Preferência'),
-                items: const [
-                  DropdownMenuItem(value: 1, child: Text('Qualquer posição')),
-                  DropdownMenuItem(value: 2, child: Text('Linha')),
-                  DropdownMenuItem(value: 3, child: Text('Goleiro')),
-                ],
-                onChanged: (v) => setModal(() => position = v ?? 1),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                initialValue: '1',
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Quantidade de vagas',
-                ),
-                onChanged: (v) => slots = int.tryParse(v) ?? 1,
-              ),
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: () => Navigator.pop(ctx, true),
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Publicar vagas'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (ok == true) {
-      await api.createOpening(widget.groupId, match.id, slots, position);
-      await load();
-    }
-  }
-
-  Future<void> _deleteOpening(String id) async {
-    await api.deleteOpening(widget.groupId, id);
-    await load();
   }
 }
 
@@ -479,18 +434,14 @@ class _Pill extends StatelessWidget {
 class _MatchCard extends StatelessWidget {
   const _MatchCard({
     required this.match,
-    required this.isAdmin,
+    required this.canApply,
     required this.busy,
     required this.onApply,
-    required this.onManage,
-    required this.onDelete,
   });
   final DiscoveryMatch match;
-  final bool isAdmin;
+  final bool canApply;
   final String? busy;
-  final ValueChanged<MatchOpening> onApply;
-  final VoidCallback onManage;
-  final ValueChanged<String> onDelete;
+  final ValueChanged<DiscoveryMatch> onApply;
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
@@ -537,12 +488,6 @@ class _MatchCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (isAdmin)
-                IconButton.filledTonal(
-                  onPressed: onManage,
-                  tooltip: 'Publicar vaga',
-                  icon: const Icon(Icons.add_rounded),
-                ),
             ],
           ),
           if (match.applicationStatus != null)
@@ -601,34 +546,24 @@ class _MatchCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    if (isAdmin)
-                      IconButton(
-                        onPressed: () => onDelete(o.id),
-                        tooltip: 'Excluir vaga',
-                        icon: Icon(
-                          Icons.delete_outline_rounded,
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      )
-                    else
-                      FilledButton.tonal(
-                        onPressed:
-                            match.applicationStatus != null || busy == o.id
-                                ? null
-                                : () => onApply(o),
-                        child: busy == o.id
-                            ? const SizedBox.square(
-                                dimension: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Candidatar'),
-                      ),
                   ],
                 ),
               ),
             ),
+          ],
+          if (canApply && match.applicationStatus == null) ...[
+            const SizedBox(height: 14),
+            SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: busy == match.id ? null : () => onApply(match),
+                  icon: busy == match.id
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.sports_soccer_rounded),
+                  label: const Text('Solicitar para jogar'),
+                )),
           ],
         ],
       ),

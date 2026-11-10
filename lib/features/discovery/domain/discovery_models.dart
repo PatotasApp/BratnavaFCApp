@@ -159,12 +159,15 @@ class MatchApplication {
     required this.playedAt,
     required this.status,
     this.position,
+    this.message,
+    this.decisionReason,
   });
   final String id, userId, name, userName, groupName;
   final String? photoUrl, placeName;
   final DateTime playedAt;
   final int status;
   final int? position;
+  final String? message, decisionReason;
   factory MatchApplication.fromJson(Map<String, dynamic> j) => MatchApplication(
         id: j['id'] as String,
         userId: j['userId'] as String,
@@ -176,6 +179,8 @@ class MatchApplication {
         playedAt: DateTime.parse(j['playedAt'] as String).toLocal(),
         status: (j['status'] as num).toInt(),
         position: (j['openingPosition'] as num?)?.toInt(),
+        message: j['message'] as String?,
+        decisionReason: j['decisionReason'] as String?,
       );
 }
 

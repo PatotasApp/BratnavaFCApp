@@ -7,6 +7,10 @@ import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../../shared/presentation/widgets/user_profile_link.dart';
 import '../../../auth/presentation/providers/account_store.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../discovery/data/discovery_datasource.dart';
+import '../../../discovery/domain/discovery_models.dart';
+import '../../../discovery/presentation/pages/discovery_search_page.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../members/presentation/providers/members_provider.dart';
@@ -34,6 +38,154 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
 
   Future<void> _goNext() async {
     await ref.read(matchNotifierProvider.notifier).goToMatchmaking();
+  }
+
+  Future<void> _manageOpenings(String groupId, String matchId) async {
+    final api = DiscoveryDataSource(ref.read(dioProvider));
+    var profile = await api.group(groupId);
+    DiscoveryMatch? current;
+    for (final match in profile.matches) {
+      if (match.id == matchId) {
+        current = match;
+        break;
+      }
+    }
+    if (!mounted || current == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) => StatefulBuilder(builder: (ctx, setSheet) {
+        Future<void> reload() async {
+          profile = await api.group(groupId);
+          for (final match in profile.matches) {
+            if (match.id == matchId) {
+              current = match;
+              break;
+            }
+          }
+          if (ctx.mounted) setSheet(() {});
+        }
+
+        Future<void> add() async {
+          var slots = 1;
+          var position = 1;
+          final ok = await showDialog<bool>(
+              context: ctx,
+              builder: (dialogContext) => StatefulBuilder(
+                  builder: (ctx, setDialog) => AlertDialog(
+                        title: const Text('Abrir vagas'),
+                        content:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                          DropdownButtonFormField<int>(
+                              initialValue: position,
+                              decoration: const InputDecoration(
+                                  labelText: 'Preferência'),
+                              items: const [
+                                DropdownMenuItem(
+                                    value: 1, child: Text('Qualquer posição')),
+                                DropdownMenuItem(
+                                    value: 2, child: Text('Linha')),
+                                DropdownMenuItem(
+                                    value: 3, child: Text('Goleiro')),
+                              ],
+                              onChanged: (v) =>
+                                  setDialog(() => position = v ?? 1)),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                              initialValue: '1',
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                  labelText: 'Quantidade'),
+                              onChanged: (v) => slots = int.tryParse(v) ?? 1),
+                        ]),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Cancelar')),
+                          FilledButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Publicar'))
+                        ],
+                      )));
+          if (ok == true) {
+            await api.createOpening(groupId, matchId, slots, position);
+            await reload();
+          }
+        }
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(children: [
+                  Expanded(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                        Text('Completar a partida',
+                            style: Theme.of(ctx)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w900)),
+                        const Text(
+                            'Publique vagas ou convide um perfil específico.')
+                      ])),
+                  IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close_rounded))
+                ]),
+                const SizedBox(height: 16),
+                if (current!.openings.isEmpty)
+                  const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Text('Nenhuma vaga aberta nesta partida.',
+                          textAlign: TextAlign.center)),
+                ...current!.openings.map((opening) => Card(
+                    child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(children: [
+                          Icon(opening.position == 3
+                              ? Icons.sports_soccer_rounded
+                              : Icons.directions_run_rounded),
+                          const SizedBox(width: 10),
+                          Expanded(
+                              child: Text(
+                                  '${opening.label}\n${opening.available} ${opening.available == 1 ? 'vaga disponível' : 'vagas disponíveis'}',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700))),
+                          IconButton.filledTonal(
+                              tooltip: 'Buscar jogador',
+                              onPressed: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                      builder: (_) => Scaffold(
+                                          appBar: AppBar(
+                                              title:
+                                                  const Text('Buscar jogador')),
+                                          body: DiscoverySearchPage(
+                                              preferredMatchId: matchId,
+                                              openingId: opening.id)))),
+                              icon: const Icon(Icons.person_search_rounded)),
+                          IconButton(
+                              tooltip: 'Excluir vaga',
+                              onPressed: () async {
+                                await api.deleteOpening(groupId, opening.id);
+                                await reload();
+                              },
+                              icon: Icon(Icons.delete_outline_rounded,
+                                  color: Theme.of(ctx).colorScheme.error)),
+                        ])))),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                    onPressed: add,
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Abrir nova vaga')),
+              ]),
+        );
+      }),
+    );
   }
 
   @override
@@ -82,6 +234,16 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
                     acceptedOverLimit: s.acceptedOverLimit,
                     progress: pct,
                   ),
+                  if (isAdmin && (s.matchId ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonalIcon(
+                          onPressed: () => _manageOpenings(gid, s.matchId!),
+                          icon: const Icon(Icons.person_add_alt_1_rounded),
+                          label: const Text('Completar com jogadores de fora'),
+                        )),
+                  ],
                   if (widget.linkedPollStrip != null) ...[
                     const SizedBox(height: 10),
                     widget.linkedPollStrip!,

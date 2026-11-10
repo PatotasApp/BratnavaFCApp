@@ -41,6 +41,7 @@ class _State extends ConsumerState<DiscoveryApplicantsPage> {
     if (!mounted) return;
     final linked = guests.where((g) => g.linked);
     String? selected = linked.isEmpty ? null : linked.first.id;
+    final reason = TextEditingController();
     final ok = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -63,6 +64,17 @@ class _State extends ConsumerState<DiscoveryApplicantsPage> {
                 'Reaproveite um convidado antigo se for a mesma pessoa.',
               ),
               const SizedBox(height: 18),
+              if (item.message?.trim().isNotEmpty == true) ...[
+                Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                        color:
+                            Theme.of(ctx).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(14)),
+                    child: Text('“${item.message!.trim()}”')),
+                const SizedBox(height: 14),
+              ],
               DropdownButtonFormField<String?>(
                 value: selected,
                 decoration: const InputDecoration(
@@ -84,6 +96,13 @@ class _State extends ConsumerState<DiscoveryApplicantsPage> {
                 ],
                 onChanged: (v) => setModal(() => selected = v),
               ),
+              const SizedBox(height: 12),
+              TextField(
+                  controller: reason,
+                  maxLength: 500,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                      labelText: 'Mensagem da aprovação (opcional)')),
               const SizedBox(height: 18),
               FilledButton(
                 onPressed: () => Navigator.pop(ctx, true),
@@ -95,13 +114,40 @@ class _State extends ConsumerState<DiscoveryApplicantsPage> {
       ),
     );
     if (ok == true) {
-      await api.approve(groupId, item.id, selected);
+      await api.approve(groupId, item.id, selected,
+          reason: reason.text.trim().isEmpty ? null : reason.text.trim());
       await load();
     }
+    reason.dispose();
   }
 
   Future<void> reject(MatchApplication item) async {
-    await api.reject(groupId, item.id);
+    final controller = TextEditingController();
+    final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+                title: const Text('Recusar solicitação'),
+                content: TextField(
+                    controller: controller,
+                    maxLength: 500,
+                    maxLines: 3,
+                    decoration:
+                        const InputDecoration(labelText: 'Motivo (opcional)')),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Cancelar')),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Recusar'))
+                ]));
+    if (ok != true) {
+      controller.dispose();
+      return;
+    }
+    await api.reject(groupId, item.id,
+        reason: controller.text.trim().isEmpty ? null : controller.text.trim());
+    controller.dispose();
     await load();
   }
 
@@ -161,7 +207,7 @@ class _State extends ConsumerState<DiscoveryApplicantsPage> {
                                         ),
                                         const SizedBox(height: 5),
                                         Text(
-                                          '${DateFormat('dd/MM · HH:mm').format(x.playedAt)} · ${x.position == 2 ? 'Linha' : x.position == 3 ? 'Goleiro' : 'Qualquer posição'}',
+                                          '${DateFormat('dd/MM · HH:mm').format(x.playedAt)}${x.position == null ? '' : ' · ${x.position == 2 ? 'Linha' : x.position == 3 ? 'Goleiro' : 'Qualquer posição'}'}',
                                           style: Theme.of(
                                             context,
                                           ).textTheme.labelSmall,

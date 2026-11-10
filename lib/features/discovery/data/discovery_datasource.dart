@@ -40,9 +40,10 @@ class DiscoveryDataSource {
     );
   }
 
-  Future<void> apply(String groupId, String openingId) => _dio.post(
+  Future<void> apply(String groupId, String matchId, {String? message}) =>
+      _dio.post(
         '/api/discovery/groups/$groupId/applications',
-        data: {'openingId': openingId},
+        data: {'matchId': matchId, 'message': message},
       );
   Future<void> createOpening(
     String groupId,
@@ -79,13 +80,16 @@ class DiscoveryDataSource {
         .toList();
   }
 
-  Future<void> approve(String groupId, String applicationId, String? guestId) =>
+  Future<void> approve(String groupId, String applicationId, String? guestId,
+          {String? reason}) =>
       _dio.patch(
         '/api/discovery/groups/$groupId/applications/$applicationId/approve',
-        data: {'guestPlayerId': guestId},
+        data: {'guestPlayerId': guestId, 'reason': reason},
       );
-  Future<void> reject(String groupId, String applicationId) => _dio.patch(
+  Future<void> reject(String groupId, String applicationId, {String? reason}) =>
+      _dio.patch(
         '/api/discovery/groups/$groupId/applications/$applicationId/reject',
+        data: {'reason': reason},
       );
   Future<List<MatchApplication>> myApplications() async {
     final r = await _dio.get('/api/discovery/applications/mine');
@@ -100,13 +104,16 @@ class DiscoveryDataSource {
       _dio.patch('/api/discovery/applications/$applicationId/accept');
   Future<void> rejectInvitation(String applicationId) =>
       _dio.patch('/api/discovery/applications/$applicationId/reject');
-  Future<void> invite(String groupId, String matchId, String userId) =>
+  Future<void> invite(String groupId, String matchId, String userId,
+          {String? openingId, String? message}) =>
       _dio.post(
         '/api/discovery/groups/$groupId/invitations',
         data: {
           'matchId': matchId,
           'userId': userId,
           'guestPlayerId': null,
+          'openingId': openingId,
+          'message': message,
         },
       );
   Future<void> updateProfile(
