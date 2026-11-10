@@ -170,6 +170,7 @@ class PrototypeScrollView extends StatelessWidget {
   final Future<void> Function()? onRefresh;
   final EdgeInsetsGeometry padding;
   final ScrollController? controller;
+  final bool fillViewport;
 
   const PrototypeScrollView({
     super.key,
@@ -182,19 +183,41 @@ class PrototypeScrollView extends StatelessWidget {
       PrototypeLayout.contentBottomPadding,
     ),
     this.controller,
+    this.fillViewport = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final scroll = SingleChildScrollView(
-      controller: controller,
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: padding,
-      child: child,
-    );
+    Widget buildScroll(Widget scrollChild) {
+      final scroll = SingleChildScrollView(
+        controller: controller,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: padding,
+        child: scrollChild,
+      );
 
-    if (onRefresh == null) return scroll;
-    return RefreshIndicator(onRefresh: onRefresh!, child: scroll);
+      if (onRefresh == null) return scroll;
+      return RefreshIndicator(onRefresh: onRefresh!, child: scroll);
+    }
+
+    if (!fillViewport) return buildScroll(child);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final verticalPadding =
+            padding.resolve(Directionality.of(context)).vertical;
+        return buildScroll(
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: (constraints.maxHeight - verticalPadding).clamp(
+                0.0,
+                double.infinity,
+              ),
+            ),
+            child: child,
+          ),
+        );
+      },
+    );
   }
 }
 

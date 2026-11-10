@@ -7,6 +7,30 @@ import 'package:patotas_app/shared/presentation/widgets/group_icon_renderer.dart
 import 'package:patotas_app/shared/presentation/widgets/prototype_ui.dart';
 
 void main() {
+  testWidgets('fillViewport centraliza estados curtos na área disponível', (
+    tester,
+  ) async {
+    const contentKey = Key('centered-content');
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: PrototypeScrollView(
+            fillViewport: true,
+            padding: EdgeInsets.zero,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [SizedBox(key: contentKey, width: 40, height: 40)],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final viewport = tester.getRect(find.byType(PrototypeScrollView));
+    final content = tester.getRect(find.byKey(contentKey));
+    expect(content.center.dy, closeTo(viewport.center.dy, 0.5));
+  });
+
   for (final brightness in Brightness.values) {
     testWidgets(
       'layout base cabe no Pixel 5 em tema ${brightness.name}',

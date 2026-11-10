@@ -232,6 +232,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       if (playersAsync.hasError) {
         return PrototypeScrollView(
           onRefresh: () => _refresh(groupId, playerId),
+          fillViewport: true,
           child: _DashboardLoadErrorState(
             onRetry: () => ref.invalidate(myPlayersProvider),
           ),
@@ -241,6 +242,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       if (groupId.isNotEmpty) {
         return PrototypeScrollView(
           onRefresh: () => _refresh(groupId, playerId),
+          fillViewport: true,
           child: _DashboardPlayerMissingState(
             onRetry: () => ref.invalidate(myPlayersProvider),
           ),
@@ -1947,30 +1949,28 @@ class _DashboardMessageState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 80),
-      child: Column(
-        children: [
-          PrototypeIconBox(
-            size: 52,
-            icon: Icon(icon, size: 26),
-          ),
-          const SizedBox(height: 14),
-          Text(title, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 18),
-          FilledButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text('Tentar novamente'),
-          ),
-        ],
-      ),
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        PrototypeIconBox(
+          size: 52,
+          icon: Icon(icon, size: 26),
+        ),
+        const SizedBox(height: 14),
+        Text(title, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(
+          message,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 18),
+        FilledButton.icon(
+          onPressed: onRetry,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('Tentar novamente'),
+        ),
+      ],
     );
   }
 }
