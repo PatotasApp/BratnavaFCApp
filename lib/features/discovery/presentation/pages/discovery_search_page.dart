@@ -22,17 +22,12 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
   final _query = TextEditingController();
   Timer? _timer;
   bool _showGroups = true;
-  bool _loading = true;
+  bool _loading = false;
+  int _searchVersion = 0;
   List<DiscoveryGroupItem> _groups = [];
   List<DiscoveryPlayerItem> _players = [];
 
   DiscoveryDataSource get _api => DiscoveryDataSource(ref.read(dioProvider));
-
-  @override
-  void initState() {
-    super.initState();
-    Future.microtask(_search);
-  }
 
   @override
   void dispose() {
@@ -53,15 +48,37 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
   }
 
   Future<void> _search() async {
+    final term = _query.text.trim();
+    final groupsTab = _showGroups;
+    final version = ++_searchVersion;
+
+    if (term.isEmpty) {
+      setState(() {
+        _loading = false;
+        if (groupsTab) {
+          _groups = [];
+        } else {
+          _players = [];
+        }
+      });
+      return;
+    }
+
     setState(() => _loading = true);
     try {
-      if (_showGroups) {
-        _groups = await _api.groups(_query.text);
+      if (groupsTab) {
+        final results = await _api.groups(term);
+        if (!mounted || version != _searchVersion) return;
+        _groups = results;
       } else {
-        _players = await _api.players(_query.text);
+        final results = await _api.players(term);
+        if (!mounted || version != _searchVersion) return;
+        _players = results;
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && version == _searchVersion) {
+        setState(() => _loading = false);
+      }
     }
   }
 
