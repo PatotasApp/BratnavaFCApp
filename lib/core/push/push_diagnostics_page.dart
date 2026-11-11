@@ -9,6 +9,10 @@ import '../api/interceptors/auth_interceptor.dart';
 import '../theme/app_colors.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 
+// Canal Swift que retorna {apnsReceived: bool, apnsError: String?}
+const _kPushDiagCh =
+    MethodChannel('br.com.patotasapp/push_diagnostics');
+
 Future<void> showPushDiagnosticsSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
@@ -30,6 +34,7 @@ class _PushDiagnosticsSheetState extends ConsumerState<PushDiagnosticsSheet> {
   bool _loading = true;
   String _permission = '...';
   String _apnsToken = '...';
+  String _apnsRegistration = '...'; // estado reportado pelo iOS nativo
   String _fcmToken = '...';
   String _backendResult = '...';
   String? _fcmTokenFull;
@@ -45,6 +50,7 @@ class _PushDiagnosticsSheetState extends ConsumerState<PushDiagnosticsSheet> {
       _loading = true;
       _permission = '...';
       _apnsToken = '...';
+      _apnsRegistration = '...';
       _fcmToken = '...';
       _backendResult = '...';
       _fcmTokenFull = null;
@@ -68,24 +74,48 @@ class _PushDiagnosticsSheetState extends ConsumerState<PushDiagnosticsSheet> {
     if (!mounted) return;
     setState(() => _permission = permission);
 
-    // 2. APNs token (iOS)
-    String apnsToken;
+    // 2. Estado do registro APNs (via canal nativo — iOS only)
+    String apnsReg = 'N/A (Android)';
     if (Platform.isIOS) {
       try {
-        final t = await FirebaseMessaging.instance.getAPNSToken();
-        apnsToken = t != null
-            ? '✅ ${t.length > 20 ? '${t.substring(0, 20)}…' : t}'
-            : '❌ null — timeout ou permissão negada';
-      } catch (e) {
-        apnsToken = '❌ $e';
+        final result = await _kPushDiagCh.invokeMapMethod<String, dynamic>(
+            'getRegistrationState');
+        final received = result?['apnsReceived'] as bool? ?? false;
+        final error = result?['apnsError'] as String?;
+        if (error != null && error.isNotEmpty) {
+          apnsReg = '❌ Falhou: $error';
+        } else if (received) {
+          apnsReg = '✅ didRegisterForRemoteNotifications foi chamado';
+        } else {
+          apnsReg = '⚠️ Ainda não chamado desde a abertura do app';
+        }
+      } catch (_) {
+        apnsReg = '⚠️ Canal nativo indisponível (build antigo?)';
       }
+    }
+    if (!mounted) return;
+    setState(() => _apnsRegistration = apnsReg);
+
+    // 3. APNs token — aguarda até 15 s (iOS entrega de forma assíncrona)
+    String apnsToken;
+    if (Platform.isIOS) {
+      String? t;
+      for (var i = 0; i < 15; i++) {
+        t = await FirebaseMessaging.instance.getAPNSToken();
+        if (t != null) break;
+        if (!mounted) return;
+        await Future<void>.delayed(const Duration(seconds: 1));
+      }
+      apnsToken = t != null
+          ? '✅ ${t.length > 20 ? '${t.substring(0, 20)}…' : t}'
+          : '❌ null após 15 s — entitlement ausente no IPA?';
     } else {
       apnsToken = 'N/A (Android)';
     }
     if (!mounted) return;
     setState(() => _apnsToken = apnsToken);
 
-    // 3. FCM token
+    // 4. FCM token
     String fcmToken;
     String? fcmFull;
     try {
@@ -103,7 +133,7 @@ class _PushDiagnosticsSheetState extends ConsumerState<PushDiagnosticsSheet> {
       _fcmTokenFull = fcmFull;
     });
 
-    // 4. Backend
+    // 5. Backend
     String backendResult;
     if (fcmFull != null) {
       try {
@@ -121,7 +151,7 @@ class _PushDiagnosticsSheetState extends ConsumerState<PushDiagnosticsSheet> {
         final code = e.response?.statusCode;
         if (code != null) {
           backendResult =
-              '❌ HTTP $code${code == 401 ? ' — não autenticado (token Firebase expirado?)' : ''}';
+              '❌ HTTP $code${code == 401 ? ' — não autenticado' : ''}';
         } else {
           backendResult = '❌ sem resposta — ${e.message}';
         }
@@ -212,6 +242,12 @@ class _PushDiagnosticsSheetState extends ConsumerState<PushDiagnosticsSheet> {
             isDark: isDark,
           ),
           _DiagRow(label: 'Permissão', value: _permission, isDark: isDark),
+          if (Platform.isIOS)
+            _DiagRow(
+              label: 'Registro iOS',
+              value: _apnsRegistration,
+              isDark: isDark,
+            ),
           _DiagRow(label: 'APNs Token', value: _apnsToken, isDark: isDark),
           _DiagRow(
             label: 'FCM Token',
@@ -223,7 +259,7 @@ class _PushDiagnosticsSheetState extends ConsumerState<PushDiagnosticsSheet> {
 
           const SizedBox(height: 16),
           Text(
-            'Toque no FCM Token para copiar. Tire um print desta tela e mande para o time.',
+            'Aguarda 15 s pelo APNs. Toque no FCM Token para copiar. Tire um print desta tela.',
             style: TextStyle(
               fontSize: 11,
               color: isDark ? AppColors.slate500 : AppColors.slate400,

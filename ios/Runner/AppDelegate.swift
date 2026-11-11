@@ -2,12 +2,20 @@ import Flutter
 import UIKit
 import FirebaseMessaging
 
+// Exposto para o Dart via canal de diagnóstico; limpado a cada inicialização.
+@objc class PushRegistrationState: NSObject {
+  static var apnsError: String? = nil
+  static var apnsReceived: Bool = false
+}
+
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    PushRegistrationState.apnsError = nil
+    PushRegistrationState.apnsReceived = false
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
@@ -17,14 +25,48 @@ import FirebaseMessaging
     _ application: UIApplication,
     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
   ) {
+    PushRegistrationState.apnsReceived = true
     Messaging.messaging().apnsToken = deviceToken
     super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+  }
+
+  // Chamado quando o iOS rejeita o registro — normalmente indica entitlement
+  // ausente no provisioning profile (aps-environment não autorizado).
+  override func application(
+    _ application: UIApplication,
+    didFailToRegisterForRemoteNotificationsWithError error: Error
+  ) {
+    PushRegistrationState.apnsError = error.localizedDescription
+    super.application(application, didFailToRegisterForRemoteNotificationsWithError: error)
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PatotasImageShare") {
       ImageShareChannel.register(messenger: registrar.messenger())
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PushDiagnostics") {
+      PushDiagnosticsChannel.register(messenger: registrar.messenger())
+    }
+  }
+}
+
+/// Expõe o estado de registro APNs ao Dart para a tela de diagnóstico de push.
+enum PushDiagnosticsChannel {
+  static func register(messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(
+      name: "br.com.patotasapp/push_diagnostics",
+      binaryMessenger: messenger
+    )
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "getRegistrationState" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      result([
+        "apnsReceived": PushRegistrationState.apnsReceived,
+        "apnsError": PushRegistrationState.apnsError as Any,
+      ])
     }
   }
 }
