@@ -284,17 +284,20 @@ class _NotificationSheetState extends ConsumerState<_NotificationSheet> {
 
   void _navigate(BuildContext ctx, AppNotification n) {
     _markRead(n);
+    // Captura o router ANTES do pop — após fechar o sheet o ctx está desmontado
+    // e ctx.push() lançaria assertion ou falharia silenciosamente.
+    final router = GoRouter.of(ctx);
     Navigator.pop(ctx);
 
     // actionUrl explícito tem prioridade
     if (n.actionUrl != null && n.actionUrl!.isNotEmpty) {
-      ctx.push(n.actionUrl!);
+      router.push(n.actionUrl!);
       return;
     }
 
     // Usa dataJson (IDs) para montar a rota mais específica possível
     final route = notificationRoute(n.type, n.dataJson ?? {});
-    if (route.isNotEmpty) ctx.push(route);
+    if (route.isNotEmpty) router.push(route);
   }
 
   IconData _iconFor(String type) {
