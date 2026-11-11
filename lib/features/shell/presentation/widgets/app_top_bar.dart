@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/push/notification_router.dart';
-import '../../../../core/push/push_diagnostics_page.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
@@ -81,55 +80,7 @@ class AppTopBar extends ConsumerWidget implements PreferredSizeWidget {
       automaticallyImplyLeading: false,
       titleSpacing: 12,
       // ── LEFT: identidade institucional ───────────────────────────
-      title: const _LogoTitle(),
-      // ── RIGHT: convites + botão de usuário ───────────────────────
-      actions: const [
-        _NotificationBell(),
-        Padding(
-          padding: EdgeInsets.only(right: 12),
-          child: _AccountButton(),
-        ),
-      ],
-    );
-  }
-}
-
-// ── Logo + título com detector de 3 toques ────────────────────────────────────
-//
-// 3 toques consecutivos (dentro de 2 s) abrem a tela de diagnóstico de push.
-class _LogoTitle extends StatefulWidget {
-  const _LogoTitle();
-
-  @override
-  State<_LogoTitle> createState() => _LogoTitleState();
-}
-
-class _LogoTitleState extends State<_LogoTitle> {
-  int _tapCount = 0;
-  DateTime? _lastTap;
-
-  void _handleTap() {
-    final now = DateTime.now();
-    if (_lastTap == null ||
-        now.difference(_lastTap!) > const Duration(seconds: 2)) {
-      _tapCount = 1;
-    } else {
-      _tapCount++;
-    }
-    _lastTap = now;
-
-    if (_tapCount >= 3) {
-      _tapCount = 0;
-      showPushDiagnosticsSheet(context);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: _handleTap,
-      behavior: HitTestBehavior.opaque,
-      child: Row(
+      title: Row(
         children: [
           Semantics(
             image: true,
@@ -162,6 +113,14 @@ class _LogoTitleState extends State<_LogoTitle> {
           ],
         ],
       ),
+      // ── RIGHT: convites + botão de usuário ───────────────────────
+      actions: const [
+        _NotificationBell(),
+        Padding(
+          padding: EdgeInsets.only(right: 12),
+          child: _AccountButton(),
+        ),
+      ],
     );
   }
 }
