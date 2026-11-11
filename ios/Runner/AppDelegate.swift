@@ -16,7 +16,12 @@ import FirebaseMessaging
   ) -> Bool {
     PushRegistrationState.apnsError = nil
     PushRegistrationState.apnsReceived = false
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    // Garante o token APNs em todo launch. Idempotente: retorna cached token se já registrado.
+    // Necessário porque o Firebase só chama registerForRemoteNotifications via requestPermission(),
+    // que o Flutter pula quando a permissão já foi concedida em sessão anterior.
+    application.registerForRemoteNotifications()
+    return result
   }
 
   // Firebase não consegue sempre capturar o APNs token via swizzling (especialmente
