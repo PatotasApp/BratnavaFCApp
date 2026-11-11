@@ -35,7 +35,9 @@ class _ConquistasPageState extends ConsumerState<ConquistasPage> {
         groupId != null && (account?.isGroupAdmin(groupId) ?? false);
 
     // "Na temporada": a atual por padrão; dá para ver uma que já passou.
-    final seasons = groupId == null ? null : ref.watch(seasonsProvider(groupId)).valueOrNull;
+    final seasons = groupId == null
+        ? null
+        : ref.watch(seasonsProvider(groupId)).valueOrNull;
     final seasonKey = 'conquistas:$groupId';
     final selection = ref.watch(seasonSelectionProvider(seasonKey));
     final chosen = selection.seasonIn(seasons);
@@ -103,17 +105,20 @@ class _ConquistasPageState extends ConsumerState<ConquistasPage> {
                                   value: selection,
                                   seasonsOnly: true,
                                   onChanged: (next) => ref
-                                      .read(seasonSelectionProvider(seasonKey).notifier)
+                                      .read(seasonSelectionProvider(seasonKey)
+                                          .notifier)
                                       .state = next,
                                 ),
                                 if (chosen != null && chosen.hasEnded)
                                   Align(
                                     alignment: Alignment.centerLeft,
                                     child: TextButton.icon(
-                                      onPressed: () =>
-                                          context.push('/app/seasons/${chosen.id}'),
-                                      icon: const Icon(Icons.emoji_events_outlined),
-                                      label: Text('Retrospectiva de ${chosen.displayName}'),
+                                      onPressed: () => context
+                                          .push('/app/seasons/${chosen.id}'),
+                                      icon: const Icon(
+                                          Icons.emoji_events_outlined),
+                                      label: Text(
+                                          'Retrospectiva de ${chosen.displayName}'),
                                     ),
                                   ),
                                 if (isAdmin) ...[

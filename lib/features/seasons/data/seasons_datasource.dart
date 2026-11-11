@@ -13,14 +13,17 @@ class SeasonsDatasource {
     return SeasonsOverview.fromJson(_unwrap(res.data));
   }
 
-  Future<SeasonClosePreview> closePreview(String groupId, DateTime cutAt) async {
+  Future<SeasonClosePreview> closePreview(
+      String groupId, DateTime cutAt) async {
     final res = await _dio.get('${_base(groupId)}/close-preview',
         queryParameters: {'cutAt': cutAt.toUtc().toIso8601String()});
     return SeasonClosePreview.fromJson(_unwrap(res.data));
   }
 
   Future<void> close(String groupId,
-      {required DateTime cutAt, String? nextName, required bool nextIsPreSeason}) async {
+      {required DateTime cutAt,
+      String? nextName,
+      required bool nextIsPreSeason}) async {
     await _dio.post('${_base(groupId)}/close', data: {
       'cutAt': cutAt.toUtc().toIso8601String(),
       'nextName': nextName,
@@ -34,7 +37,8 @@ class SeasonsDatasource {
         data: {'name': name, 'isPreSeason': isPreSeason});
   }
 
-  Future<void> moveStart(String groupId, String seasonId, DateTime startsAt) async {
+  Future<void> moveStart(
+      String groupId, String seasonId, DateTime startsAt) async {
     await _dio.put('${_base(groupId)}/$seasonId/start',
         data: {'startsAt': startsAt.toUtc().toIso8601String()});
   }

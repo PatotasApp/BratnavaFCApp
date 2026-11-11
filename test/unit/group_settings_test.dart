@@ -94,22 +94,22 @@ void main() {
   group('GroupSettings.toJson', () {
     test('includes goalkeeperMonthlyFee when paymentMode == 0', () {
       final body = const GroupSettings().toJson(
-        minPlayers:          5,
-        maxPlayers:          10,
-        defaultPlaceName:    null,
-        defaultDayOfWeek:    null,
-        defaultKickoffTime:  null,
-        paymentMode:         0,
-        monthlyFee:          100.0,
+        minPlayers: 5,
+        maxPlayers: 10,
+        defaultPlaceName: null,
+        defaultDayOfWeek: null,
+        defaultKickoffTime: null,
+        paymentMode: 0,
+        monthlyFee: 100.0,
         goalkeeperMonthlyFee: 60.0,
-        goalIcon:            null,
-        goalkeeperIcon:      null,
-        assistIcon:          null,
-        ownGoalIcon:         null,
-        mvpIcon:             null,
-        playerIcon:          null,
-        mvpTieRule:          1,
-        showPlayerStats:     false,
+        goalIcon: null,
+        goalkeeperIcon: null,
+        assistIcon: null,
+        ownGoalIcon: null,
+        mvpIcon: null,
+        playerIcon: null,
+        mvpTieRule: 1,
+        showPlayerStats: false,
       );
 
       expect(body['goalkeeperMonthlyFee'], 60.0);
@@ -118,46 +118,48 @@ void main() {
 
     test('sends null for goalkeeperMonthlyFee when paymentMode == 1', () {
       final body = const GroupSettings().toJson(
-        minPlayers:          5,
-        maxPlayers:          10,
-        defaultPlaceName:    null,
-        defaultDayOfWeek:    null,
-        defaultKickoffTime:  null,
-        paymentMode:         1,
-        monthlyFee:          100.0,
+        minPlayers: 5,
+        maxPlayers: 10,
+        defaultPlaceName: null,
+        defaultDayOfWeek: null,
+        defaultKickoffTime: null,
+        paymentMode: 1,
+        monthlyFee: 100.0,
         goalkeeperMonthlyFee: 60.0,
-        goalIcon:            null,
-        goalkeeperIcon:      null,
-        assistIcon:          null,
-        ownGoalIcon:         null,
-        mvpIcon:             null,
-        playerIcon:          null,
-        mvpTieRule:          1,
-        showPlayerStats:     false,
+        goalIcon: null,
+        goalkeeperIcon: null,
+        assistIcon: null,
+        ownGoalIcon: null,
+        mvpIcon: null,
+        playerIcon: null,
+        mvpTieRule: 1,
+        showPlayerStats: false,
       );
 
       expect(body['goalkeeperMonthlyFee'], isNull);
       expect(body['monthlyFee'], isNull);
     });
 
-    test('sends null goalkeeperMonthlyFee when fee is null and paymentMode == 0', () {
+    test(
+        'sends null goalkeeperMonthlyFee when fee is null and paymentMode == 0',
+        () {
       final body = const GroupSettings().toJson(
-        minPlayers:          5,
-        maxPlayers:          10,
-        defaultPlaceName:    null,
-        defaultDayOfWeek:    null,
-        defaultKickoffTime:  null,
-        paymentMode:         0,
-        monthlyFee:          100.0,
+        minPlayers: 5,
+        maxPlayers: 10,
+        defaultPlaceName: null,
+        defaultDayOfWeek: null,
+        defaultKickoffTime: null,
+        paymentMode: 0,
+        monthlyFee: 100.0,
         goalkeeperMonthlyFee: null,
-        goalIcon:            null,
-        goalkeeperIcon:      null,
-        assistIcon:          null,
-        ownGoalIcon:         null,
-        mvpIcon:             null,
-        playerIcon:          null,
-        mvpTieRule:          1,
-        showPlayerStats:     false,
+        goalIcon: null,
+        goalkeeperIcon: null,
+        assistIcon: null,
+        ownGoalIcon: null,
+        mvpIcon: null,
+        playerIcon: null,
+        mvpTieRule: 1,
+        showPlayerStats: false,
       );
 
       expect(body['goalkeeperMonthlyFee'], isNull);

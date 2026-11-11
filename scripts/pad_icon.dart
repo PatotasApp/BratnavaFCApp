@@ -13,7 +13,7 @@ void main() {
 
   // O logo vai ocupar 75% do centro
   final logoSize = (outputSize * 0.75).round();
-  final offset   = ((outputSize - logoSize) / 2).round();
+  final offset = ((outputSize - logoSize) / 2).round();
 
   // Canvas branco — garante fundo branco tanto no ícone adaptativo quanto no legado
   final canvas = img.Image(width: outputSize, height: outputSize);

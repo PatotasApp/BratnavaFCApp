@@ -93,8 +93,10 @@ class GroupSpreadsheet {
       status: SpreadsheetStatus.fromApi(f('status')),
       adminNote: s('adminNote'),
       uploadedByName: s('uploadedByName') ?? '',
-      createdAt: DateTime.tryParse('${f('createdAt')}')?.toLocal() ?? DateTime.now(),
-      statusChangedAt: DateTime.tryParse('${f('statusChangedAt') ?? ''}')?.toLocal(),
+      createdAt:
+          DateTime.tryParse('${f('createdAt')}')?.toLocal() ?? DateTime.now(),
+      statusChangedAt:
+          DateTime.tryParse('${f('statusChangedAt') ?? ''}')?.toLocal(),
     );
   }
 }
@@ -122,7 +124,8 @@ class SpreadsheetFileRules {
   static MediaType contentTypeOf(String fileName) {
     switch (extensionOf(fileName)) {
       case 'xlsx':
-        return MediaType('application', 'vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        return MediaType('application',
+            'vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       case 'xls':
         return MediaType('application', 'vnd.ms-excel');
       case 'csv':
@@ -164,7 +167,9 @@ class GroupSpreadsheetsDataSource {
     final body = res.data;
     final list = body is Map ? (body['data'] ?? body['Data']) : body;
     if (list is! List) return const [];
-    return [for (final e in list.whereType<Map>()) GroupSpreadsheet.fromJson(e)];
+    return [
+      for (final e in list.whereType<Map>()) GroupSpreadsheet.fromJson(e)
+    ];
   }
 
   Future<GroupSpreadsheet?> upload({
@@ -193,7 +198,8 @@ class GroupSpreadsheetsDataSource {
     return data is Map ? GroupSpreadsheet.fromJson(data) : null;
   }
 
-  Future<void> delete(String groupId, String id) => _dio.delete('${_base(groupId)}/$id');
+  Future<void> delete(String groupId, String id) =>
+      _dio.delete('${_base(groupId)}/$id');
 }
 
 final groupSpreadsheetsDsProvider = Provider<GroupSpreadsheetsDataSource>(

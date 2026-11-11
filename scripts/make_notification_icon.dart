@@ -32,20 +32,20 @@ void main() {
 
   // Salva nos tamanhos necessários para cada densidade Android
   final densities = {
-    'mdpi':    24,
-    'hdpi':    36,
-    'xhdpi':   48,
-    'xxhdpi':  72,
+    'mdpi': 24,
+    'hdpi': 36,
+    'xhdpi': 48,
+    'xxhdpi': 72,
     'xxxhdpi': 96,
   };
 
   for (final entry in densities.entries) {
-    final dir = Directory(
-        'android/app/src/main/res/drawable-${entry.key}');
+    final dir = Directory('android/app/src/main/res/drawable-${entry.key}');
     dir.createSync(recursive: true);
 
     final resized = img.copyResize(rgba,
-        width: entry.value, height: entry.value,
+        width: entry.value,
+        height: entry.value,
         interpolation: img.Interpolation.average);
 
     File('${dir.path}/ic_notification.png')

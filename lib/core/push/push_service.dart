@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -247,7 +248,10 @@ class PushService {
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       _log.d(
           '[Push OPEN] ${message.notification?.title} | data: ${message.data}');
-      _navigate(message.data);
+      // addPostFrameCallback garante que o router terminou a transição
+      // background→foreground antes de tentar navegar.
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _navigate(message.data));
     });
   }
 
@@ -289,6 +293,11 @@ class PushService {
       } catch (e) {
         _log.w('[Push] Falha ao trocar patota antes de navegar: $e');
       }
+      // Aguarda o frame seguinte para o router processar qualquer redirect
+      // ou rebuild desencadeado pela troca de grupo antes de fazer o push.
+      final settled = Completer<void>();
+      WidgetsBinding.instance.addPostFrameCallback((_) => settled.complete());
+      await settled.future;
     }
     _router.push(route);
   }

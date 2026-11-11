@@ -18,20 +18,26 @@ class SeasonsSettingsPage extends ConsumerStatefulWidget {
   const SeasonsSettingsPage({super.key});
 
   @override
-  ConsumerState<SeasonsSettingsPage> createState() => _SeasonsSettingsPageState();
+  ConsumerState<SeasonsSettingsPage> createState() =>
+      _SeasonsSettingsPageState();
 }
 
 class _SeasonsSettingsPageState extends ConsumerState<SeasonsSettingsPage> {
   bool _busy = false;
 
-  Future<void> _run(String groupId, Future<void> Function() action, String success) async {
+  Future<void> _run(
+      String groupId, Future<void> Function() action, String success) async {
     setState(() => _busy = true);
     try {
       await action();
       ref.invalidate(seasonsProvider(groupId));
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(success)));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(extractDioError(e))));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(extractDioError(e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -53,7 +59,8 @@ class _SeasonsSettingsPageState extends ConsumerState<SeasonsSettingsPage> {
             child: groupId.isEmpty
                 ? const NoActiveGroupView(message: 'Selecione uma patota.')
                 : ref.watch(seasonsProvider(groupId)).when(
-                      loading: () => const Center(child: CircularProgressIndicator()),
+                      loading: () =>
+                          const Center(child: CircularProgressIndicator()),
                       error: (e, _) => Center(child: Text(extractDioError(e))),
                       data: (data) => _body(context, groupId, data),
                     ),
@@ -66,7 +73,8 @@ class _SeasonsSettingsPageState extends ConsumerState<SeasonsSettingsPage> {
   Widget _body(BuildContext context, String groupId, SeasonsOverview data) {
     final ds = ref.read(seasonsDatasourceProvider);
     final open = data.open;
-    final years = data.seasons.map((s) => s.year).toSet().toList()..sort((a, b) => b.compareTo(a));
+    final years = data.seasons.map((s) => s.year).toSet().toList()
+      ..sort((a, b) => b.compareTo(a));
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 36),
       children: [
@@ -81,7 +89,8 @@ class _SeasonsSettingsPageState extends ConsumerState<SeasonsSettingsPage> {
             color: Theme.of(context).colorScheme.tertiaryContainer,
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: Text('${open!.displayName} ainda está aberta e o ano já virou. Abra a temporada de ${DateTime.now().year}.'),
+              child: Text(
+                  '${open!.displayName} ainda está aberta e o ano já virou. Abra a temporada de ${DateTime.now().year}.'),
             ),
           ),
         ],
@@ -100,11 +109,14 @@ class _SeasonsSettingsPageState extends ConsumerState<SeasonsSettingsPage> {
                     final ok = await showConfirmDialog(
                       context: context,
                       title: 'Desfazer último fechamento',
-                      message: '${open?.displayName ?? 'A temporada aberta'} é apagada e a anterior volta a ficar aberta.',
+                      message:
+                          '${open?.displayName ?? 'A temporada aberta'} é apagada e a anterior volta a ficar aberta.',
                       confirmLabel: 'Desfazer',
                       danger: true,
                     );
-                    if (ok) await _run(groupId, () => ds.undoClose(groupId), 'Fechamento desfeito.');
+                    if (ok)
+                      await _run(groupId, () => ds.undoClose(groupId),
+                          'Fechamento desfeito.');
                   },
             icon: const Icon(Icons.undo),
             label: const Text('Desfazer último fechamento'),
@@ -112,12 +124,14 @@ class _SeasonsSettingsPageState extends ConsumerState<SeasonsSettingsPage> {
         for (final year in years) ...[
           const SizedBox(height: 16),
           Text('$year', style: Theme.of(context).textTheme.labelLarge),
-          for (final season in data.seasons.where((s) => s.year == year).toList().reversed)
+          for (final season
+              in data.seasons.where((s) => s.year == year).toList().reversed)
             _SeasonTile(
               season: season,
               busy: _busy,
               canMoveStart: season.id != data.seasons.first.id,
-              onEdit: () => _edit(context, groupId, season, canMoveStart: season.id != data.seasons.first.id),
+              onEdit: () => _edit(context, groupId, season,
+                  canMoveStart: season.id != data.seasons.first.id),
             ),
         ],
       ],
@@ -134,12 +148,16 @@ class _SeasonsSettingsPageState extends ConsumerState<SeasonsSettingsPage> {
     final ds = ref.read(seasonsDatasourceProvider);
     await _run(
       groupId,
-      () => ds.close(groupId, cutAt: result.cutAt, nextName: result.nextName, nextIsPreSeason: result.isPreSeason),
+      () => ds.close(groupId,
+          cutAt: result.cutAt,
+          nextName: result.nextName,
+          nextIsPreSeason: result.isPreSeason),
       'Temporada fechada. A próxima já está aberta.',
     );
   }
 
-  Future<void> _edit(BuildContext context, String groupId, Season season, {required bool canMoveStart}) async {
+  Future<void> _edit(BuildContext context, String groupId, Season season,
+      {required bool canMoveStart}) async {
     final name = TextEditingController(text: season.name ?? '');
     var isPre = season.isPreSeason;
     var start = season.startsAt.toLocal();
@@ -154,7 +172,9 @@ class _SeasonsSettingsPageState extends ConsumerState<SeasonsSettingsPage> {
               TextField(
                 controller: name,
                 maxLength: 40,
-                decoration: InputDecoration(labelText: 'Nome', hintText: 'Padrão: ${season.year}/${season.number}'),
+                decoration: InputDecoration(
+                    labelText: 'Nome',
+                    hintText: 'Padrão: ${season.year}/${season.number}'),
               ),
               if (canMoveStart)
                 ListTile(
@@ -172,13 +192,18 @@ class _SeasonsSettingsPageState extends ConsumerState<SeasonsSettingsPage> {
                 value: isPre,
                 onChanged: (v) => setLocal(() => isPre = v),
                 title: const Text('É pré-temporada'),
-                subtitle: const Text('Conta na carreira, mas não entra nos filtros e títulos do ano'),
+                subtitle: const Text(
+                    'Conta na carreira, mas não entra nos filtros e títulos do ano'),
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
-            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Salvar')),
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancelar')),
+            FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Salvar')),
           ],
         ),
       ),
@@ -186,8 +211,11 @@ class _SeasonsSettingsPageState extends ConsumerState<SeasonsSettingsPage> {
     if (saved != true) return;
     final ds = ref.read(seasonsDatasourceProvider);
     await _run(groupId, () async {
-      if (canMoveStart && start != season.startsAt.toLocal()) await ds.moveStart(groupId, season.id, start);
-      await ds.update(groupId, season.id, name: name.text.trim().isEmpty ? null : name.text.trim(), isPreSeason: isPre);
+      if (canMoveStart && start != season.startsAt.toLocal())
+        await ds.moveStart(groupId, season.id, start);
+      await ds.update(groupId, season.id,
+          name: name.text.trim().isEmpty ? null : name.text.trim(),
+          isPreSeason: isPre);
     }, 'Temporada salva.');
   }
 }
@@ -198,13 +226,19 @@ class _SeasonTile extends StatelessWidget {
   final bool canMoveStart;
   final VoidCallback onEdit;
 
-  const _SeasonTile({required this.season, required this.busy, required this.canMoveStart, required this.onEdit});
+  const _SeasonTile(
+      {required this.season,
+      required this.busy,
+      required this.canMoveStart,
+      required this.onEdit});
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Card(
-      color: season.isCurrent ? colors.primaryContainer.withValues(alpha: 0.4) : null,
+      color: season.isCurrent
+          ? colors.primaryContainer.withValues(alpha: 0.4)
+          : null,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -218,9 +252,16 @@ class _SeasonTile extends StatelessWidget {
                     runSpacing: 4,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Text(season.displayName, style: const TextStyle(fontWeight: FontWeight.w700)),
-                      if (season.isCurrent) const Chip(label: Text('Atual'), visualDensity: VisualDensity.compact),
-                      if (season.isPreSeason) const Chip(label: Text('Pré-temporada'), visualDensity: VisualDensity.compact),
+                      Text(season.displayName,
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      if (season.isCurrent)
+                        const Chip(
+                            label: Text('Atual'),
+                            visualDensity: VisualDensity.compact),
+                      if (season.isPreSeason)
+                        const Chip(
+                            label: Text('Pré-temporada'),
+                            visualDensity: VisualDensity.compact),
                     ],
                   ),
                 ),
@@ -238,7 +279,8 @@ class _SeasonTile extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             if (season.closedByName != null && season.closedAt != null)
-              Text('Fechada por ${season.closedByName} em ${_fmt.format(season.closedAt!.toLocal())}',
+              Text(
+                  'Fechada por ${season.closedByName} em ${_fmt.format(season.closedAt!.toLocal())}',
                   style: Theme.of(context).textTheme.bodySmall),
             if (season.hasEnded)
               TextButton.icon(
@@ -284,10 +326,20 @@ class _CloseSheetState extends ConsumerState<_CloseSheet> {
 
   Future<void> _loadPreview() async {
     try {
-      final preview = await ref.read(seasonsDatasourceProvider).closePreview(widget.groupId, _cut);
-      if (mounted) setState(() { _preview = preview; _error = null; });
+      final preview = await ref
+          .read(seasonsDatasourceProvider)
+          .closePreview(widget.groupId, _cut);
+      if (mounted)
+        setState(() {
+          _preview = preview;
+          _error = null;
+        });
     } catch (e) {
-      if (mounted) setState(() { _preview = null; _error = extractDioError(e); });
+      if (mounted)
+        setState(() {
+          _preview = null;
+          _error = extractDioError(e);
+        });
     }
   }
 
@@ -295,12 +347,14 @@ class _CloseSheetState extends ConsumerState<_CloseSheet> {
   Widget build(BuildContext context) {
     final p = _preview;
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.fromLTRB(
+          16, 16, 16, 16 + MediaQuery.of(context).viewInsets.bottom),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Fechar temporada', style: Theme.of(context).textTheme.titleMedium),
+          Text('Fechar temporada',
+              style: Theme.of(context).textTheme.titleMedium),
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Corte (a próxima começa aqui)'),
@@ -317,7 +371,9 @@ class _CloseSheetState extends ConsumerState<_CloseSheet> {
           TextField(
             controller: _name,
             maxLength: 40,
-            decoration: InputDecoration(labelText: 'Nome da próxima', hintText: p == null ? null : 'Padrão: ${p.nextDefaultName}'),
+            decoration: InputDecoration(
+                labelText: 'Nome da próxima',
+                hintText: p == null ? null : 'Padrão: ${p.nextDefaultName}'),
             onChanged: (_) => setState(() {}),
           ),
           SwitchListTile(
@@ -326,7 +382,9 @@ class _CloseSheetState extends ConsumerState<_CloseSheet> {
             onChanged: (v) => setState(() => _isPre = v),
             title: const Text('A próxima é pré-temporada'),
           ),
-          if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          if (_error != null)
+            Text(_error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
           if (p != null)
             Text(
               'Fecha ${p.closingDisplayName} (${_fmt.format(p.closingStartsAt.toLocal())} → ${_fmt.format(p.cutAt.toLocal())}): '
@@ -339,7 +397,12 @@ class _CloseSheetState extends ConsumerState<_CloseSheet> {
           FilledButton.icon(
             onPressed: p == null
                 ? null
-                : () => Navigator.pop(context, _CloseInput(_cut, _name.text.trim().isEmpty ? null : _name.text.trim(), _isPre)),
+                : () => Navigator.pop(
+                    context,
+                    _CloseInput(
+                        _cut,
+                        _name.text.trim().isEmpty ? null : _name.text.trim(),
+                        _isPre)),
             icon: const Icon(Icons.flag_outlined),
             label: const Text('Confirmar fechamento'),
           ),
@@ -357,7 +420,8 @@ Future<DateTime?> _pickDateTime(BuildContext context, DateTime initial) async {
     lastDate: DateTime.now().add(const Duration(days: 31)),
   );
   if (date == null || !context.mounted) return null;
-  final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(initial));
+  final time = await showTimePicker(
+      context: context, initialTime: TimeOfDay.fromDateTime(initial));
   if (time == null) return null;
   return DateTime(date.year, date.month, date.day, time.hour, time.minute);
 }

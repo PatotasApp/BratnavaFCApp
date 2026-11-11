@@ -13,12 +13,14 @@ void main() {
   // Logo ocupa apenas 45% → padding de 27.5% em cada lado
   // Garante que as estrelas fiquem bem dentro da área visível
   final logoSize = (outputSize * 0.45).round();
-  final offset   = ((outputSize - logoSize) / 2).round();
+  final offset = ((outputSize - logoSize) / 2).round();
 
   final canvas = img.Image(width: outputSize, height: outputSize);
   img.fill(canvas, color: img.ColorRgba8(255, 255, 255, 255));
 
-  final resized = img.copyResize(src, width: logoSize, height: logoSize,
+  final resized = img.copyResize(src,
+      width: logoSize,
+      height: logoSize,
       interpolation: img.Interpolation.average);
 
   img.compositeImage(canvas, resized, dstX: offset, dstY: offset);

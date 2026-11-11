@@ -1417,7 +1417,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
               child: OutlinedButton.icon(
                 key: const Key('settings-spreadsheets'),
                 onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => GroupSpreadsheetsPage(groupId: widget.groupId),
+                  builder: (_) =>
+                      GroupSpreadsheetsPage(groupId: widget.groupId),
                 )),
                 icon: const Icon(Icons.cloud_upload_outlined, size: 18),
                 label: const Text('Enviar ou acompanhar planilhas'),

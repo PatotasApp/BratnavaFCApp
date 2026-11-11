@@ -77,15 +77,15 @@ class PollCard extends StatelessWidget {
                           child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                            Icon(Icons.sports_soccer_rounded,
-                                size: 9, color: AppColors.emerald700),
-                            SizedBox(width: 3),
-                            Text('Partida',
-                                style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.emerald700)),
-                          ]),
+                                Icon(Icons.sports_soccer_rounded,
+                                    size: 9, color: AppColors.emerald700),
+                                SizedBox(width: 3),
+                                Text('Partida',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.emerald700)),
+                              ]),
                         ),
                       ],
                     ],

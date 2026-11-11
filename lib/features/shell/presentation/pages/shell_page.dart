@@ -117,30 +117,30 @@ class _ShellPageState extends ConsumerState<ShellPage>
         }
       },
       child: Scaffold(
-      appBar: const AppTopBar(),
-      body: Column(
-        children: [
-          // Fica acima de tudo e some sozinho quando o e-mail é verificado.
-          // Não bloqueia navegação: verificar é recomendado, não exigido.
-          const EmailVerificationBanner(),
-          Expanded(
-            child: KeyedSubtree(
-              key: ValueKey(accountKey),
-              child: widget.child,
+        appBar: const AppTopBar(),
+        body: Column(
+          children: [
+            // Fica acima de tudo e some sozinho quando o e-mail é verificado.
+            // Não bloqueia navegação: verificar é recomendado, não exigido.
+            const EmailVerificationBanner(),
+            Expanded(
+              child: KeyedSubtree(
+                key: ValueKey(accountKey),
+                child: widget.child,
+              ),
             ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: _PrototypeBottomNavigation(
-        selectedIndex: selected,
-        onDestinationSelected: (i) {
-          if (_tabs[i].path.isNotEmpty) {
-            context.go(_tabs[i].path);
-          } else {
-            _openDrawer(context);
-          }
-        },
-      ),
+          ],
+        ),
+        bottomNavigationBar: _PrototypeBottomNavigation(
+          selectedIndex: selected,
+          onDestinationSelected: (i) {
+            if (_tabs[i].path.isNotEmpty) {
+              context.go(_tabs[i].path);
+            } else {
+              _openDrawer(context);
+            }
+          },
+        ),
       ),
     );
   }
@@ -458,51 +458,51 @@ class _MoreSheet extends ConsumerWidget {
                           groupId: groupId,
                           canSeeReplays: canSeeReplays,
                         ))) ...[
-                    Text(
-                      group.label.toUpperCase(),
-                      style: theme.textTheme.labelSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final columns = constraints.maxWidth < 320 ? 1 : 2;
-                        const gap = 8.0;
-                        final itemWidth =
-                            (constraints.maxWidth - gap * (columns - 1)) /
-                                columns;
-                        final visibleItems = group.items.where((item) {
-                          return isShellMenuItemVisible(
-                            path: item.path,
-                            isAdmin: isAdmin,
-                            canSeeStats: canSeeStats,
-                            requiresStatsPermission: item.statsPermission,
-                            groupId: groupId,
-                            canSeeReplays: canSeeReplays,
-                          );
-                        });
+                      Text(
+                        group.label.toUpperCase(),
+                        style: theme.textTheme.labelSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final columns = constraints.maxWidth < 320 ? 1 : 2;
+                          const gap = 8.0;
+                          final itemWidth =
+                              (constraints.maxWidth - gap * (columns - 1)) /
+                                  columns;
+                          final visibleItems = group.items.where((item) {
+                            return isShellMenuItemVisible(
+                              path: item.path,
+                              isAdmin: isAdmin,
+                              canSeeStats: canSeeStats,
+                              requiresStatsPermission: item.statsPermission,
+                              groupId: groupId,
+                              canSeeReplays: canSeeReplays,
+                            );
+                          });
 
-                        return Wrap(
-                          spacing: gap,
-                          runSpacing: gap,
-                          children: [
-                            for (final item in visibleItems)
-                              SizedBox(
-                                width: itemWidth,
-                                child: PrototypeMenuTile(
-                                  icon: Icon(item.icon),
-                                  title: item.label,
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                    context.go(item.path);
-                                  },
+                          return Wrap(
+                            spacing: gap,
+                            runSpacing: gap,
+                            children: [
+                              for (final item in visibleItems)
+                                SizedBox(
+                                  width: itemWidth,
+                                  child: PrototypeMenuTile(
+                                    icon: Icon(item.icon),
+                                    title: item.label,
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                      context.go(item.path);
+                                    },
+                                  ),
                                 ),
-                              ),
-                          ],
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                  ],
+                            ],
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                 ],
               ),
             ),

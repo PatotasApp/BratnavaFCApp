@@ -39,8 +39,9 @@ void main() {
   /// copyWith não serve para REMOVER a foto: nele `null` significa "mantém o valor
   /// atual". Sem um setter explícito, excluir a foto deixaria o avatar antigo na barra.
   test('withPhoto limpa a foto quando recebe nulo', () {
-    final cleared = account(photoUrl: 'https://pub-abc.r2.dev/avatars/u/foto.jpg')
-        .withPhoto(null);
+    final cleared =
+        account(photoUrl: 'https://pub-abc.r2.dev/avatars/u/foto.jpg')
+            .withPhoto(null);
 
     expect(cleared.photoUrl, isNull);
     expect(cleared.userId, 'user-1');

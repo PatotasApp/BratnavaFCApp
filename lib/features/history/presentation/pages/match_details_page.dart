@@ -339,10 +339,10 @@ class _DetailsBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedTab = (activeTab == 2 && !canSeeStats) ||
-            (activeTab == 3 && !showReplays)
-        ? 0
-        : activeTab;
+    final selectedTab =
+        (activeTab == 2 && !canSeeStats) || (activeTab == 3 && !showReplays)
+            ? 0
+            : activeTab;
     // Build sorted goals with team info
     final byMatchPlayerId = <String, String>{};
     final byPlayerId = <String, String>{};
