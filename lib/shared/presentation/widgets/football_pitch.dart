@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
+import 'field_label_layout.dart';
 
 /// Campo de futebol compartilhado.
 ///
@@ -323,12 +324,7 @@ class MatchPitch extends StatelessWidget {
                     // reclama de overflow — o recorte de verdade, igual ao do
                     // site, é o ClipRRect de fora.
                     clipBehavior: Clip.none,
-                    children: [
-                      ..._pins(teamA, teamAColor,
-                          top: true, size: constraints.biggest),
-                      ..._pins(teamB, teamBColor,
-                          top: false, size: constraints.biggest),
-                    ],
+                    children: _pins(constraints.biggest),
                   ),
                 ),
               ),
@@ -338,23 +334,59 @@ class MatchPitch extends StatelessWidget {
     );
   }
 
-  List<Widget> _pins(List<PitchPlayer> players, Color color,
-      {required bool top, required Size size}) {
-    final positions = _layout(players, top: top);
-    return List.generate(players.length, (i) {
-      // Deitado, a metade "de cima" vira a da esquerda. É o mesmo giro de 90°
-      // aplicado ao desenho do campo: (x, y) → (y, 1 − x).
-      final p = positions[i];
-      final pos = horizontal ? Offset(p.dy, 1 - p.dx) : p;
+  List<Widget> _pins(Size size) {
+    Offset center(Offset position) {
+      final normalized = horizontal
+          ? Offset(position.dy, 1 - position.dx)
+          : position;
+      return Offset(
+        normalized.dx * size.width,
+        normalized.dy * size.height,
+      );
+    }
 
-      // O pino é ancorado pelo centro do círculo, não pelo topo da caixa: se
-      // fosse pelo topo, um nome de duas linhas empurraria o círculo para
-      // cima e o jogador sairia da posição.
+    final players = [...teamA, ...teamB];
+    final colors = [
+      ...List<Color>.filled(teamA.length, teamAColor),
+      ...List<Color>.filled(teamB.length, teamBColor),
+    ];
+    final centers = [
+      ..._layout(teamA, top: true).map(center),
+      ..._layout(teamB, top: false).map(center),
+    ];
+    const labelStyle = TextStyle(
+      fontSize: 9,
+      height: 1.15,
+      fontWeight: FontWeight.w600,
+    );
+    final labelRects = resolveFieldLabelRects(
+      anchors: [
+        for (var i = 0; i < players.length; i++)
+          FieldLabelAnchor(center: centers[i], text: players[i].name),
+      ],
+      fieldSize: size,
+      labelWidth: _Pin.width,
+      pinRadius: _Pin.diameter / 2,
+      textStyle: labelStyle,
+    );
+
+    return List.generate(players.length, (i) {
+      final pinRect = Rect.fromCircle(
+        center: centers[i],
+        radius: _Pin.diameter / 2,
+      );
+      final bounds = pinRect.expandToInclude(labelRects[i]);
       return Positioned(
-        left: pos.dx * size.width - _Pin.width / 2,
-        top: pos.dy * size.height - _Pin.diameter / 2,
-        width: _Pin.width,
-        child: _Pin(player: players[i], color: color),
+        left: bounds.left,
+        top: bounds.top,
+        width: bounds.width,
+        height: bounds.height,
+        child: _Pin(
+          player: players[i],
+          color: colors[i],
+          pinRect: pinRect.shift(-bounds.topLeft),
+          labelRect: labelRects[i].shift(-bounds.topLeft),
+        ),
       );
     });
   }
@@ -367,10 +399,18 @@ class _Pin extends StatelessWidget {
 
   /// Largura da caixa do nome. É ela que limita o texto: sem um teto, nomes
   /// compridos se sobrepõem aos dos vizinhos.
-  static const double width = 52;
+  static const double width = 72;
   static const double diameter = 28;
 
-  const _Pin({required this.player, required this.color});
+  final Rect pinRect;
+  final Rect labelRect;
+
+  const _Pin({
+    required this.player,
+    required this.color,
+    required this.pinRect,
+    required this.labelRect,
+  });
 
   /// Primeira letra do primeiro e do último nome — "Pedro Roweder" → "PR".
   /// Nome único vira as duas primeiras letras.
@@ -393,59 +433,61 @@ class _Pin extends StatelessWidget {
     final onColor =
         light ? AppColors.darkApp.withValues(alpha: .82) : AppColors.onDark;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
+    return Stack(
+      clipBehavior: Clip.none,
       children: [
-        Container(
-          width: diameter,
-          height: diameter,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: light
-                  ? AppColors.darkApp.withValues(alpha: .25)
-                  : AppColors.onDark.withValues(alpha: .9),
-              width: 2,
+        Positioned.fromRect(
+          rect: pinRect,
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: light
+                    ? AppColors.darkApp.withValues(alpha: .25)
+                    : AppColors.onDark.withValues(alpha: .9),
+                width: 2,
+              ),
+              boxShadow: const [
+                BoxShadow(
+                    color: AppColors.shadow25,
+                    blurRadius: 4,
+                    offset: Offset(0, 2)),
+              ],
             ),
-            boxShadow: const [
-              BoxShadow(
-                  color: AppColors.shadow25,
-                  blurRadius: 4,
-                  offset: Offset(0, 2)),
-            ],
-          ),
-          child: player.isGoalkeeper
-              // Luva, como no Montar times — lá é o emoji 🧤.
-              ? const Text('🧤', style: TextStyle(fontSize: 13, height: 1))
-              : Text(
-                  _initials(player.name),
-                  style: TextStyle(
-                    fontSize: 9,
-                    height: 1,
-                    fontWeight: FontWeight.w900,
-                    color: onColor,
+            child: player.isGoalkeeper
+                ? const Text('🧤', style: TextStyle(fontSize: 13, height: 1))
+                : Text(
+                    _initials(player.name),
+                    style: TextStyle(
+                      fontSize: 9,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                      color: onColor,
+                    ),
                   ),
-                ),
-        ),
-        const SizedBox(height: 2),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-          decoration: BoxDecoration(
-            color: AppColors.darkApp.withValues(alpha: .6),
-            borderRadius: BorderRadius.circular(4),
           ),
-          child: Text(
-            player.name,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.onDark,
-              fontSize: 9,
-              height: 1.15,
-              fontWeight: FontWeight.w600,
+        ),
+        Positioned.fromRect(
+          rect: labelRect,
+          child: Container(
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            decoration: BoxDecoration(
+              color: AppColors.darkApp.withValues(alpha: .6),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              player.name,
+              textAlign: TextAlign.center,
+              softWrap: true,
+              style: const TextStyle(
+                color: AppColors.onDark,
+                fontSize: 9,
+                height: 1.15,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ),

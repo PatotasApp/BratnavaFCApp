@@ -1106,19 +1106,27 @@ class _ReplayButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isLightColor = color.computeLuminance() > 0.6;
+    final foregroundColor =
+        isLightColor ? AppColors.slate900 : AppColors.onDark;
+
     return FilledButton.icon(
       style: FilledButton.styleFrom(
         backgroundColor: color,
+        foregroundColor: foregroundColor,
+        side: isLightColor
+            ? const BorderSide(color: AppColors.slate300)
+            : null,
         padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 10),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       onPressed: disabled ? null : onPressed,
       icon: loading
-          ? const SizedBox(
+          ? SizedBox(
               width: 18,
               height: 18,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: AppColors.onDark),
+                  strokeWidth: 2, color: foregroundColor),
             )
           : Icon(icon, size: 18),
       label: Text(

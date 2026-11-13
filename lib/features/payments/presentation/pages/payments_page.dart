@@ -843,9 +843,15 @@ class _CaixaViewState extends ConsumerState<_CaixaView> {
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: isDark ? AppColors.warning : AppColors.amber50,
+                color: isDark
+                    ? AppColors.warning.withValues(alpha: .12)
+                    : AppColors.amber50,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.amber200),
+                border: Border.all(
+                  color: isDark
+                      ? AppColors.warning.withValues(alpha: .35)
+                      : AppColors.amber200,
+                ),
               ),
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1638,9 +1644,68 @@ class _MonthlyGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final border = isDark ? AppColors.slate700 : AppColors.slate200;
     final headerBg = isDark ? AppColors.slate800 : AppColors.slate50;
-    final rowHover =
-        isDark ? AppColors.slate800.withValues(alpha: .4) : AppColors.slate50;
     final txtMuted = isDark ? AppColors.slate500 : AppColors.slate300;
+    const nameColumnWidth = 132.0;
+    const monthColumnWidth = 52.0;
+    const headerHeight = 56.0;
+    const rowHeight = 48.0;
+
+    Widget playerCell(PlayerRow row) => Container(
+          height: rowHeight,
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: border)),
+          ),
+          child: PlayerNameWithIcon(
+            name: row.playerName,
+            icons: icons,
+            isGoalkeeper: row.isGoalkeeper,
+            iconSize: 11,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: isDark ? AppColors.slate100 : AppColors.slate800,
+            ),
+          ),
+        );
+
+    Widget monthCell(PlayerRow row, int month) {
+      final cell = row.months.where((c) => c.month == month).firstOrNull;
+      return Container(
+        width: monthColumnWidth,
+        height: rowHeight,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: border)),
+        ),
+        child: cell == null
+            ? Text('—', style: TextStyle(fontSize: 12, color: txtMuted))
+            : InkWell(
+                onTap: () => onTap(row, month),
+                borderRadius: BorderRadius.circular(18),
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: cell.isPaid
+                        ? AppColors.green100
+                        : AppColors.rose50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    cell.isPaid
+                        ? Icons.check_circle_rounded
+                        : Icons.cancel_rounded,
+                    size: 16,
+                    color: cell.isPaid
+                        ? AppColors.primaryPressed
+                        : AppColors.rose400,
+                  ),
+                ),
+              ),
+      );
+    }
 
     return Container(
       decoration: BoxDecoration(
@@ -1649,100 +1714,86 @@ class _MonthlyGrid extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: DataTable(
-            headingRowColor: WidgetStateProperty.all(headerBg),
-            dataRowMinHeight: 48,
-            dataRowMaxHeight: 48,
-            columnSpacing: 8,
-            horizontalMargin: 12,
-            columns: [
-              DataColumn(
-                label: Text('Jogador',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? AppColors.slate400 : AppColors.slate600,
-                    )),
-              ),
-              for (var i = 0; i < 12; i++)
-                DataColumn(
-                  label: Text(
-                    _months[i],
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: i + 1 <= currentMonth
-                          ? (isDark ? AppColors.slate400 : AppColors.slate500)
-                          : txtMuted,
-                    ),
-                  ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // A coluna do jogador fica fora do scroll horizontal para que o
+            // nome continue identificando a linha ao navegar pelos meses.
+            SizedBox(
+              width: nameColumnWidth,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border(right: BorderSide(color: border)),
                 ),
-            ],
-            rows: grid.players.map((row) {
-              return DataRow(
-                color: WidgetStateProperty.resolveWith(
-                  (s) => s.contains(WidgetState.hovered) ? rowHover : null,
-                ),
-                cells: [
-                  DataCell(
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        PlayerNameWithIcon(
-                          name: row.playerName,
-                          icons: icons,
-                          isGoalkeeper: row.isGoalkeeper,
-                          iconSize: 11,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: isDark
-                                ? AppColors.slate100
-                                : AppColors.slate800,
-                          ),
+                child: Column(
+                  children: [
+                    Container(
+                      height: headerHeight,
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      color: headerBg,
+                      child: Text(
+                        'Jogador',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isDark
+                              ? AppColors.slate400
+                              : AppColors.slate600,
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                  for (var m = 1; m <= 12; m++) ...[
-                    () {
-                      final cell =
-                          row.months.where((c) => c.month == m).firstOrNull;
-                      if (cell == null) {
-                        return DataCell(
-                          Text('—',
-                              style: TextStyle(fontSize: 12, color: txtMuted)),
-                        );
-                      }
-                      final paid = cell.isPaid;
-                      return DataCell(
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: paid ? AppColors.green100 : AppColors.rose50,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            paid
-                                ? Icons.check_circle_rounded
-                                : Icons.cancel_rounded,
-                            size: 16,
-                            color: paid
-                                ? AppColors.primaryPressed
-                                : AppColors.rose400,
-                          ),
-                        ),
-                        onTap: () => onTap(row, m),
-                      );
-                    }(),
+                    for (final row in grid.players) playerCell(row),
                   ],
-                ],
-              );
-            }).toList(),
-          ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: monthColumnWidth * 12,
+                  child: Column(
+                    children: [
+                      Container(
+                        height: headerHeight,
+                        color: headerBg,
+                        child: Row(
+                          children: [
+                            for (var i = 0; i < 12; i++)
+                              SizedBox(
+                                width: monthColumnWidth,
+                                child: Center(
+                                  child: Text(
+                                    _months[i],
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: i + 1 <= currentMonth
+                                          ? (isDark
+                                              ? AppColors.slate400
+                                              : AppColors.slate500)
+                                          : txtMuted,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      for (final row in grid.players)
+                        Row(
+                          children: [
+                            for (var month = 1; month <= 12; month++)
+                              monthCell(row, month),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

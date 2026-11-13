@@ -1,23 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../../../core/api/api_response.dart';
-import '../../../../core/constants/app_constants.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/datasources/championship_api_datasource.dart';
 import '../../data/datasources/championship_datasource.dart';
-import '../../data/datasources/championship_mock_datasource.dart';
 import '../../domain/entities/championship_enums.dart';
 import '../../domain/entities/championship_models.dart';
 
-final championshipDataSourceProvider = Provider<ChampionshipDataSource>((ref) {
-  if (AppConstants.championshipsUseMock) {
-    return ChampionshipMockDataSource();
-  }
-  return ChampionshipApiDataSource(ref.watch(dioProvider));
-});
+final championshipDataSourceProvider = Provider<ChampionshipDataSource>(
+  (ref) => ChampionshipApiDataSource(ref.watch(dioProvider)),
+);
 
 final championshipGroupIdProvider = Provider<String>((ref) {
   final account = ref.watch(accountStoreProvider).activeAccount;
@@ -38,12 +33,6 @@ typedef ChampionshipGroupPlayer = ({String id, String name, bool isGuest});
 /// usa. O convidado do campeonato tem de ser jogador já cadastrado.
 final championshipGroupPlayersProvider = FutureProvider.autoDispose
     .family<List<ChampionshipGroupPlayer>, String>((ref, groupId) async {
-  if (AppConstants.championshipsUseMock) {
-    return [
-      for (var index = 1; index <= 4; index++)
-        (id: 'mock-guest-$index', name: 'Convidado $index', isGuest: true),
-    ];
-  }
   final response =
       await ref.watch(dioProvider).get(ApiConstants.groupById(groupId));
   final body = unwrapMap(response.data);

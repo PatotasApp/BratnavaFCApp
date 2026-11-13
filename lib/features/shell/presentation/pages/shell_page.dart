@@ -28,7 +28,7 @@ class _ShellPageState extends ConsumerState<ShellPage>
     _TabItem(
         icon: Icons.home_outlined,
         activeIcon: Icons.home,
-        label: 'Dashboard',
+        label: 'Visão geral',
         path: '/app'),
     _TabItem(
         icon: Icons.sports_soccer_outlined,

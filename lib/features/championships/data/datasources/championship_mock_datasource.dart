@@ -217,7 +217,7 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
 
   static String? _colorWarning(int teamCount) => teamCount <= _mockColors.length
       ? null
-      : 'Ha so ${_mockColors.length} cor(es) ativa(s) para $teamCount times: '
+      : 'Há só ${_mockColors.length} cor(es) ativa(s) para $teamCount times: '
           '${teamCount - _mockColors.length} time(s) ficaram sem cor. '
           'Cadastre mais cores em Cores dos times.';
 

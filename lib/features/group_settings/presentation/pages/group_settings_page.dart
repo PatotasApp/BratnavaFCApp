@@ -518,7 +518,6 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Divider(color: isDark ? AppColors.slate700 : AppColors.slate100),
         Text(
           'Abas disponiveis',
           style: TextStyle(
@@ -1799,6 +1798,13 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                Divider(
+                  height: 1,
+                  color: isDark ? AppColors.slate700 : AppColors.slate200,
+                ),
+                const SizedBox(height: 12),
+                _statsTabChips(isDark),
               ],
             ),
           ),
@@ -1872,17 +1878,6 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
             ),
             const SizedBox(height: 12),
           ],
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.slate900 : AppColors.onDark,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: isDark ? AppColors.slate700 : AppColors.slate200),
-            ),
-            padding: const EdgeInsets.all(16),
-            child: _statsTabChips(isDark),
-          ),
         ],
       );
 
@@ -2285,19 +2280,6 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                 _statsTabChips(isDark),
               ],
             ),
-          ),
-
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.slate900 : AppColors.onDark,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: isDark ? AppColors.slate700 : AppColors.slate200),
-            ),
-            padding: const EdgeInsets.all(16),
-            child: _statsTabChips(isDark), // Conteúdo da seção geral.
           ),
 
           const SizedBox(height: 20),

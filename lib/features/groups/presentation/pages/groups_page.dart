@@ -4539,7 +4539,10 @@ class _InviteSheetState extends State<_InviteSheet> {
           _AppInput(
             controller: _searchCtrl,
             hint: 'Pesquisar...',
-            enabled: !_loading,
+            // A busca é disparada enquanto o usuário digita. Desabilitar o
+            // campo durante a requisição remove o foco e fecha o teclado,
+            // impedindo que o termo seja corrigido após o primeiro resultado.
+            enabled: true,
             isDark: isDark,
           ),
           if (_err != null) ...[

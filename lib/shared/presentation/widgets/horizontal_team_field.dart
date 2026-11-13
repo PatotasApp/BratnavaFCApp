@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
+import 'field_label_layout.dart';
 
 // ── Data model ────────────────────────────────────────────────────────────────
 
@@ -116,6 +117,32 @@ class HorizontalTeamField extends StatelessWidget {
           builder: (context, constraints) {
             final w = constraints.maxWidth;
             final h = constraints.maxHeight;
+            const labelStyle = TextStyle(
+              fontSize: 8,
+              fontWeight: FontWeight.w700,
+              height: 1.15,
+            );
+            const labelWidth = 72.0;
+            final centers = [
+              ...posA.map((pos) => Offset(pos.dx * w, pos.dy * h)),
+              ...posB.map((pos) => Offset(pos.dx * w, pos.dy * h)),
+            ];
+            final labelRects = resolveFieldLabelRects(
+              anchors: [
+                for (var i = 0; i < teamA.length; i++)
+                  FieldLabelAnchor(center: centers[i], text: teamA[i].name),
+                for (var i = 0; i < teamB.length; i++)
+                  FieldLabelAnchor(
+                    center: centers[teamA.length + i],
+                    text: teamB[i].name,
+                  ),
+              ],
+              fieldSize: Size(w, h),
+              labelWidth: labelWidth,
+              pinRadius: 11,
+              textStyle: labelStyle,
+              horizontalPadding: 3,
+            );
             return Stack(
               children: [
                 // Field markings
@@ -129,10 +156,9 @@ class HorizontalTeamField extends StatelessWidget {
                   _PlayerPin(
                     name: teamA[i].name,
                     color: teamAColor,
-                    pos: posA[i],
+                    center: centers[i],
+                    labelRect: labelRects[i],
                     dimmed: teamA[i].dimmed,
-                    width: w,
-                    height: h,
                     isSelected: canInteract &&
                         (sel1Id == teamA[i].id || sel2Id == teamA[i].id),
                     onTap: canInteract && onPlayerClick != null
@@ -145,10 +171,9 @@ class HorizontalTeamField extends StatelessWidget {
                   _PlayerPin(
                     name: teamB[i].name,
                     color: teamBColor,
-                    pos: posB[i],
+                    center: centers[teamA.length + i],
+                    labelRect: labelRects[teamA.length + i],
                     dimmed: teamB[i].dimmed,
-                    width: w,
-                    height: h,
                     isSelected: canInteract &&
                         (sel1Id == teamB[i].id || sel2Id == teamB[i].id),
                     onTap: canInteract && onPlayerClick != null
@@ -238,20 +263,18 @@ class _HorizontalFieldPainter extends CustomPainter {
 class _PlayerPin extends StatelessWidget {
   final String name;
   final Color color;
-  final Offset pos; // normalized 0..1
+  final Offset center;
+  final Rect labelRect;
   final bool dimmed;
-  final double width;
-  final double height;
   final bool isSelected;
   final VoidCallback? onTap;
 
   const _PlayerPin({
     required this.name,
     required this.color,
-    required this.pos,
+    required this.center,
+    required this.labelRect,
     required this.dimmed,
-    required this.width,
-    required this.height,
     this.isSelected = false,
     this.onTap,
   });
@@ -270,82 +293,93 @@ class _PlayerPin extends StatelessWidget {
   Widget build(BuildContext context) {
     const pinR = 11.0;
     const pinD = pinR * 2;
-    const labelW = 62.0;
+    final pinRect = Rect.fromCircle(center: center, radius: pinR);
+    final bounds = pinRect.expandToInclude(labelRect);
 
-    final cx = pos.dx * width;
-    final cy = pos.dy * height;
-
-    // Clamp so the pin label never clips outside the field edges
-    final left =
-        (cx - labelW / 2).clamp(0.0, math.max(0.0, width - labelW)).toDouble();
-
-    final uiColor = dimmed
-        ? color.withValues(alpha: 0.35)
-        : (color.computeLuminance() > 0.8
-            ? AppColors.lightTextSecondary
-            : color);
-
-    final textColor =
-        dimmed ? AppColors.onDark.withValues(alpha: 0.35) : AppColors.onDark;
+    // Mantém a cor real do time. Para cores claras (especialmente branco),
+    // o contraste vem do texto e da borda escuros, como no campo do dashboard,
+    // em vez de trocar a cor escolhida por cinza.
+    final pinColor = isSelected ? AppColors.warning : color;
+    final isLightColor = pinColor.computeLuminance() > 0.5;
+    final uiColor =
+        dimmed ? pinColor.withValues(alpha: 0.35) : pinColor;
+    final baseTextColor = isLightColor
+        ? AppColors.darkApp.withValues(alpha: 0.82)
+        : AppColors.onDark;
+    final textColor = dimmed
+        ? baseTextColor.withValues(alpha: 0.35)
+        : baseTextColor;
 
     final borderColor = isSelected
         ? AppColors.warning // amber — "selected" ring
-        : AppColors.onDark.withValues(alpha: dimmed ? 0.2 : 0.7);
+        : isLightColor
+            ? AppColors.darkApp.withValues(alpha: dimmed ? 0.1 : 0.25)
+            : AppColors.onDark.withValues(alpha: dimmed ? 0.2 : 0.9);
     final borderWidth = isSelected ? 2.0 : 1.5;
 
-    Widget pin = Column(
-      mainAxisSize: MainAxisSize.min,
+    Widget pin = Stack(
+      clipBehavior: Clip.none,
       children: [
-        Container(
-          width: pinD,
-          height: pinD,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: isSelected ? AppColors.warning : uiColor,
-            border: Border.all(color: borderColor, width: borderWidth),
-            boxShadow: dimmed
-                ? []
-                : [
-                    BoxShadow(
-                      color: (isSelected ? AppColors.warning : uiColor)
-                          .withValues(alpha: 0.6),
-                      blurRadius: isSelected ? 8 : 4,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
-          ),
-          child: Center(
-            child: Text(
-              _abbr(name),
-              style: TextStyle(
-                fontSize: 7.5,
-                fontWeight: FontWeight.w800,
-                color: textColor,
-                height: 1,
+        Positioned(
+          left: pinRect.left - bounds.left,
+          top: pinRect.top - bounds.top,
+          child: Container(
+            width: pinD,
+            height: pinD,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: uiColor,
+              border: Border.all(color: borderColor, width: borderWidth),
+              boxShadow: dimmed
+                  ? []
+                  : [
+                      BoxShadow(
+                        color: isLightColor
+                            ? AppColors.shadow25
+                            : uiColor.withValues(alpha: 0.6),
+                        blurRadius: isSelected ? 8 : 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+            ),
+            child: Center(
+              child: Text(
+                _abbr(name),
+                style: TextStyle(
+                  fontSize: 7.5,
+                  fontWeight: FontWeight.w800,
+                  color: textColor,
+                  height: 1,
+                ),
               ),
             ),
           ),
         ),
-        const SizedBox(height: 2),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? AppColors.warning.withValues(alpha: 0.85)
-                : AppColors.darkApp.withValues(alpha: dimmed ? 0.25 : 0.55),
-            borderRadius: BorderRadius.circular(3),
-          ),
-          child: Text(
-            name,
-            style: TextStyle(
-              fontSize: 8.0,
-              fontWeight: FontWeight.w700,
-              color: AppColors.onDark.withValues(alpha: dimmed ? 0.45 : 1.0),
-              height: 1.15,
+        Positioned(
+          left: labelRect.left - bounds.left,
+          top: labelRect.top - bounds.top,
+          width: labelRect.width,
+          height: labelRect.height,
+          child: Container(
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? AppColors.warning.withValues(alpha: 0.85)
+                  : AppColors.darkApp.withValues(alpha: dimmed ? 0.25 : 0.55),
+              borderRadius: BorderRadius.circular(3),
             ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
+            child: Text(
+              name,
+              style: TextStyle(
+                fontSize: 8,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onDark.withValues(alpha: dimmed ? 0.45 : 1),
+                height: 1.15,
+              ),
+              softWrap: true,
+              textAlign: TextAlign.center,
+            ),
           ),
         ),
       ],
@@ -356,9 +390,10 @@ class _PlayerPin extends StatelessWidget {
     }
 
     return Positioned(
-      left: left,
-      top: cy - pinR,
-      width: labelW,
+      left: bounds.left,
+      top: bounds.top,
+      width: bounds.width,
+      height: bounds.height,
       child: pin,
     );
   }

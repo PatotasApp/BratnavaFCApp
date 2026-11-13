@@ -339,10 +339,13 @@ class _DetailsBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedTab =
-        (activeTab == 2 && !canSeeStats) || (activeTab == 3 && !showReplays)
-            ? 0
-            : activeTab;
+    final hasGoals = data.goals.isNotEmpty;
+    final selectedTab = switch (activeTab) {
+      0 when !hasGoals => 1,
+      2 when !canSeeStats => hasGoals ? 0 : 1,
+      3 when !showReplays => hasGoals ? 0 : 1,
+      _ => activeTab,
+    };
     // Build sorted goals with team info
     final byMatchPlayerId = <String, String>{};
     final byPlayerId = <String, String>{};
@@ -433,6 +436,7 @@ class _DetailsBody extends StatelessWidget {
                   isDark: isDark,
                   canSeeStats: canSeeStats,
                   showReplays: showReplays,
+                  hasGoals: hasGoals,
                 ),
               ),
               const SizedBox(height: 12),
@@ -544,6 +548,7 @@ class _MatchDetailsTabs extends StatelessWidget {
   final bool isDark;
   final bool canSeeStats;
   final bool showReplays;
+  final bool hasGoals;
 
   const _MatchDetailsTabs({
     required this.activeTab,
@@ -551,10 +556,11 @@ class _MatchDetailsTabs extends StatelessWidget {
     required this.isDark,
     required this.canSeeStats,
     required this.showReplays,
+    required this.hasGoals,
   });
 
   List<(String, int)> get _tabs => [
-        ('Resumo', 0),
+        if (hasGoals) ('Resumo', 0),
         ('Escalação', 1),
         if (canSeeStats) ('Gols', 2),
         if (showReplays) ('Replays', 3),
@@ -941,15 +947,14 @@ class _HeroMvpBadge extends StatelessWidget {
                       color: textColor,
                     ),
                   ),
-                  for (final name in names)
-                    Text(
-                      name,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: textColor,
-                      ),
+                  Text(
+                    names.join(' · '),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: textColor,
                     ),
+                  ),
                 ],
               ),
             ),

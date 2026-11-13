@@ -91,6 +91,11 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
                     items: _tabs,
                     value: _tab,
                     semanticLabel: 'Filtrar por resposta',
+                    labelBuilder: (tab) => switch (tab) {
+                      _tabRejected => '$tab · ${rejected.length}',
+                      _tabPending => '$tab · ${pending.length}',
+                      _ => '$tab · ${accepted.length}',
+                    },
                     onChanged: (t) => setState(() => _tab = t),
                   ),
                   const SizedBox(height: 12),
