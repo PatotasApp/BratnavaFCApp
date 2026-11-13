@@ -12,6 +12,7 @@ import '../../../group_settings/presentation/providers/group_settings_provider.d
 import '../../../members/presentation/providers/members_provider.dart';
 import '../../domain/entities/match_models.dart';
 import '../providers/match_provider.dart';
+import '../widgets/match_player_role_toggle.dart';
 
 class Step2AceitacaoPage extends ConsumerStatefulWidget {
   final Widget? linkedPollStrip;
@@ -421,6 +422,40 @@ class _InviteCard extends StatelessWidget {
         children: [
           // `SectionTitle`: título em caixa normal + contagem num chip neutro.
           PrototypeSectionTitle(title: title, count: '$count'),
+          if (isAdmin && items.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppColors.slate800
+                    : AppColors.emerald50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDark
+                      ? AppColors.slate700
+                      : AppColors.emerald200,
+                ),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.touch_app_outlined,
+                      size: 16, color: AppColors.emerald700),
+                  SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      'Toque em Linha ou Goleiro para alterar a função do jogador.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.slate500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           Column(
             children: [
@@ -641,24 +676,13 @@ class _PlayerRow extends StatelessWidget {
                 ),
                 // Goleiro toggle (admin) ou ícone (não-admin)
                 if (isAdmin)
-                  GestureDetector(
-                    onTap: busy
-                        ? null
-                        : () => onSetRole(
-                            player.matchPlayerId, !player.isGoalkeeper),
-                    child: Opacity(
-                      opacity: busy ? 0.5 : 1,
-                      child: Tooltip(
-                        message: player.isGoalkeeper
-                            ? 'Goleiro – toque para mudar para linha'
-                            : 'Linha – toque para mudar para goleiro',
-                        child: renderGroupIcon(
-                          player.isGoalkeeper ? icons.goalkeeper : icons.player,
-                          size: 14,
-                          color: AppColors.slate400,
-                        ),
-                      ),
-                    ),
+                  MatchPlayerRoleToggle(
+                    playerName: player.playerName,
+                    isGoalkeeper: player.isGoalkeeper,
+                    icons: icons,
+                    busy: busy,
+                    onPressed: () => onSetRole(
+                        player.matchPlayerId, !player.isGoalkeeper),
                   )
                 else
                   renderGroupIcon(
