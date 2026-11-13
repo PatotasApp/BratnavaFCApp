@@ -24,13 +24,21 @@ void main() {
     );
   }
 
-  testWidgets('mostra a função atual e deixa claro que é uma troca',
+  testWidgets('mostra um seletor compacto entre goleiro e jogador',
       (tester) async {
     final semantics = tester.ensureSemantics();
     await tester.pumpWidget(subject(isGoalkeeper: false));
 
-    expect(find.text('Linha'), findsOneWidget);
-    expect(find.byIcon(Icons.swap_horiz_rounded), findsOneWidget);
+    expect(find.byKey(const Key('role-goalkeeper-icon')), findsOneWidget);
+    expect(find.byKey(const Key('match-player-role-switch')), findsOneWidget);
+    expect(find.byKey(const Key('role-field-player-icon')), findsOneWidget);
+    expect(find.text('Linha'), findsNothing);
+    expect(find.text('Goleiro'), findsNothing);
+    final size = tester.getSize(
+      find.byKey(const Key('match-player-role-toggle')),
+    );
+    expect(size.width, lessThan(90));
+    expect(size.height, lessThan(30));
     expect(
       find.bySemanticsLabel(RegExp('Artur: Linha.*mudar para goleiro')),
       findsOneWidget,
@@ -45,7 +53,6 @@ void main() {
       onPressed: () => taps++,
     ));
 
-    expect(find.text('Goleiro'), findsOneWidget);
     await tester.tap(find.byKey(const Key('match-player-role-toggle')));
 
     expect(taps, 1);

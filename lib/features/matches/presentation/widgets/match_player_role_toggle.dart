@@ -24,12 +24,13 @@ class MatchPlayerRoleToggle extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final role = isGoalkeeper ? 'Goleiro' : 'Linha';
     final nextRole = isGoalkeeper ? 'jogador de linha' : 'goleiro';
-    final foreground = isDark ? AppColors.slate200 : AppColors.slate700;
+    final inactive = isDark ? AppColors.slate500 : AppColors.slate400;
+    final track = isDark ? AppColors.slate700 : AppColors.slate200;
     final border = isDark ? AppColors.slate600 : AppColors.slate300;
     final background = isDark
-        ? AppColors.slate800.withValues(alpha: 0.75)
-        : AppColors.slate100;
-    final actionDescription = '$role — toque para mudar para $nextRole';
+        ? AppColors.slate800.withValues(alpha: 0.55)
+        : AppColors.slate100.withValues(alpha: 0.8);
+    final actionDescription = '$role. Toque para mudar para $nextRole';
 
     return Tooltip(
       message: actionDescription,
@@ -44,41 +45,73 @@ class MatchPlayerRoleToggle extends StatelessWidget {
             onTap: busy ? null : onPressed,
             borderRadius: BorderRadius.circular(999),
             child: Ink(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               decoration: BoxDecoration(
                 color: background,
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: border),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (busy)
-                    SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: foreground,
-                      ),
-                    )
-                  else
-                    renderGroupIcon(
-                      isGoalkeeper ? icons.goalkeeper : icons.player,
-                      size: 14,
-                      color: foreground,
+                  Opacity(
+                      key: const Key('role-goalkeeper-icon'),
+                      opacity: isGoalkeeper ? 1 : 0.42,
+                      child: renderGroupIcon(
+                        icons.goalkeeper,
+                        size: 15,
+                        color: isGoalkeeper ? AppColors.emerald500 : inactive,
+                      )),
+                  const SizedBox(width: 4),
+                  AnimatedContainer(
+                    key: const Key('match-player-role-switch'),
+                    duration: const Duration(milliseconds: 160),
+                    curve: Curves.easeOut,
+                    width: 30,
+                    height: 16,
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: track,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: border),
                     ),
-                  const SizedBox(width: 5),
-                  Text(
-                    role,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: foreground,
+                    child: busy
+                        ? const Center(
+                            child: SizedBox(
+                              width: 10,
+                              height: 10,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.6,
+                                color: AppColors.emerald500,
+                              ),
+                            ),
+                          )
+                        : AnimatedAlign(
+                            duration: const Duration(milliseconds: 160),
+                            curve: Curves.easeOut,
+                            alignment: isGoalkeeper
+                                ? Alignment.centerLeft
+                                : Alignment.centerRight,
+                            child: Container(
+                              key: const Key('match-player-role-thumb'),
+                              width: 10,
+                              height: 10,
+                              decoration: const BoxDecoration(
+                                color: AppColors.emerald500,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 4),
+                  Opacity(
+                    key: const Key('role-field-player-icon'),
+                    opacity: isGoalkeeper ? 0.42 : 1,
+                    child: renderGroupIcon(
+                      icons.player,
+                      size: 15,
+                      color: isGoalkeeper ? inactive : AppColors.emerald500,
                     ),
                   ),
-                  const SizedBox(width: 3),
-                  Icon(Icons.swap_horiz_rounded, size: 14, color: foreground),
                 ],
               ),
             ),
