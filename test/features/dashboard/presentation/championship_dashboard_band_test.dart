@@ -5,18 +5,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:patotas_app/core/theme/app_theme.dart';
-import 'package:patotas_app/features/championships/data/datasources/championship_mock_datasource.dart';
+import '../../../support/championship_test_datasource.dart';
 import 'package:patotas_app/features/championships/domain/entities/championship_enums.dart';
 import 'package:patotas_app/features/championships/domain/entities/championship_models.dart';
 import 'package:patotas_app/features/championships/presentation/providers/championship_provider.dart';
 import 'package:patotas_app/features/dashboard/presentation/pages/dashboard_page.dart';
 
 /// O card do campeonato no dashboard muda por etapa, como o da partida.
-/// Usa os campeonatos do mock: um em cada status (`championship-<valor>`).
+/// Usa cenários de teste: um campeonato em cada status (`championship-<valor>`).
 void main() {
   setUpAll(() => initializeDateFormatting('pt_BR'));
 
-  final dataSource = ChampionshipMockDataSource();
+  final dataSource = ChampionshipTestDataSource();
 
   Future<void> pump(WidgetTester tester, ChampionshipStatus status) async {
     final details =
@@ -33,7 +33,7 @@ void main() {
             child: ChampionshipDashboardBand(
               details: details,
               groupId: 'g',
-              // 1º jogador do mock: time Azul nas etapas com times.
+              // 1º jogador do cenário: time Azul nas etapas com times.
               playerId: 'championship-${status.value}-player-1',
             ),
           ),
@@ -56,7 +56,7 @@ void main() {
     expect(find.text('9 confirmados · presença aberta'), findsOneWidget);
     expect(find.text('Presença confirmada'), findsOneWidget);
     expect(find.text('Não vou'), findsOneWidget);
-    expect(find.text('9'), findsOneWidget); // 9 confirmados no mock
+    expect(find.text('9'), findsOneWidget); // 9 confirmados no cenário
   });
 
   testWidgets('times: resumo, seu time e escalação', (tester) async {
@@ -161,7 +161,7 @@ void main() {
   });
 }
 
-class _NextGameDataSource extends ChampionshipMockDataSource {
+class _NextGameDataSource extends ChampionshipTestDataSource {
   _NextGameDataSource(this._next);
   final Future<NextGameSuggestion?> Function() _next;
 

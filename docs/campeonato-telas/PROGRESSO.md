@@ -50,7 +50,7 @@ Contrato da API: **v6** de 27/10/2026 (antes: v3).
 | 14 | Seletor de jogadores da patota para convidado | ✅ |
 
 O que mudou:
-- Removidos o formato mata-mata (3), `ChampionshipEndMode` e `championshipEnd` (modelos, wizard e mock). O wizard explica que o campeonato termina em "Encerrar campeonato".
+- Removidos o formato mata-mata (3), `ChampionshipEndMode` e `championshipEnd` (modelos, wizard e fonte de teste). O wizard explica que o campeonato termina em "Encerrar campeonato".
 - Novo `WinnerStaysLimitRule` (`winnerStays.limitRule`): "Ao atingir o limite" aparece quando o limite de vitórias é maior que 0, com o aviso "Com 3 times não dá para saírem os dois; sai só o vencedor." Os presets usam `limitRule` 1. Se o JSON não trouxer `limitRule`, o app assume 1.
 - Desempate: "Pontos" fica travado em 1º (cadeado; os outros só se reordenam entre si). A validação exige `tiebreakers[0] == 1`.
 - `minGamesForPlacementResult` aparece no wizard com o texto "Quem jogou menos que isso conta só presença" (padrão 1; aceita >= 0, como o servidor).

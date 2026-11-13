@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:patotas_app/core/theme/app_theme.dart';
-import 'package:patotas_app/features/championships/data/datasources/championship_mock_datasource.dart';
+import '../../../support/championship_test_datasource.dart';
 import 'package:patotas_app/features/championships/presentation/pages/championship_wizard_page.dart';
 import 'package:patotas_app/features/championships/presentation/providers/championship_provider.dart';
 
@@ -19,7 +19,7 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         championshipDataSourceProvider
-            .overrideWithValue(ChampionshipMockDataSource()),
+            .overrideWithValue(ChampionshipTestDataSource()),
         championshipGroupIdProvider.overrideWithValue('g'),
       ],
       child: MaterialApp(
@@ -57,7 +57,7 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         championshipDataSourceProvider
-            .overrideWithValue(ChampionshipMockDataSource()),
+            .overrideWithValue(ChampionshipTestDataSource()),
         championshipGroupIdProvider.overrideWithValue('g'),
       ],
       child: MaterialApp(

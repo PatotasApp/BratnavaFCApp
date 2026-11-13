@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:patotas_app/features/championships/data/datasources/championship_mock_datasource.dart';
+import '../../../support/championship_test_datasource.dart';
 import 'package:patotas_app/features/championships/domain/entities/championship_enums.dart';
 import 'package:patotas_app/features/championships/domain/entities/championship_models.dart';
 import 'package:patotas_app/features/championships/domain/entities/championship_rules.dart';
@@ -52,8 +52,9 @@ void main() {
     expect(parsed.playedAt.toUtc(), instant.toUtc());
   });
 
-  test('mock oferece um campeonato em cada status do contrato', () async {
-    final datasource = ChampionshipMockDataSource();
+  test('fonte de teste oferece um campeonato em cada status do contrato',
+      () async {
+    final datasource = ChampionshipTestDataSource();
 
     final summaries = await datasource.fetchAll('group');
 
@@ -69,7 +70,7 @@ void main() {
   });
 
   test('detalhe aceita myInviteResponse nulo no contrato v3', () async {
-    final datasource = ChampionshipMockDataSource();
+    final datasource = ChampionshipTestDataSource();
     final source = await datasource.fetchById('group', 'championship-0');
     final json = source.toJson()..['myInviteResponse'] = null;
 
