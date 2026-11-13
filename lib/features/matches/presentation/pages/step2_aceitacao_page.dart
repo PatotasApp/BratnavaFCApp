@@ -742,8 +742,8 @@ class _PlayerRow extends StatelessWidget {
           ),
           const SizedBox(width: PrototypeLayout.rowGap),
 
-          // Duas colunas de ação sempre reservadas. Mesmo quando uma ação não
-          // existe na aba atual, a outra não muda de posição entre as linhas.
+          // Com duas ações, recusar fica à esquerda e aceitar à direita. Se só
+          // houver uma ação, ela ocupa a coluna da direita.
           SizedBox(
             key: ValueKey('match-player-actions-${player.matchPlayerId}'),
             width: _actionsWidth,
@@ -751,7 +751,7 @@ class _PlayerRow extends StatelessWidget {
               children: [
                 SizedBox(
                   width: PrototypeLayout.minimumTouchTarget,
-                  child: showReject
+                  child: showReject && showAccept
                       ? _ActionBtn(
                           icon: Icons.close,
                           isDark: isDark,
@@ -772,7 +772,15 @@ class _PlayerRow extends StatelessWidget {
                           enabled: !busy,
                           onTap: () => onAccept(player.playerId),
                         )
-                      : null,
+                      : showReject
+                          ? _ActionBtn(
+                              icon: Icons.close,
+                              isDark: isDark,
+                              tooltip: 'Recusar',
+                              enabled: !busy,
+                              onTap: () => onReject(player.playerId),
+                            )
+                          : null,
                 ),
               ],
             ),
