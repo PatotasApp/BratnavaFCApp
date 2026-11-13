@@ -637,9 +637,17 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
               .read(authNotifierProvider.notifier)
               .refreshGroupMembership();
           ref.invalidate(myPlayersProvider);
-          // Abre automaticamente se agora há exatamente uma patota
-          if (_myGroups.length == 1) {
-            _openGroup(_myGroups.first['groupId']!);
+
+          // A patota recém-criada passa a ser o contexto ativo mesmo quando o
+          // usuário já participa de outras. Além de atualizar a tela, a
+          // seleção fica persistida no AccountStore e sobrevive ao onboarding
+          // de planilhas e às próximas aberturas do app.
+          final newGroupId = createdId;
+          if (newGroupId != null && newGroupId.isNotEmpty) {
+            await ref.read(authNotifierProvider.notifier).selectActiveGroup(
+                  groupId: newGroupId,
+                );
+            if (mounted) await _openGroup(newGroupId);
           }
         },
       ),
