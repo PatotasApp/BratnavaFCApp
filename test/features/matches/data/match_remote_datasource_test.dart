@@ -31,4 +31,22 @@ void main() {
     );
     expect(call.data, {'isGoalkeeper': true});
   });
+
+  test('adiciona convidado diretamente na partida', () async {
+    final recorder = _RequestRecorder();
+    final datasource = MatchRemoteDataSource(
+      Dio()..interceptors.add(recorder),
+    );
+
+    await datasource.addGuest('group-1', 'match-1', 'Bruno', false, 4);
+
+    final call = recorder.calls.single;
+    expect(call.method, 'POST');
+    expect(call.path, '/api/matches/group/group-1/match-1/guests');
+    expect(call.data, {
+      'name': 'Bruno',
+      'isGoalkeeper': false,
+      'guestStarRating': 4,
+    });
+  });
 }

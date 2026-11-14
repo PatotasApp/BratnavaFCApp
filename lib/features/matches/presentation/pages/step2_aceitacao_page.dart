@@ -12,6 +12,7 @@ import '../../../group_settings/presentation/providers/group_settings_provider.d
 import '../../../members/presentation/providers/members_provider.dart';
 import '../../domain/entities/match_models.dart';
 import '../providers/match_provider.dart';
+import '../widgets/match_add_guest_sheet.dart';
 import '../widgets/match_player_role_toggle.dart';
 
 class Step2AceitacaoPage extends ConsumerStatefulWidget {
@@ -35,6 +36,19 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
 
   Future<void> _goNext() async {
     await ref.read(matchNotifierProvider.notifier).goToMatchmaking();
+  }
+
+  Future<void> _addGuest(GroupIcons icons) async {
+    final added = await showMatchAddGuestSheet(
+      context: context,
+      icons: icons,
+      onSubmit: (name, isGoalkeeper, starRating) => ref
+          .read(matchNotifierProvider.notifier)
+          .addGuest(name, isGoalkeeper, starRating),
+    );
+    if (added == true && mounted) {
+      setState(() => _tab = _tabAccepted);
+    }
   }
 
   @override
@@ -86,6 +100,19 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
                   if (widget.linkedPollStrip != null) ...[
                     const SizedBox(height: 10),
                     widget.linkedPollStrip!,
+                  ],
+                  if (isAdmin) ...[
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: OutlinedButton.icon(
+                        key: const Key('add-match-guest-button'),
+                        onPressed: s.mutating ? null : () => _addGuest(icons),
+                        icon: const Icon(Icons.person_add_alt_1_outlined,
+                            size: 17),
+                        label: const Text('Adicionar convidado'),
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 12),
                   PrototypeSegmented(
