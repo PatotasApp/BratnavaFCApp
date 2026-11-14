@@ -659,6 +659,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     if (id != null && mounted) {
       await showSpreadsheetOnboardingSheet(context,
           groupId: id, groupName: createdName);
+      if (mounted) context.go('/app/settings?tour=true');
     }
   }
 

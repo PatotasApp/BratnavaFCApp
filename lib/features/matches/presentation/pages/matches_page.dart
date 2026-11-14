@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/realtime/realtime_provider.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/no_active_group_view.dart';
+import '../../../../shared/presentation/widgets/new_group_tour_banner.dart';
 import '../../../auth/domain/entities/account.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
@@ -31,7 +33,13 @@ final _linkedPollDetailProvider = FutureProvider.autoDispose
 
 class MatchesPage extends ConsumerStatefulWidget {
   final String? initialMatchId;
-  const MatchesPage({super.key, this.initialMatchId});
+  final bool onboarding;
+
+  const MatchesPage({
+    super.key,
+    this.initialMatchId,
+    this.onboarding = false,
+  });
 
   @override
   ConsumerState<MatchesPage> createState() => _MatchesPageState();
@@ -103,10 +111,35 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
     final placeName = _placeCtrl.text.trim();
     final playedAt =
         DateTime(_date.year, _date.month, _date.day, _time.hour, _time.minute);
-    await ref
+    final created = await ref
         .read(matchNotifierProvider.notifier)
         .createMatch(placeName, playedAt);
-    if (mounted) setState(() => _creatingNew = false);
+    if (!created) return;
+    if (mounted) {
+      setState(() => _creatingNew = false);
+      if (widget.onboarding) {
+        await showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            icon: const Icon(Icons.check_circle_rounded,
+                color: AppColors.accent, size: 42),
+            title: const Text('Patota pronta!'),
+            content: const Text(
+              'Configurações, uniformes e primeira partida cadastrados. Agora você já pode convidar os jogadores.',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  context.go('/app/matches');
+                },
+                child: const Text('Começar'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _editCurrentMatch(MatchState s) async {
@@ -256,6 +289,7 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
               onPickTime: _pickTime,
               onCreate: _createMatch,
               mutating: s.mutating,
+              onboarding: widget.onboarding,
               onCancel: s.hasMatch
                   ? () => setState(() => _creatingNew = false)
                   : null,
@@ -276,6 +310,7 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
                 onPickTime: _pickTime,
                 onCreate: _createMatch,
                 mutating: s.mutating,
+                onboarding: widget.onboarding,
               )
             : const _WaitingForMatchView();
       case MatchStep.accept:
@@ -1387,6 +1422,7 @@ class _CreateMatchView extends StatelessWidget {
   final VoidCallback onPickTime;
   final VoidCallback onCreate;
   final bool mutating;
+  final bool onboarding;
   final VoidCallback? onCancel;
 
   const _CreateMatchView({
@@ -1398,6 +1434,7 @@ class _CreateMatchView extends StatelessWidget {
     required this.onPickTime,
     required this.onCreate,
     required this.mutating,
+    this.onboarding = false,
     this.onCancel,
   });
 
@@ -1412,66 +1449,80 @@ class _CreateMatchView extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Form(
               key: formKey,
-              child: Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Nova Partida',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 20),
-                      // Local
-                      TextFormField(
-                        controller: placeCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Local *',
-                          prefixIcon: Icon(Icons.location_on_outlined),
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (v) => (v?.trim().isEmpty ?? true)
-                            ? 'Informe o local'
-                            : null,
-                      ),
-                      const SizedBox(height: 16),
-                      // Data
-                      InkWell(
-                        onTap: onPickDate,
-                        borderRadius: BorderRadius.circular(4),
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Data *',
-                            prefixIcon: Icon(Icons.calendar_today_outlined),
-                            border: OutlineInputBorder(),
+              child: Column(
+                children: [
+                  if (onboarding) ...[
+                    NewGroupTourBanner(
+                      step: 3,
+                      title: 'Crie a primeira partida',
+                      description:
+                          'Confira o local, a data sugerida e o horário. Ao criar a partida, sua patota estará pronta para começar.',
+                      onSkip: () => context.go('/app'),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Nova Partida',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 20),
+                          // Local
+                          TextFormField(
+                            controller: placeCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Local *',
+                              prefixIcon: Icon(Icons.location_on_outlined),
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (v) => (v?.trim().isEmpty ?? true)
+                                ? 'Informe o local'
+                                : null,
                           ),
-                          child: Text(fmt.format(date),
-                              style: const TextStyle(fontSize: 16)),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      // Horário
-                      InkWell(
-                        onTap: onPickTime,
-                        borderRadius: BorderRadius.circular(4),
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Horário *',
-                            prefixIcon: Icon(Icons.access_time_outlined),
-                            border: OutlineInputBorder(),
+                          const SizedBox(height: 16),
+                          // Data
+                          InkWell(
+                            onTap: onPickDate,
+                            borderRadius: BorderRadius.circular(4),
+                            child: InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'Data *',
+                                prefixIcon: Icon(Icons.calendar_today_outlined),
+                                border: OutlineInputBorder(),
+                              ),
+                              child: Text(fmt.format(date),
+                                  style: const TextStyle(fontSize: 16)),
+                            ),
                           ),
-                          child: Text(time.format(context),
-                              style: const TextStyle(fontSize: 16)),
-                        ),
+                          const SizedBox(height: 16),
+                          // Horário
+                          InkWell(
+                            onTap: onPickTime,
+                            borderRadius: BorderRadius.circular(4),
+                            child: InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'Horário *',
+                                prefixIcon: Icon(Icons.access_time_outlined),
+                                border: OutlineInputBorder(),
+                              ),
+                              child: Text(time.format(context),
+                                  style: const TextStyle(fontSize: 16)),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ),

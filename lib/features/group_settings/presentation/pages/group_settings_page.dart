@@ -16,6 +16,7 @@ import '../providers/group_settings_provider.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/no_active_group_view.dart';
+import '../../../../shared/presentation/widgets/new_group_tour_banner.dart';
 import '../../../../core/share/share_links.dart';
 import '../../../group_spreadsheets/presentation/group_spreadsheets_page.dart';
 
@@ -218,7 +219,9 @@ const _kDayLabels = <String>[
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 class GroupSettingsPage extends ConsumerStatefulWidget {
-  const GroupSettingsPage({super.key});
+  final bool onboarding;
+
+  const GroupSettingsPage({super.key, this.onboarding = false});
 
   @override
   ConsumerState<GroupSettingsPage> createState() =>
@@ -299,6 +302,7 @@ class _GroupSettingsPageWrapperState extends ConsumerState<GroupSettingsPage> {
         detailAsync: detailAsync,
         groupId: groupId,
         account: account,
+        onboarding: widget.onboarding,
       ),
     );
   }
@@ -331,12 +335,14 @@ class _SettingsBody extends ConsumerStatefulWidget {
   final AsyncValue<GroupDetail> detailAsync;
   final String groupId;
   final Account account;
+  final bool onboarding;
 
   const _SettingsBody({
     required this.settings,
     required this.detailAsync,
     required this.groupId,
     required this.account,
+    required this.onboarding,
   });
 
   @override
@@ -344,6 +350,7 @@ class _SettingsBody extends ConsumerStatefulWidget {
 }
 
 class _SettingsBodyState extends ConsumerState<_SettingsBody> {
+  final ScrollController _scrollController = ScrollController();
   // ── Form state ────────────────────────────────────────────────────────────
   late final TextEditingController _placeCtrl;
   late final TextEditingController _minCtrl;
@@ -393,6 +400,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   // ── Tab state ─────────────────────────────────────────────────────────────
   int _activeTab = 0;
+  int _tourTabIndex = 0;
 
   // ── Save state ────────────────────────────────────────────────────────────
   bool _saving = false;
@@ -556,6 +564,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _placeCtrl.dispose();
     _minCtrl.dispose();
     _maxCtrl.dispose();
@@ -568,7 +577,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   // ── Save ──────────────────────────────────────────────────────────────────
 
-  Future<void> _save() async {
+  Future<bool> _save() async {
+    var saved = false;
     setState(() {
       _saving = true;
       _saveMsg = null;
@@ -635,6 +645,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
         manualMatchSchedules: _manualMatchSchedules,
       );
       ref.invalidate(groupSettingsProvider(widget.groupId));
+      saved = true;
       if (mounted) {
         setState(() {
           _isPersisted = true;
@@ -655,6 +666,27 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+    return saved;
+  }
+
+  Future<void> _advanceSettingsTour() async {
+    if (_tourTabIndex < _kTabLabels.length - 1) {
+      setState(() {
+        _tourTabIndex++;
+        _activeTab = _tourTabIndex;
+      });
+      if (_scrollController.hasClients) {
+        await _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+      }
+      return;
+    }
+
+    final saved = await _save();
+    if (saved && mounted) context.go('/app/team-colors?tour=true');
   }
 
   // ── Time picker ───────────────────────────────────────────────────────────
@@ -1017,11 +1049,32 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
     return Scaffold(
       body: CustomScrollView(
+        controller: _scrollController,
         slivers: [
           // ── 1. Header ────────────────────────────────────────────────────
           SliverToBoxAdapter(
             child: _buildHeader(detail?.name),
           ),
+
+          if (widget.onboarding)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: NewGroupTourBanner(
+                  step: 1,
+                  title: 'Configurações · ${_kTabLabels[_activeTab]}',
+                  description:
+                      'Conheça e ajuste esta aba. O tour vai passar pelas cinco áreas antes de seguir para os uniformes.',
+                  status: '${_tourTabIndex + 1}/${_kTabLabels.length} abas',
+                  actionLabel: _tourTabIndex == _kTabLabels.length - 1
+                      ? 'Salvar e ir para uniformes'
+                      : 'Próxima aba: ${_kTabLabels[_tourTabIndex + 1]}',
+                  actionEnabled: !_saving,
+                  onAction: _advanceSettingsTour,
+                  onSkip: () => context.go('/app'),
+                ),
+              ),
+            ),
 
           // ── 2. Configurações (tabbed) ─────────────────────────────────────
           SliverToBoxAdapter(
@@ -1276,8 +1329,9 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   Widget _buildTabBtn(int idx, String label, bool isDark) {
     final sel = _activeTab == idx;
+    final enabled = !widget.onboarding || idx <= _tourTabIndex;
     return InkWell(
-      onTap: () => setState(() => _activeTab = idx),
+      onTap: enabled ? () => setState(() => _activeTab = idx) : null,
       borderRadius: BorderRadius.circular(7),
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 44),
@@ -1980,7 +2034,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
             SizedBox(
               height: 44,
               child: FilledButton.icon(
-                onPressed: _saving ? null : _save,
+                onPressed: _saving ? null : () => _save(),
                 icon: _saving
                     ? const SizedBox(
                         width: 14,
@@ -2280,7 +2334,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                 SizedBox(
                   height: 44,
                   child: FilledButton.icon(
-                    onPressed: _saving ? null : _save,
+                    onPressed: _saving ? null : () => _save(),
                     icon: _saving
                         ? const SizedBox(
                             width: 14,

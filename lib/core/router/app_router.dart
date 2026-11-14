@@ -228,6 +228,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/app/matches',
             builder: (_, state) => MatchesPage(
               initialMatchId: state.uri.queryParameters['matchId'],
+              onboarding: state.uri.queryParameters['tour'] == 'true',
             ),
           ),
           GoRoute(
@@ -253,7 +254,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/app/team-colors',
-            builder: (_, __) => const TeamColorsPage(),
+            builder: (_, state) => TeamColorsPage(
+              onboarding: state.uri.queryParameters['tour'] == 'true',
+            ),
           ),
           GoRoute(
             path: '/app/visual-stats',
@@ -287,7 +290,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/app/settings',
-            builder: (_, __) => const GroupSettingsPage(),
+            builder: (_, state) => GroupSettingsPage(
+              onboarding: state.uri.queryParameters['tour'] == 'true',
+            ),
           ),
           GoRoute(
             path: '/app/spreadsheets',

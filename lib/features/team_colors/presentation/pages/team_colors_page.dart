@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/no_active_group_view.dart';
+import '../../../../shared/presentation/widgets/new_group_tour_banner.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/datasources/team_color_remote_datasource.dart';
@@ -14,7 +16,9 @@ import '../providers/team_colors_provider.dart';
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 class TeamColorsPage extends ConsumerStatefulWidget {
-  const TeamColorsPage({super.key});
+  final bool onboarding;
+
+  const TeamColorsPage({super.key, this.onboarding = false});
 
   @override
   ConsumerState<TeamColorsPage> createState() => _TeamColorsPageState();
@@ -63,6 +67,44 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
                     : null,
               ),
             ),
+
+            if (widget.onboarding && groupIdNN != null)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Consumer(
+                    builder: (context, ref, _) {
+                      final colors = ref
+                              .watch(teamColorsProvider(groupIdNN))
+                              .valueOrNull ??
+                          const <TeamColor>[];
+                      final count = colors.length;
+                      return NewGroupTourBanner(
+                        step: 2,
+                        title: 'Cadastre dois uniformes',
+                        description:
+                            'Crie as duas cores usadas para dividir os times. O próximo passo será criar a primeira partida.',
+                        status: '${count.clamp(0, 2)}/2',
+                        actionLabel: count >= 2
+                            ? 'Continuar para a primeira partida'
+                            : count == 0
+                                ? 'Cadastrar 1º uniforme'
+                                : 'Cadastrar 2º uniforme',
+                        actionEnabled: canManage,
+                        onAction: count >= 2
+                            ? () => context.go('/app/matches?tour=true')
+                            : () => _openEditSheet(
+                                  context,
+                                  groupId: groupIdNN,
+                                  canManage: canManage,
+                                  isDark: isDark,
+                                ),
+                        onSkip: () => context.go('/app'),
+                      );
+                    },
+                  ),
+                ),
+              ),
 
             if (groupId == null || groupId.isEmpty) ...[
               // Enquanto myPlayersProvider carrega, spinner em vez de "sem grupo"
