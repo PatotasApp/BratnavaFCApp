@@ -58,7 +58,7 @@ void main() {
     expect(advanced, isFalse);
   });
 
-  testWidgets('mantém o conteúdo ao fundo interativo fora do painel',
+  testWidgets('recolhe sem bloquear o conteúdo ao fundo e permite reabrir',
       (tester) async {
     var backgroundTapped = false;
 
@@ -89,6 +89,15 @@ void main() {
     );
 
     await tester.tap(find.text('Campo ao fundo'));
+    await tester.pump();
+
     expect(backgroundTapped, isTrue);
+    expect(find.text('TOUR GUIADO · ETAPA 1 DE 3'), findsNothing);
+    expect(find.text('Tour 1/3'), findsOneWidget);
+
+    await tester.tap(find.text('Tour 1/3'));
+    await tester.pump();
+
+    expect(find.text('TOUR GUIADO · ETAPA 1 DE 3'), findsOneWidget);
   });
 }
