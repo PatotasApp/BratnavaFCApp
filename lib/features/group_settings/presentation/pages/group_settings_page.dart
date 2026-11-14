@@ -1469,7 +1469,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                 _labeledInput(
                   label: 'Local padrão',
                   ctrl: _placeCtrl,
-                  hint: 'Ex: Boca Jrs',
+                  hint: 'Ex: Arena Municipal',
                   isDark: isDark,
                 ),
                 const SizedBox(height: 12),
@@ -2088,7 +2088,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                 _labeledInput(
                   label: 'Local padrão',
                   ctrl: _placeCtrl,
-                  hint: 'Ex: Boca Jrs',
+                  hint: 'Ex: Arena Municipal',
                   isDark: isDark,
                 ),
                 const SizedBox(height: 12),
