@@ -351,7 +351,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
   late final TextEditingController _feeCtrl;
   late final TextEditingController _goalkeeperFeeCtrl;
 
-  late int? _dayOfWeek; // null = "Sem padrão"
+  late Set<int> _daysOfWeek;
   late String? _kickoffTime; // "HH:mm" for display; saved as "HH:mm:ss"
   late int _paymentMode;
 
@@ -419,7 +419,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
           ? s.goalkeeperMonthlyFee!.toStringAsFixed(2)
           : '',
     );
-    _dayOfWeek = s.defaultDayOfWeek;
+    _daysOfWeek = s.defaultDaysOfWeek.toSet();
     // API stores "HH:mm:ss" — display only "HH:mm"
     _kickoffTime = s.defaultKickoffTime
         ?.substring(0, 5.clamp(0, s.defaultKickoffTime!.length));
@@ -600,7 +600,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
         minPlayers: min,
         maxPlayers: max,
         defaultPlaceName: place,
-        defaultDayOfWeek: _dayOfWeek,
+        defaultDaysOfWeek: _daysOfWeek.toList()..sort(),
         defaultKickoffTime: kickoff,
         paymentMode: _paymentMode,
         monthlyFee: fee,
@@ -1473,24 +1473,18 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                   isDark: isDark,
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                        child: _DayDropdown(
-                      label: 'Dia',
-                      value: _dayOfWeek,
-                      isDark: isDark,
-                      onChanged: (v) => setState(() => _dayOfWeek = v),
-                    )),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: _TimeField(
-                      label: 'Horário',
-                      value: _kickoffTime,
-                      isDark: isDark,
-                      onTap: _pickTime,
-                    )),
-                  ],
+                _DaysSelector(
+                  label: 'Dias',
+                  values: _daysOfWeek,
+                  isDark: isDark,
+                  onChanged: (values) => setState(() => _daysOfWeek = values),
+                ),
+                const SizedBox(height: 12),
+                _TimeField(
+                  label: 'Horário',
+                  value: _kickoffTime,
+                  isDark: isDark,
+                  onTap: _pickTime,
                 ),
               ],
             ),
@@ -2092,24 +2086,18 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                   isDark: isDark,
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                        child: _DayDropdown(
-                      label: 'Dia',
-                      value: _dayOfWeek,
-                      isDark: isDark,
-                      onChanged: (v) => setState(() => _dayOfWeek = v),
-                    )),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: _TimeField(
-                      label: 'Horário',
-                      value: _kickoffTime,
-                      isDark: isDark,
-                      onTap: _pickTime,
-                    )),
-                  ],
+                _DaysSelector(
+                  label: 'Dias',
+                  values: _daysOfWeek,
+                  isDark: isDark,
+                  onChanged: (values) => setState(() => _daysOfWeek = values),
+                ),
+                const SizedBox(height: 12),
+                _TimeField(
+                  label: 'Horário',
+                  value: _kickoffTime,
+                  isDark: isDark,
+                  onTap: _pickTime,
                 ),
               ],
             ),
@@ -3478,6 +3466,69 @@ class _IconRenderer extends StatelessWidget {
 
 // ── Day Dropdown ──────────────────────────────────────────────────────────────
 
+class _DaysSelector extends StatelessWidget {
+  final String label;
+  final Set<int> values;
+  final bool isDark;
+  final ValueChanged<Set<int>> onChanged;
+
+  const _DaysSelector({
+    required this.label,
+    required this.values,
+    required this.isDark,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: isDark ? AppColors.slate400 : AppColors.slate500,
+            )),
+        const SizedBox(height: 5),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: List.generate(7, (index) {
+            const labels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+            final selected = values.contains(index);
+            return FilterChip(
+              key: ValueKey('default-match-day-$index'),
+              label: Text(labels[index]),
+              selected: selected,
+              showCheckmark: false,
+              visualDensity: VisualDensity.compact,
+              onSelected: (enabled) {
+                final next = Set<int>.from(values);
+                enabled ? next.add(index) : next.remove(index);
+                onChanged(next);
+              },
+            );
+          }),
+        ),
+        if (values.isEmpty) ...[
+          const SizedBox(height: 5),
+          Text(
+            'Sem dias padrão',
+            style: TextStyle(
+              fontSize: 11,
+              color: isDark ? AppColors.slate500 : AppColors.slate400,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ── Due Day Dropdown ──────────────────────────────────────────────────────────
+
+// The automatic match scheduler still has one execution weekday of its own.
 class _DayDropdown extends StatelessWidget {
   final String label;
   final int? value;
@@ -3493,6 +3544,15 @@ class _DayDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const labels = [
+      'Domingo',
+      'Segunda-feira',
+      'Terça-feira',
+      'Quarta-feira',
+      'Quinta-feira',
+      'Sexta-feira',
+      'Sábado',
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3532,22 +3592,13 @@ class _DayDropdown extends StatelessWidget {
                               ? AppColors.slate500
                               : AppColors.slate400)),
                 ),
-                // 0=Domingo … 6=Sábado (mirrors site's DAY_OPTIONS)
-                ...List.generate(7, (i) {
-                  const labels = [
-                    'Domingo',
-                    'Segunda-feira',
-                    'Terça-feira',
-                    'Quarta-feira',
-                    'Quinta-feira',
-                    'Sexta-feira',
-                    'Sábado',
-                  ];
-                  return DropdownMenuItem<int?>(
-                    value: i,
-                    child: Text(labels[i]),
-                  );
-                }),
+                ...List.generate(
+                  labels.length,
+                  (index) => DropdownMenuItem<int?>(
+                    value: index,
+                    child: Text(labels[index]),
+                  ),
+                ),
               ],
             ),
           ),
@@ -3556,8 +3607,6 @@ class _DayDropdown extends StatelessWidget {
     );
   }
 }
-
-// ── Due Day Dropdown ──────────────────────────────────────────────────────────
 
 class _DueDayDropdown extends StatelessWidget {
   final String label;

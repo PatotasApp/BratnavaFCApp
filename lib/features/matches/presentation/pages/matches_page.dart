@@ -14,6 +14,7 @@ import '../../../polls/presentation/providers/polls_provider.dart';
 import '../../../polls/presentation/widgets/event_detail_sheet.dart';
 import '../../../polls/presentation/widgets/poll_detail_sheet.dart';
 import '../../domain/entities/match_models.dart';
+import '../../domain/next_match_date.dart';
 import '../providers/match_provider.dart';
 import '../widgets/match_stepper_header.dart';
 import 'step2_aceitacao_page.dart';
@@ -73,6 +74,10 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
   void _initForm(MatchState s) {
     if (_formInited) return;
     _formInited = true;
+    _date = nearestConfiguredMatchDate(
+      DateTime.now(),
+      s.groupSettings?.defaultDaysOfWeek ?? const [],
+    );
     if (s.groupSettings?.defaultPlaceName != null && _placeCtrl.text.isEmpty) {
       _placeCtrl.text = s.groupSettings!.defaultPlaceName!;
     }

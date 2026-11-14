@@ -496,26 +496,42 @@ class MatchGroupSettings {
   final int? minPlayers;
   final int? maxPlayers;
   final String? defaultPlaceName;
+  final List<int> defaultDaysOfWeek;
   final String? defaultKickoffTime; // formato "HH:mm:ss"
 
   const MatchGroupSettings({
     this.minPlayers,
     this.maxPlayers,
     this.defaultPlaceName,
+    this.defaultDaysOfWeek = const [],
     this.defaultKickoffTime,
   });
 
-  factory MatchGroupSettings.fromJson(Map<String, dynamic> j) =>
-      MatchGroupSettings(
-        minPlayers: j['minPlayers'] as int? ?? j['MinPlayers'] as int?,
-        maxPlayers: j['maxPlayers'] as int? ?? j['MaxPlayers'] as int?,
-        defaultPlaceName: j['defaultPlaceName'] as String? ??
-            j['DefaultPlaceName'] as String? ??
-            j['placeName'] as String? ??
-            j['PlaceName'] as String?,
-        defaultKickoffTime: j['defaultKickoffTime'] as String? ??
-            j['DefaultKickoffTime'] as String?,
-      );
+  factory MatchGroupSettings.fromJson(Map<String, dynamic> j) {
+    final legacyDay = j['defaultDayOfWeek'] as int? ??
+        j['DefaultDayOfWeek'] as int?;
+    final days = ((j['defaultDaysOfWeek'] ?? j['DefaultDaysOfWeek']) as List? ??
+            const [])
+        .whereType<num>()
+        .map((value) => value.toInt())
+        .where((value) => value >= 0 && value <= 6)
+        .toSet()
+        .toList()
+      ..sort();
+    if (days.isEmpty && legacyDay != null) days.add(legacyDay);
+
+    return MatchGroupSettings(
+      minPlayers: j['minPlayers'] as int? ?? j['MinPlayers'] as int?,
+      maxPlayers: j['maxPlayers'] as int? ?? j['MaxPlayers'] as int?,
+      defaultPlaceName: j['defaultPlaceName'] as String? ??
+          j['DefaultPlaceName'] as String? ??
+          j['placeName'] as String? ??
+          j['PlaceName'] as String?,
+      defaultDaysOfWeek: days,
+      defaultKickoffTime: j['defaultKickoffTime'] as String? ??
+          j['DefaultKickoffTime'] as String?,
+    );
+  }
 }
 
 // ── Estado global da partida ──────────────────────────────────────────────────

@@ -87,17 +87,57 @@ void main() {
       expect(gs.monthlyFee, 80.0);
       expect(gs.goalkeeperMonthlyFee, 50.0);
     });
+
+    test('reads multiple default match days', () {
+      final gs = GroupSettings.fromJson({
+        'defaultDayOfWeek': 2,
+        'defaultDaysOfWeek': [4, 2, 4],
+      });
+
+      expect(gs.defaultDaysOfWeek, [2, 4]);
+      expect(gs.defaultDayOfWeek, 2);
+    });
+
+    test('falls back to the legacy single default day', () {
+      final gs = GroupSettings.fromJson({'defaultDayOfWeek': 4});
+
+      expect(gs.defaultDaysOfWeek, [4]);
+    });
   });
 
   // ── GroupSettings.toJson ───────────────────────────────────────────────────
 
   group('GroupSettings.toJson', () {
+    test('sends multiple default match days and a legacy fallback', () {
+      final body = const GroupSettings().toJson(
+        minPlayers: 5,
+        maxPlayers: 10,
+        defaultPlaceName: null,
+        defaultDaysOfWeek: const [2, 4],
+        defaultKickoffTime: null,
+        paymentMode: 1,
+        monthlyFee: null,
+        goalkeeperMonthlyFee: null,
+        goalIcon: null,
+        goalkeeperIcon: null,
+        assistIcon: null,
+        ownGoalIcon: null,
+        mvpIcon: null,
+        playerIcon: null,
+        mvpTieRule: 1,
+        showPlayerStats: false,
+      );
+
+      expect(body['defaultDaysOfWeek'], [2, 4]);
+      expect(body['defaultDayOfWeek'], 2);
+    });
+
     test('includes goalkeeperMonthlyFee when paymentMode == 0', () {
       final body = const GroupSettings().toJson(
         minPlayers: 5,
         maxPlayers: 10,
         defaultPlaceName: null,
-        defaultDayOfWeek: null,
+        defaultDaysOfWeek: const [],
         defaultKickoffTime: null,
         paymentMode: 0,
         monthlyFee: 100.0,
@@ -121,7 +161,7 @@ void main() {
         minPlayers: 5,
         maxPlayers: 10,
         defaultPlaceName: null,
-        defaultDayOfWeek: null,
+        defaultDaysOfWeek: const [],
         defaultKickoffTime: null,
         paymentMode: 1,
         monthlyFee: 100.0,
@@ -147,7 +187,7 @@ void main() {
         minPlayers: 5,
         maxPlayers: 10,
         defaultPlaceName: null,
-        defaultDayOfWeek: null,
+        defaultDaysOfWeek: const [],
         defaultKickoffTime: null,
         paymentMode: 0,
         monthlyFee: 100.0,
@@ -182,7 +222,7 @@ void main() {
         minPlayers: 5,
         maxPlayers: 10,
         defaultPlaceName: null,
-        defaultDayOfWeek: null,
+        defaultDaysOfWeek: const [],
         defaultKickoffTime: null,
         paymentMode: 1,
         monthlyFee: null,
