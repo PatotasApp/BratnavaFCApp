@@ -42,7 +42,7 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
         account.groupAdminIds.isNotEmpty;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return RefreshIndicator(
+    final page = RefreshIndicator(
       onRefresh: () async {
         if (groupIdNN != null) {
           ref.invalidate(teamColorsProvider(groupIdNN));
@@ -67,44 +67,6 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
                     : null,
               ),
             ),
-
-            if (widget.onboarding && groupIdNN != null)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: Consumer(
-                    builder: (context, ref, _) {
-                      final colors = ref
-                              .watch(teamColorsProvider(groupIdNN))
-                              .valueOrNull ??
-                          const <TeamColor>[];
-                      final count = colors.length;
-                      return NewGroupTourBanner(
-                        step: 2,
-                        title: 'Cadastre dois uniformes',
-                        description:
-                            'Crie as duas cores usadas para dividir os times. O próximo passo será criar a primeira partida.',
-                        status: '${count.clamp(0, 2)}/2',
-                        actionLabel: count >= 2
-                            ? 'Continuar para a primeira partida'
-                            : count == 0
-                                ? 'Cadastrar 1º uniforme'
-                                : 'Cadastrar 2º uniforme',
-                        actionEnabled: canManage,
-                        onAction: count >= 2
-                            ? () => context.go('/app/matches?tour=true')
-                            : () => _openEditSheet(
-                                  context,
-                                  groupId: groupIdNN,
-                                  canManage: canManage,
-                                  isDark: isDark,
-                                ),
-                        onSkip: () => context.go('/app'),
-                      );
-                    },
-                  ),
-                ),
-              ),
 
             if (groupId == null || groupId.isEmpty) ...[
               // Enquanto myPlayersProvider carrega, spinner em vez de "sem grupo"
@@ -157,6 +119,39 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
           ],
         ),
       ),
+    );
+
+    if (!widget.onboarding || groupIdNN == null) return page;
+
+    final colors =
+        ref.watch(teamColorsProvider(groupIdNN)).valueOrNull ?? const [];
+    final count = colors.length;
+    return Stack(
+      children: [
+        page,
+        NewGroupTourOverlay(
+          step: 2,
+          title: 'Cadastre dois uniformes',
+          description:
+              'Use o botão abaixo para criar as duas cores da patota. Você verá os uniformes aparecendo na tela ao fundo.',
+          status: '${count.clamp(0, 2)}/2',
+          actionLabel: count >= 2
+              ? 'Continuar para a primeira partida'
+              : count == 0
+                  ? 'Cadastrar 1º uniforme'
+                  : 'Cadastrar 2º uniforme',
+          actionEnabled: canManage,
+          onAction: count >= 2
+              ? () => context.go('/app/matches?tour=true')
+              : () => _openEditSheet(
+                    context,
+                    groupId: groupIdNN,
+                    canManage: canManage,
+                    isDark: isDark,
+                  ),
+          onSkip: () => context.go('/app'),
+        ),
+      ],
     );
   }
 

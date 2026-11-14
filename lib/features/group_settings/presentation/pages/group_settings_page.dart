@@ -1048,66 +1048,64 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     final detail = detailAsync.valueOrNull;
 
     return Scaffold(
-      body: CustomScrollView(
-        controller: _scrollController,
-        slivers: [
-          // ── 1. Header ────────────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: _buildHeader(detail?.name),
-          ),
-
-          if (widget.onboarding)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: NewGroupTourBanner(
-                  step: 1,
-                  title: 'Configurações · ${_kTabLabels[_activeTab]}',
-                  description:
-                      'Conheça e ajuste esta aba. O tour vai passar pelas cinco áreas antes de seguir para os uniformes.',
-                  status: '${_tourTabIndex + 1}/${_kTabLabels.length} abas',
-                  actionLabel: _tourTabIndex == _kTabLabels.length - 1
-                      ? 'Salvar e ir para uniformes'
-                      : 'Próxima aba: ${_kTabLabels[_tourTabIndex + 1]}',
-                  actionEnabled: !_saving,
-                  onAction: _advanceSettingsTour,
-                  onSkip: () => context.go('/app'),
-                ),
+      body: Stack(
+        children: [
+          CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              // ── 1. Header ────────────────────────────────────────────────────
+              SliverToBoxAdapter(
+                child: _buildHeader(detail?.name),
               ),
-            ),
 
-          // ── 2. Configurações (tabbed) ─────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildTabbedSettings(
-                    isDark,
-                    detail: detail,
-                    detailAsync: detailAsync,
+              // ── 2. Configurações (tabbed) ─────────────────────────────────────
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildTabbedSettings(
+                        isDark,
+                        detail: detail,
+                        detailAsync: detailAsync,
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-          ),
-
-          // ── 3. Equipe da patota ───────────────────────────────────────────
-          // A equipe agora é exibida dentro da aba própria, acima.
-          if (_activeTab == -1)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
-                child: _CardSection(
-                  iconBg: AppColors.darkBorder,
-                  icon: Icons.group_outlined,
-                  title: 'Equipe da patota',
-                  subtitle: 'Administradores e responsáveis financeiros',
-                  child: _buildTeam(isDark,
-                      detail: detail, detailAsync: detailAsync),
                 ),
               ),
+
+              // ── 3. Equipe da patota ───────────────────────────────────────────
+              // A equipe agora é exibida dentro da aba própria, acima.
+              if (_activeTab == -1)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+                    child: _CardSection(
+                      iconBg: AppColors.darkBorder,
+                      icon: Icons.group_outlined,
+                      title: 'Equipe da patota',
+                      subtitle: 'Administradores e responsáveis financeiros',
+                      child: _buildTeam(isDark,
+                          detail: detail, detailAsync: detailAsync),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (widget.onboarding)
+            NewGroupTourOverlay(
+              step: 1,
+              title: 'Configurações · ${_kTabLabels[_activeTab]}',
+              description:
+                  'Ajuste os campos desta tela ao fundo. Vamos passar pelas cinco áreas para você conhecer tudo antes dos uniformes.',
+              status: '${_tourTabIndex + 1}/${_kTabLabels.length} abas',
+              actionLabel: _tourTabIndex == _kTabLabels.length - 1
+                  ? 'Salvar e ir para uniformes'
+                  : 'Próxima: ${_kTabLabels[_tourTabIndex + 1]}',
+              actionEnabled: !_saving,
+              onAction: _advanceSettingsTour,
+              onSkip: () => context.go('/app'),
             ),
         ],
       ),

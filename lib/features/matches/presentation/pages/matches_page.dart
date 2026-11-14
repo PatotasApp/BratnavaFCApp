@@ -1442,7 +1442,7 @@ class _CreateMatchView extends StatelessWidget {
   Widget build(BuildContext context) {
     final fmt = DateFormat('dd/MM/yyyy', 'pt_BR');
 
-    return Column(
+    final content = Column(
       children: [
         Expanded(
           child: SingleChildScrollView(
@@ -1451,16 +1451,6 @@ class _CreateMatchView extends StatelessWidget {
               key: formKey,
               child: Column(
                 children: [
-                  if (onboarding) ...[
-                    NewGroupTourBanner(
-                      step: 3,
-                      title: 'Crie a primeira partida',
-                      description:
-                          'Confira o local, a data sugerida e o horário. Ao criar a partida, sua patota estará pronta para começar.',
-                      onSkip: () => context.go('/app'),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
                   Card(
                     elevation: 2,
                     shape: RoundedRectangleBorder(
@@ -1553,6 +1543,24 @@ class _CreateMatchView extends StatelessWidget {
               ),
             ]),
           ),
+        ),
+      ],
+    );
+
+    if (!onboarding) return content;
+
+    return Stack(
+      children: [
+        content,
+        NewGroupTourOverlay(
+          step: 3,
+          title: 'Crie a primeira partida',
+          description:
+              'Preencha ou confira local, data e horário na tela ao fundo. Depois, crie a partida para concluir o tour.',
+          actionLabel: 'Criar primeira partida',
+          actionEnabled: !mutating,
+          onAction: onCreate,
+          onSkip: () => context.go('/app'),
         ),
       ],
     );
