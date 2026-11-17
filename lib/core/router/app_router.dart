@@ -8,6 +8,7 @@ import '../../features/auth/presentation/pages/forgot_password_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/auth/presentation/providers/session_provider.dart';
 import '../../features/auth/presentation/providers/account_store.dart';
+import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/account/presentation/pages/my_account_page.dart';
 import '../../features/calendar/presentation/pages/calendar_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
@@ -113,6 +114,89 @@ class _SessionLoadingPage extends StatelessWidget {
       );
 }
 
+class _ResumeNewGroupTourPage extends ConsumerStatefulWidget {
+  const _ResumeNewGroupTourPage();
+
+  @override
+  ConsumerState<_ResumeNewGroupTourPage> createState() =>
+      _ResumeNewGroupTourPageState();
+}
+
+class _ResumeNewGroupTourPageState
+    extends ConsumerState<_ResumeNewGroupTourPage> {
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _resume());
+  }
+
+  Future<void> _resume() async {
+    if (mounted) setState(() => _error = null);
+    final account = ref.read(accountStoreProvider).activeAccount;
+    final pending =
+        ref.read(newGroupTourStorageProvider).readForCreator(account?.userId);
+    if (pending == null) {
+      if (mounted) context.go('/app');
+      return;
+    }
+
+    try {
+      await ref.read(authNotifierProvider.notifier).selectActiveGroup(
+            groupId: pending.groupId,
+          );
+      if (mounted) context.go(pending.location);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = 'Não foi possível reabrir a patota do tour.';
+        });
+      }
+    }
+  }
+
+  Future<void> _skip() async {
+    await ref.read(newGroupTourStorageProvider).clear();
+    if (mounted) context.go('/app');
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: _error == null
+                ? const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Retomando o tour da sua nova patota…'),
+                    ],
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline_rounded, size: 42),
+                      const SizedBox(height: 12),
+                      Text(_error!, textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: _resume,
+                        child: const Text('Tentar novamente'),
+                      ),
+                      TextButton(
+                        onPressed: _skip,
+                        child: const Text('Pular tour'),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      );
+}
+
 // ── NavigatorKey global (compartilhado com PushService) ──────────────────────
 
 final navigatorKeyProvider = Provider<GlobalKey<NavigatorState>>(
@@ -170,12 +254,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       final account = ref.read(accountStoreProvider).activeAccount;
-      final pendingTour = ref.read(newGroupTourStorageProvider).readFor(
-            userId: account?.userId,
-            groupId: account?.activeGroupId,
-          );
+      final pendingTour =
+          ref.read(newGroupTourStorageProvider).readForCreator(account?.userId);
 
       if (isAuthRoute || path == '/splash') {
+        if (pendingTour != null &&
+            account?.activeGroupId?.toLowerCase() !=
+                pendingTour.groupId.toLowerCase()) {
+          return '/resume-new-group-tour';
+        }
         return pendingTour?.location ?? pendingShare.take() ?? '/app';
       }
 
@@ -183,6 +270,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       // estado apenas da rota. Reabrir o app (ou sair da tela sem concluir)
       // retorna à etapa persistida até finalizar ou escolher "Pular tour".
       if (pendingTour != null) {
+        final activeGroupId = account?.activeGroupId?.toLowerCase();
+        if (activeGroupId != pendingTour.groupId.toLowerCase()) {
+          return path == '/resume-new-group-tour'
+              ? null
+              : '/resume-new-group-tour';
+        }
         final isCurrentTourPage = path == pendingTour.path &&
             state.uri.queryParameters['tour'] == 'true';
         if (!isCurrentTourPage) return pendingTour.location;
@@ -213,6 +306,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/splash',
         builder: (_, __) => const _SessionLoadingPage(),
+      ),
+      GoRoute(
+        path: '/resume-new-group-tour',
+        builder: (_, __) => const _ResumeNewGroupTourPage(),
       ),
       GoRoute(
         path: '/login',
@@ -410,6 +507,9 @@ class _SessionListenable extends ChangeNotifier {
     // Escuta a sessão do Firebase e o estado do perfil. Antes escutava o
     // AccountStore, que deixou de ser quem decide se há sessão.
     _ref.listen<SessionState>(sessionProvider, (_, __) {
+      notifyListeners();
+    });
+    _ref.listen<AccountState>(accountStoreProvider, (_, __) {
       notifyListeners();
     });
   }

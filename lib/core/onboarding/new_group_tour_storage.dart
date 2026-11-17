@@ -89,6 +89,14 @@ class NewGroupTourStorage {
     return pending;
   }
 
+  PendingNewGroupTour? readForCreator(String? userId) {
+    final pending = read();
+    if (pending == null || userId == null) return null;
+    return pending.creatorUserId.toLowerCase() == userId.toLowerCase()
+        ? pending
+        : null;
+  }
+
   Future<void> start({
     required String creatorUserId,
     required String groupId,

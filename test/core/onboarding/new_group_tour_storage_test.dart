@@ -19,6 +19,8 @@ void main() {
     expect(restored?.stage, NewGroupTourStage.settings);
     expect(restored?.settingsTab, 3);
     expect(restored?.location, '/app/settings?tour=true&tab=3');
+    expect(storage.readForCreator('user-1')?.groupId, 'group-1');
+    expect(storage.readForCreator('user-2'), isNull);
     expect(storage.readFor(userId: 'user-2', groupId: 'group-1'), isNull);
     expect(storage.readFor(userId: 'user-1', groupId: 'group-2'), isNull);
   });
