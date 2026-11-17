@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/onboarding/new_group_tour_storage.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/realtime/realtime_provider.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
@@ -115,11 +116,16 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
         .read(matchNotifierProvider.notifier)
         .createMatch(placeName, playedAt);
     if (!created) return;
+    if (widget.onboarding) {
+      await ref.read(newGroupTourStorageProvider).clear();
+    }
+    if (!mounted) return;
     if (mounted) {
       setState(() => _creatingNew = false);
       if (widget.onboarding) {
         await showDialog<void>(
           context: context,
+          barrierDismissible: false,
           builder: (dialogContext) => AlertDialog(
             icon: const Icon(Icons.check_circle_rounded,
                 color: AppColors.accent, size: 42),
@@ -129,17 +135,20 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
             ),
             actions: [
               FilledButton(
-                onPressed: () {
-                  Navigator.pop(dialogContext);
-                  context.go('/app/matches');
-                },
+                onPressed: () => Navigator.pop(dialogContext),
                 child: const Text('Começar'),
               ),
             ],
           ),
         );
+        if (mounted) context.go('/app/matches');
       }
     }
+  }
+
+  Future<void> _skipTour() async {
+    await ref.read(newGroupTourStorageProvider).clear();
+    if (mounted) context.go('/app');
   }
 
   Future<void> _editCurrentMatch(MatchState s) async {
@@ -290,6 +299,7 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
               onCreate: _createMatch,
               mutating: s.mutating,
               onboarding: widget.onboarding,
+              onSkipTour: _skipTour,
               onCancel: s.hasMatch
                   ? () => setState(() => _creatingNew = false)
                   : null,
@@ -311,6 +321,7 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
                 onCreate: _createMatch,
                 mutating: s.mutating,
                 onboarding: widget.onboarding,
+                onSkipTour: _skipTour,
               )
             : const _WaitingForMatchView();
       case MatchStep.accept:
@@ -1423,6 +1434,7 @@ class _CreateMatchView extends StatelessWidget {
   final VoidCallback onCreate;
   final bool mutating;
   final bool onboarding;
+  final VoidCallback? onSkipTour;
   final VoidCallback? onCancel;
 
   const _CreateMatchView({
@@ -1435,6 +1447,7 @@ class _CreateMatchView extends StatelessWidget {
     required this.onCreate,
     required this.mutating,
     this.onboarding = false,
+    this.onSkipTour,
     this.onCancel,
   });
 
@@ -1560,7 +1573,7 @@ class _CreateMatchView extends StatelessWidget {
           actionLabel: 'Criar primeira partida',
           actionEnabled: !mutating,
           onAction: onCreate,
-          onSkip: () => context.go('/app'),
+          onSkip: onSkipTour ?? () => context.go('/app'),
         ),
       ],
     );

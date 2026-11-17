@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../../../core/api/api_response.dart';
 import '../../../../core/errors/app_exception.dart';
+import '../../../../core/onboarding/new_group_tour_storage.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -645,6 +646,10 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
           final newGroupId = createdId;
           if (newGroupId != null && newGroupId.isNotEmpty) {
             await ref.read(authNotifierProvider.notifier).selectActiveGroup(
+                  groupId: newGroupId,
+                );
+            await ref.read(newGroupTourStorageProvider).start(
+                  creatorUserId: account.userId,
                   groupId: newGroupId,
                 );
             if (mounted) await _openGroup(newGroupId);

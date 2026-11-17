@@ -7,6 +7,7 @@ import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/forgot_password_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/auth/presentation/providers/session_provider.dart';
+import '../../features/auth/presentation/providers/account_store.dart';
 import '../../features/account/presentation/pages/my_account_page.dart';
 import '../../features/calendar/presentation/pages/calendar_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
@@ -42,6 +43,7 @@ import '../../features/share/presentation/share_link_page.dart';
 import '../share/pending_share_link.dart';
 import '../share/share_links.dart';
 import '../../features/group_spreadsheets/presentation/group_spreadsheets_page.dart';
+import '../onboarding/new_group_tour_storage.dart';
 
 // ── Placeholder para rotas ainda não implementadas ────────────────────────────
 class _PlaceholderPage extends StatelessWidget {
@@ -167,8 +169,24 @@ final routerProvider = Provider<GoRouter>((ref) {
         return path == '/splash' ? null : '/splash';
       }
 
-      if (isAuthRoute || path == '/splash')
-        return pendingShare.take() ?? '/app';
+      final account = ref.read(accountStoreProvider).activeAccount;
+      final pendingTour = ref.read(newGroupTourStorageProvider).readFor(
+            userId: account?.userId,
+            groupId: account?.activeGroupId,
+          );
+
+      if (isAuthRoute || path == '/splash') {
+        return pendingTour?.location ?? pendingShare.take() ?? '/app';
+      }
+
+      // O onboarding iniciado pelo criador é uma tarefa pendente, não um
+      // estado apenas da rota. Reabrir o app (ou sair da tela sem concluir)
+      // retorna à etapa persistida até finalizar ou escolher "Pular tour".
+      if (pendingTour != null) {
+        final isCurrentTourPage = path == pendingTour.path &&
+            state.uri.queryParameters['tour'] == 'true';
+        if (!isCurrentTourPage) return pendingTour.location;
+      }
 
       return null;
     },
@@ -292,6 +310,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/app/settings',
             builder: (_, state) => GroupSettingsPage(
               onboarding: state.uri.queryParameters['tour'] == 'true',
+              initialTourTab:
+                  int.tryParse(state.uri.queryParameters['tab'] ?? '') ?? 0,
             ),
           ),
           GoRoute(

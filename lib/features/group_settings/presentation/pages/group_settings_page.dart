@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/errors/app_exception.dart';
+import '../../../../core/onboarding/new_group_tour_storage.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/entities/account.dart';
 import '../../../auth/presentation/providers/account_store.dart';
@@ -220,8 +221,13 @@ const _kDayLabels = <String>[
 
 class GroupSettingsPage extends ConsumerStatefulWidget {
   final bool onboarding;
+  final int initialTourTab;
 
-  const GroupSettingsPage({super.key, this.onboarding = false});
+  const GroupSettingsPage({
+    super.key,
+    this.onboarding = false,
+    this.initialTourTab = 0,
+  });
 
   @override
   ConsumerState<GroupSettingsPage> createState() =>
@@ -303,6 +309,7 @@ class _GroupSettingsPageWrapperState extends ConsumerState<GroupSettingsPage> {
         groupId: groupId,
         account: account,
         onboarding: widget.onboarding,
+        initialTourTab: widget.initialTourTab,
       ),
     );
   }
@@ -336,6 +343,7 @@ class _SettingsBody extends ConsumerStatefulWidget {
   final String groupId;
   final Account account;
   final bool onboarding;
+  final int initialTourTab;
 
   const _SettingsBody({
     required this.settings,
@@ -343,6 +351,7 @@ class _SettingsBody extends ConsumerStatefulWidget {
     required this.groupId,
     required this.account,
     required this.onboarding,
+    required this.initialTourTab,
   });
 
   @override
@@ -412,6 +421,10 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
   @override
   void initState() {
     super.initState();
+    if (widget.onboarding) {
+      _tourTabIndex = widget.initialTourTab.clamp(0, _kTabLabels.length - 1);
+      _activeTab = _tourTabIndex;
+    }
     _initFromSettings(widget.settings);
   }
 
@@ -671,8 +684,11 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   Future<void> _advanceSettingsTour() async {
     if (_tourTabIndex < _kTabLabels.length - 1) {
+      final nextTab = _tourTabIndex + 1;
+      await ref.read(newGroupTourStorageProvider).updateSettingsTab(nextTab);
+      if (!mounted) return;
       setState(() {
-        _tourTabIndex++;
+        _tourTabIndex = nextTab;
         _activeTab = _tourTabIndex;
       });
       if (_scrollController.hasClients) {
@@ -686,7 +702,16 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     }
 
     final saved = await _save();
-    if (saved && mounted) context.go('/app/team-colors?tour=true');
+    if (!saved) return;
+    await ref
+        .read(newGroupTourStorageProvider)
+        .moveTo(NewGroupTourStage.uniforms);
+    if (mounted) context.go('/app/team-colors?tour=true');
+  }
+
+  Future<void> _skipTour() async {
+    await ref.read(newGroupTourStorageProvider).clear();
+    if (mounted) context.go('/app');
   }
 
   // ── Time picker ───────────────────────────────────────────────────────────
@@ -1105,7 +1130,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                   : 'Próxima: ${_kTabLabels[_tourTabIndex + 1]}',
               actionEnabled: !_saving,
               onAction: _advanceSettingsTour,
-              onSkip: () => context.go('/app'),
+              onSkip: _skipTour,
             ),
         ],
       ),

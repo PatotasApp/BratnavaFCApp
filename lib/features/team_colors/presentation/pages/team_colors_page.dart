@@ -3,6 +3,7 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/errors/app_exception.dart';
+import '../../../../core/onboarding/new_group_tour_storage.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/no_active_group_view.dart';
@@ -26,6 +27,18 @@ class TeamColorsPage extends ConsumerStatefulWidget {
 
 class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
   int _selectedIndex = 0;
+
+  Future<void> _continueTour() async {
+    await ref
+        .read(newGroupTourStorageProvider)
+        .moveTo(NewGroupTourStage.firstMatch);
+    if (mounted) context.go('/app/matches?tour=true');
+  }
+
+  Future<void> _skipTour() async {
+    await ref.read(newGroupTourStorageProvider).clear();
+    if (mounted) context.go('/app');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -142,14 +155,14 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
                   : 'Cadastrar 2º uniforme',
           actionEnabled: canManage,
           onAction: count >= 2
-              ? () => context.go('/app/matches?tour=true')
+              ? _continueTour
               : () => _openEditSheet(
                     context,
                     groupId: groupIdNN,
                     canManage: canManage,
                     isDark: isDark,
                   ),
-          onSkip: () => context.go('/app'),
+          onSkip: _skipTour,
         ),
       ],
     );
