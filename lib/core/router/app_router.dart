@@ -1,3 +1,4 @@
+import '../../features/billing/presentation/group_plan_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -458,6 +459,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/app/team-builder',
             builder: (_, __) => const TeamBuilderPage(),
+          ),
+          GoRoute(
+            path: '/app/plano',
+            builder: (_, state) => GroupPlanPage(
+              groupId: state.uri.queryParameters['groupId'],
+            ),
           ),
           GoRoute(
             path: '/app/conquistas',

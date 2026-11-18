@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../billing/presentation/patota_vencida.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -50,7 +51,14 @@ final authInterceptorProvider = Provider<AuthInterceptor>((ref) {
 // ── Dio configurado com AuthInterceptor ───────────────────────────────────────
 
 final dioProvider = Provider<Dio>((ref) {
-  return buildDio(authInterceptor: ref.watch(authInterceptorProvider));
+  return buildDio(
+    authInterceptor: ref.watch(authInterceptorProvider),
+    // Patota vencida (402 PATOTA_VENCIDA): avisa e, para admin/financeiro,
+    // leva ao pagamento.
+    extraInterceptors: [
+      PatotaVencidaInterceptor((groupId) => showPatotaVencida(ref, groupId)),
+    ],
+  );
 });
 
 // ── Acesso ao perfil ─────────────────────────────────────────────────────────
