@@ -477,17 +477,19 @@ class MatchNotifier extends StateNotifier<MatchState> {
     }
   }
 
-  Future<void> addGuest(String name, bool isGoalkeeper, int? starRating) async {
+  Future<bool> addGuest(String name, bool isGoalkeeper, int? starRating) async {
     final matchId = state.matchId;
-    if (matchId == null) return;
-    state = state.copyWith(mutating: true);
+    if (matchId == null) return false;
+    state = state.copyWith(mutating: true, error: null);
     try {
       await _ds.addGuest(groupId, matchId, name, isGoalkeeper, starRating);
       final d = await _ds.fetchAcceptation(groupId, matchId);
       _applyAcceptation(d);
+      return true;
     } catch (e) {
       state = state.copyWith(
           error: extractDioError(e, 'Falha ao adicionar convidado.'));
+      return false;
     } finally {
       state = state.copyWith(mutating: false);
     }

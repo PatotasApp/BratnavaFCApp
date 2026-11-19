@@ -19,7 +19,9 @@ class GroupSpreadsheetsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final account = ref.watch(accountStoreProvider).activeAccount;
-    final gid = (groupId != null && groupId!.isNotEmpty) ? groupId! : account?.activeGroupId;
+    final gid = (groupId != null && groupId!.isNotEmpty)
+        ? groupId!
+        : account?.activeGroupId;
 
     return Scaffold(
       body: Column(
@@ -71,7 +73,8 @@ class _Body extends ConsumerWidget {
       isScrollControlled: true,
       useSafeArea: true,
       builder: (c) => Padding(
-        padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(c).viewInsets.bottom),
+        padding: EdgeInsets.fromLTRB(
+            20, 20, 20, 20 + MediaQuery.of(c).viewInsets.bottom),
         child: SingleChildScrollView(
           child: SpreadsheetUploadForm(
             groupId: groupId,
@@ -80,7 +83,8 @@ class _Body extends ConsumerWidget {
             onSent: (_) {
               Navigator.pop(c);
               ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
-                content: Text('Planilha enviada! Avisaremos quando a importação começar.'),
+                content: Text(
+                    'Planilha enviada! Avisaremos quando a importação começar.'),
               ));
             },
           ),
@@ -89,15 +93,21 @@ class _Body extends ConsumerWidget {
     );
   }
 
-  Future<void> _delete(BuildContext context, WidgetRef ref, GroupSpreadsheet s) async {
+  Future<void> _delete(
+      BuildContext context, WidgetRef ref, GroupSpreadsheet s) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         title: const Text('Remover planilha?'),
-        content: Text('"${s.fileName}" será apagada e a equipe não vai mais importá-la.'),
+        content: Text(
+            '"${s.fileName}" será apagada e a equipe não vai mais importá-la.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Remover')),
+          TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Remover')),
         ],
       ),
     );
@@ -108,7 +118,8 @@ class _Body extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-          content: Text(extractDioError(e, 'Não foi possível remover a planilha.')),
+          content:
+              Text(extractDioError(e, 'Não foi possível remover a planilha.')),
         ));
       }
     }
@@ -137,9 +148,15 @@ class _Body extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
           ...async.when(
-            loading: () => [const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))],
+            loading: () => [
+              const Center(
+                  child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: CircularProgressIndicator()))
+            ],
             error: (e, _) => [
-              Text(extractDioError(e, 'Não foi possível carregar as planilhas.'),
+              Text(
+                  extractDioError(e, 'Não foi possível carregar as planilhas.'),
                   style: const TextStyle(color: AppColors.prototypeDanger)),
             ],
             data: (items) => items.isEmpty
@@ -147,12 +164,16 @@ class _Body extends ConsumerWidget {
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
                       child: Text('Nenhuma planilha enviada ainda.',
-                          textAlign: TextAlign.center, style: TextStyle(color: AppColors.slate500)),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppColors.slate500)),
                     ),
                   ]
                 : [
                     for (final s in items)
-                      _SpreadsheetCard(s, onDelete: s.canDelete ? () => _delete(context, ref, s) : null),
+                      _SpreadsheetCard(s,
+                          onDelete: s.canDelete
+                              ? () => _delete(context, ref, s)
+                              : null),
                   ],
           ),
         ],
@@ -183,13 +204,15 @@ class _SpreadsheetCard extends StatelessWidget {
                   child: Text(s.kind.label,
                       style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          color: isDark ? AppColors.onDark : AppColors.slate900)),
+                          color:
+                              isDark ? AppColors.onDark : AppColors.slate900)),
                 ),
                 SpreadsheetStatusChip(s.status),
               ],
             ),
             const SizedBox(height: 4),
-            Text('${s.fileName} · ${SpreadsheetFileRules.formatSize(s.sizeBytes)}',
+            Text(
+                '${s.fileName} · ${SpreadsheetFileRules.formatSize(s.sizeBytes)}',
                 style: const TextStyle(fontSize: 13)),
             const SizedBox(height: 2),
             Text(
@@ -197,7 +220,9 @@ class _SpreadsheetCard extends StatelessWidget {
               style: const TextStyle(fontSize: 12, color: AppColors.slate500),
             ),
             const SizedBox(height: 6),
-            Text(s.status.description, style: const TextStyle(fontSize: 12, color: AppColors.slate500)),
+            Text(s.status.description,
+                style:
+                    const TextStyle(fontSize: 12, color: AppColors.slate500)),
             if (s.adminNote != null) ...[
               const SizedBox(height: 8),
               Container(
@@ -207,7 +232,8 @@ class _SpreadsheetCard extends StatelessWidget {
                   color: isDark ? AppColors.slate800 : AppColors.amber50,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text('Equipe PatotasApp: ${s.adminNote}', style: const TextStyle(fontSize: 13)),
+                child: Text('Equipe PatotasApp: ${s.adminNote}',
+                    style: const TextStyle(fontSize: 13)),
               ),
             ],
             if (onDelete != null)

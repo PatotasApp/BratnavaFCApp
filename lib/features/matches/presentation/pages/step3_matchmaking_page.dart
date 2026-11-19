@@ -304,7 +304,6 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
           ref.read(matchNotifierProvider.notifier).selectTeamGenOption(i),
       onConfirm: () =>
           ref.read(matchNotifierProvider.notifier).assignTeamsFromGenerated(),
-      onRegenerate: _generateTeams,
     );
   }
 
@@ -1342,7 +1341,6 @@ class _TeamGenOptionsSection extends ConsumerStatefulWidget {
   final bool isDark;
   final void Function(int) onSelectIdx;
   final VoidCallback onConfirm;
-  final VoidCallback onRegenerate;
 
   const _TeamGenOptionsSection({
     required this.options,
@@ -1354,7 +1352,6 @@ class _TeamGenOptionsSection extends ConsumerStatefulWidget {
     required this.isDark,
     required this.onSelectIdx,
     required this.onConfirm,
-    required this.onRegenerate,
   });
 
   @override
@@ -1820,31 +1817,19 @@ class _TeamGenOptionsSectionState
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: widget.mutating ? null : widget.onRegenerate,
-                    icon: const Icon(Icons.refresh, size: 15),
-                    label: const Text('Gerar prévia',
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: widget.mutating ? null : widget.onConfirm,
+                child: widget.mutating
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.onDark))
+                    : const Text('Setar times',
                         style: TextStyle(fontSize: 13)),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: widget.mutating ? null : widget.onConfirm,
-                    child: widget.mutating
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: AppColors.onDark))
-                        : const Text('Setar times',
-                            style: TextStyle(fontSize: 13)),
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ],

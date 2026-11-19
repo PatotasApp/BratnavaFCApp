@@ -76,9 +76,8 @@ class _EmailLoginPageState extends ConsumerState<EmailLoginPage> {
                 // Sem pilha (rota aberta direto), volta para a escolha.
                 onPressed: isLoading
                     ? null
-                    : () => context.canPop()
-                        ? context.pop()
-                        : context.go('/login'),
+                    : () =>
+                        context.canPop() ? context.pop() : context.go('/login'),
                 style: TextButton.styleFrom(
                   padding: EdgeInsets.zero,
                   foregroundColor: AppColors.lightTextSecondary,

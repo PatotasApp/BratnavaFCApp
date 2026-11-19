@@ -1,3 +1,4 @@
+import '../../features/billing/presentation/group_plan_page.dart';
 import 'package:flutter/material.dart';
 import '../../features/auth/presentation/providers/account_store.dart';
 import '../../features/discovery/presentation/pages/guest_match_page.dart';
@@ -9,6 +10,8 @@ import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/forgot_password_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/auth/presentation/providers/session_provider.dart';
+import '../../features/auth/presentation/providers/account_store.dart';
+import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/account/presentation/pages/my_account_page.dart';
 import '../../features/calendar/presentation/pages/calendar_page.dart';
 import '../../features/dashboard/presentation/pages/dashboard_page.dart';
@@ -48,6 +51,7 @@ import '../../features/share/presentation/share_link_page.dart';
 import '../share/pending_share_link.dart';
 import '../share/share_links.dart';
 import '../../features/group_spreadsheets/presentation/group_spreadsheets_page.dart';
+import '../onboarding/new_group_tour_storage.dart';
 
 // ── Placeholder para rotas ainda não implementadas ────────────────────────────
 class _PlaceholderPage extends StatelessWidget {
@@ -117,6 +121,89 @@ class _SessionLoadingPage extends StatelessWidget {
       );
 }
 
+class _ResumeNewGroupTourPage extends ConsumerStatefulWidget {
+  const _ResumeNewGroupTourPage();
+
+  @override
+  ConsumerState<_ResumeNewGroupTourPage> createState() =>
+      _ResumeNewGroupTourPageState();
+}
+
+class _ResumeNewGroupTourPageState
+    extends ConsumerState<_ResumeNewGroupTourPage> {
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _resume());
+  }
+
+  Future<void> _resume() async {
+    if (mounted) setState(() => _error = null);
+    final account = ref.read(accountStoreProvider).activeAccount;
+    final pending =
+        ref.read(newGroupTourStorageProvider).readForCreator(account?.userId);
+    if (pending == null) {
+      if (mounted) context.go('/app');
+      return;
+    }
+
+    try {
+      await ref.read(authNotifierProvider.notifier).selectActiveGroup(
+            groupId: pending.groupId,
+          );
+      if (mounted) context.go(pending.location);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = 'Não foi possível reabrir a patota do tour.';
+        });
+      }
+    }
+  }
+
+  Future<void> _skip() async {
+    await ref.read(newGroupTourStorageProvider).clear();
+    if (mounted) context.go('/app');
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: _error == null
+                ? const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Retomando o tour da sua nova patota…'),
+                    ],
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline_rounded, size: 42),
+                      const SizedBox(height: 12),
+                      Text(_error!, textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: _resume,
+                        child: const Text('Tentar novamente'),
+                      ),
+                      TextButton(
+                        onPressed: _skip,
+                        child: const Text('Pular tour'),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      );
+}
+
 // ── NavigatorKey global (compartilhado com PushService) ──────────────────────
 
 final navigatorKeyProvider = Provider<GlobalKey<NavigatorState>>(
@@ -173,12 +260,36 @@ final routerProvider = Provider<GoRouter>((ref) {
         return path == '/splash' ? null : '/splash';
       }
 
-      if (isAuthRoute || path == '/splash')
-        return pendingShare.take() ?? '/app';
+      final account = ref.read(accountStoreProvider).activeAccount;
+      final pendingTour =
+          ref.read(newGroupTourStorageProvider).readForCreator(account?.userId);
+
+      if (isAuthRoute || path == '/splash') {
+        if (pendingTour != null &&
+            account?.activeGroupId?.toLowerCase() !=
+                pendingTour.groupId.toLowerCase()) {
+          return '/resume-new-group-tour';
+        }
+        return pendingTour?.location ?? pendingShare.take() ?? '/app';
+      }
+
+      // O onboarding iniciado pelo criador é uma tarefa pendente, não um
+      // estado apenas da rota. Reabrir o app (ou sair da tela sem concluir)
+      // retorna à etapa persistida até finalizar ou escolher "Pular tour".
+      if (pendingTour != null) {
+        final activeGroupId = account?.activeGroupId?.toLowerCase();
+        if (activeGroupId != pendingTour.groupId.toLowerCase()) {
+          return path == '/resume-new-group-tour'
+              ? null
+              : '/resume-new-group-tour';
+        }
+        final isCurrentTourPage = path == pendingTour.path &&
+            state.uri.queryParameters['tour'] == 'true';
+        if (!isCurrentTourPage) return pendingTour.location;
+      }
 
       // Convidado de fora (sem patota ativa): notificações de partida levam à
       // tela dele, não às telas da patota, que ele não enxerga.
-      final account = ref.read(accountStoreProvider).activeAccount;
       if (account != null && account.activeGroupId == null) {
         final matchId = state.uri.queryParameters['matchId'];
         if (path == '/app/matches' && matchId != null && matchId.isNotEmpty) {
@@ -216,6 +327,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const _SessionLoadingPage(),
       ),
       GoRoute(
+        path: '/resume-new-group-tour',
+        builder: (_, __) => const _ResumeNewGroupTourPage(),
+      ),
+      GoRoute(
         path: '/login',
         builder: (_, __) => const LoginPage(),
       ),
@@ -247,6 +362,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/app/matches',
             builder: (_, state) => MatchesPage(
               initialMatchId: state.uri.queryParameters['matchId'],
+              onboarding: state.uri.queryParameters['tour'] == 'true',
             ),
           ),
           GoRoute(
@@ -296,7 +412,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/app/team-colors',
-            builder: (_, __) => const TeamColorsPage(),
+            builder: (_, state) => TeamColorsPage(
+              onboarding: state.uri.queryParameters['tour'] == 'true',
+            ),
           ),
           GoRoute(
             path: '/app/visual-stats',
@@ -330,7 +448,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/app/settings',
-            builder: (_, __) => const GroupSettingsPage(),
+            builder: (_, state) => GroupSettingsPage(
+              onboarding: state.uri.queryParameters['tour'] == 'true',
+              initialTourTab:
+                  int.tryParse(state.uri.queryParameters['tab'] ?? '') ?? 0,
+            ),
           ),
           GoRoute(
             path: '/app/spreadsheets',
@@ -381,6 +503,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, __) => const TeamBuilderPage(),
           ),
           GoRoute(
+            path: '/app/plano',
+            builder: (_, state) => GroupPlanPage(
+              groupId: state.uri.queryParameters['groupId'],
+            ),
+          ),
+          GoRoute(
             path: '/app/conquistas',
             builder: (_, __) => const ConquistasPage(),
           ),
@@ -428,6 +556,9 @@ class _SessionListenable extends ChangeNotifier {
     // Escuta a sessão do Firebase e o estado do perfil. Antes escutava o
     // AccountStore, que deixou de ser quem decide se há sessão.
     _ref.listen<SessionState>(sessionProvider, (_, __) {
+      notifyListeners();
+    });
+    _ref.listen<AccountState>(accountStoreProvider, (_, __) {
       notifyListeners();
     });
   }

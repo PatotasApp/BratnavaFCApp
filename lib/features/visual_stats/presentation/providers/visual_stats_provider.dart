@@ -21,6 +21,5 @@ final visualStatsProvider =
 );
 
 /// "seasonId=x" | "year=2026&includePreSeason=false" | "" → parâmetros da API.
-Map<String, String> periodParams(String period) => period.isEmpty
-    ? const {}
-    : Uri.splitQueryString(period);
+Map<String, String> periodParams(String period) =>
+    period.isEmpty ? const {} : Uri.splitQueryString(period);

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../billing/presentation/patota_vencida.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -50,7 +51,14 @@ final authInterceptorProvider = Provider<AuthInterceptor>((ref) {
 // ── Dio configurado com AuthInterceptor ───────────────────────────────────────
 
 final dioProvider = Provider<Dio>((ref) {
-  final dio = buildDio(authInterceptor: ref.watch(authInterceptorProvider));
+  final dio = buildDio(
+    authInterceptor: ref.watch(authInterceptorProvider),
+    // Patota vencida (402 PATOTA_VENCIDA): avisa e, para admin/financeiro,
+    // leva ao pagamento.
+    extraInterceptors: [
+      PatotaVencidaInterceptor((groupId) => showPatotaVencida(ref, groupId)),
+    ],
+  );
 
   // Se a API recusa (403) uma rota da patota que o app acha que está ativa, a
   // seleção local ficou velha: a pessoa não é mais membro (ex.: era só

@@ -1,11 +1,11 @@
 import 'dart:convert';
-import '../../domain/entities/championship_enums.dart';
-import '../../domain/entities/championship_models.dart';
-import '../../domain/entities/championship_rules.dart';
-import 'championship_datasource.dart';
+import 'package:patotas_app/features/championships/data/datasources/championship_datasource.dart';
+import 'package:patotas_app/features/championships/domain/entities/championship_enums.dart';
+import 'package:patotas_app/features/championships/domain/entities/championship_models.dart';
+import 'package:patotas_app/features/championships/domain/entities/championship_rules.dart';
 
-class ChampionshipMockDataSource implements ChampionshipDataSource {
-  ChampionshipMockDataSource() {
+class ChampionshipTestDataSource implements ChampionshipDataSource {
+  ChampionshipTestDataSource() {
     for (var index = 0; index < ChampionshipStatus.values.length; index++) {
       final status = ChampionshipStatus.values[index];
       final details = _seed(status, index);
@@ -74,7 +74,7 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
 
   @override
   Future<String> create(String groupId, ChampionshipUpsert input) async {
-    final id = 'championship-mock-${_sequence++}';
+    final id = 'championship-test-${_sequence++}';
     final base = _seed(ChampionshipStatus.created, _sequence);
     base
       ..['id'] = id
@@ -208,21 +208,21 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
     });
   }
 
-  /// Cores "ativas da patota" no mock: só 3, para exercitar o aviso da v5.
-  static const _mockColors = [
-    ('mock-color-blue', '#2563EB'),
-    ('mock-color-green', '#16A34A'),
-    ('mock-color-orange', '#F97316'),
+  /// Cores "ativas da patota" no cenário de teste: só 3, para exercitar o aviso da v5.
+  static const _testColors = [
+    ('test-color-blue', '#2563EB'),
+    ('test-color-green', '#16A34A'),
+    ('test-color-orange', '#F97316'),
   ];
 
-  static String? _colorWarning(int teamCount) => teamCount <= _mockColors.length
+  static String? _colorWarning(int teamCount) => teamCount <= _testColors.length
       ? null
-      : 'Ha so ${_mockColors.length} cor(es) ativa(s) para $teamCount times: '
-          '${teamCount - _mockColors.length} time(s) ficaram sem cor. '
+      : 'Há só ${_testColors.length} cor(es) ativa(s) para $teamCount times: '
+          '${teamCount - _testColors.length} time(s) ficaram sem cor. '
           'Cadastre mais cores em Cores dos times.';
 
   static String? _hexOf(String? colorId) {
-    for (final (id, hex) in _mockColors) {
+    for (final (id, hex) in _testColors) {
       if (id == colorId) return hex;
     }
     return null;
@@ -277,8 +277,8 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
       }
       final colorId = teamIndex < colorIds.length && colorIds[teamIndex] != null
           ? colorIds[teamIndex]
-          : teamIndex < _mockColors.length
-              ? _mockColors[teamIndex].$1
+          : teamIndex < _testColors.length
+              ? _testColors[teamIndex].$1
               : null;
       String? keeper;
       for (final p in players) {
@@ -371,7 +371,7 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
         return DefineChampionshipTeam(
           name: names[teamIndex % names.length],
           colorId:
-              teamIndex < _mockColors.length ? _mockColors[teamIndex].$1 : null,
+              teamIndex < _testColors.length ? _testColors[teamIndex].$1 : null,
           playerIds: ids,
           goalkeeperPlayerId: ids.isEmpty ? null : ids.first,
         );
@@ -388,7 +388,7 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
     final teams =
         (_require(id)['teams'] as List<dynamic>).cast<Map<String, dynamic>>();
     for (var index = 0; index < teams.length; index++) {
-      final color = index < _mockColors.length ? _mockColors[index] : null;
+      final color = index < _testColors.length ? _testColors[index] : null;
       teams[index]
         ..['colorId'] = color?.$1
         ..['colorHex'] = color?.$2;
@@ -740,8 +740,8 @@ class ChampionshipMockDataSource implements ChampionshipDataSource {
             (teamIndex) => {
                   'id': teamIds[teamIndex],
                   'name': ['Azul', 'Verde', 'Laranja'][teamIndex],
-                  'colorId': _mockColors[teamIndex].$1,
-                  'colorHex': _mockColors[teamIndex].$2,
+                  'colorId': _testColors[teamIndex].$1,
+                  'colorHex': _testColors[teamIndex].$2,
                   'finalPosition': isFinalized ? teamIndex + 1 : null,
                   'playerIds': playerIds.skip(teamIndex * 3).take(3).toList(),
                 })

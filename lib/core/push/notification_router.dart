@@ -41,9 +41,11 @@ String notificationRoute(String type, Map<String, dynamic> data) {
     case 'poll_closed':
     case 'poll_reminder':
     case 'poll_deadline_changed':
-      return data['pollType'] == 'event'
-          ? '/app/polls/events'
-          : '/app/polls/votes';
+      final pollId = data['pollId'] as String?;
+      if (data['pollType'] == 'event') {
+        return _ok(pollId) ? '/app/polls/events?pollId=$pollId' : '/app/polls/events';
+      }
+      return _ok(pollId) ? '/app/polls/votes?pollId=$pollId' : '/app/polls/votes';
 
     // ── Calendário ────────────────────────────────────────────────────────
 

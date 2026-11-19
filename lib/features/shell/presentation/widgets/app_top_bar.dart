@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/constants/app_constants.dart';
 import '../../../../core/push/notification_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/date_utils.dart';
@@ -117,10 +116,6 @@ class _AppTopBarState extends ConsumerState<AppTopBar> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (AppConstants.environmentBadge.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            const _EnvBadge(),
-          ],
         ],
       ),
       // ── RIGHT: convites + botão de usuário ───────────────────────
@@ -135,36 +130,6 @@ class _AppTopBarState extends ConsumerState<AppTopBar> {
   }
 }
 
-// ── Selo de ambiente ──────────────────────────────────────────────────────────
-//
-// Aparece só fora de produção (ver AppConstants.environmentBadge). A cor âmbar
-// destaca sem imitar o vermelho de perigo — é aviso, não erro.
-class _EnvBadge extends StatelessWidget {
-  const _EnvBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: (isDark ? AppColors.warning : AppColors.warningLight)
-            .withValues(alpha: isDark ? .22 : .30),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.warning.withValues(alpha: .55)),
-      ),
-      child: Text(
-        AppConstants.environmentBadge,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.6,
-          color: isDark ? AppColors.warningLight : AppColors.warning,
-        ),
-      ),
-    );
-  }
-}
 
 class _AccountButton extends ConsumerWidget {
   const _AccountButton();
@@ -294,17 +259,20 @@ class _NotificationSheetState extends ConsumerState<_NotificationSheet> {
 
   void _navigate(BuildContext ctx, AppNotification n) {
     _markRead(n);
+    // Captura o router ANTES do pop — após fechar o sheet o ctx está desmontado
+    // e ctx.push() lançaria assertion ou falharia silenciosamente.
+    final router = GoRouter.of(ctx);
     Navigator.pop(ctx);
 
     // actionUrl explícito tem prioridade
     if (n.actionUrl != null && n.actionUrl!.isNotEmpty) {
-      ctx.push(n.actionUrl!);
+      router.push(n.actionUrl!);
       return;
     }
 
     // Usa dataJson (IDs) para montar a rota mais específica possível
     final route = notificationRoute(n.type, n.dataJson ?? {});
-    if (route.isNotEmpty) ctx.push(route);
+    if (route.isNotEmpty) router.push(route);
   }
 
   IconData _iconFor(String type) {

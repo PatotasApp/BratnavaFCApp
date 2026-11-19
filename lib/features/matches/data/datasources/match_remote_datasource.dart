@@ -294,7 +294,7 @@ class MatchRemoteDataSource {
     String matchPlayerId,
     bool isGoalkeeper,
   ) async {
-    await _dio.put(
+    await _dio.patch(
       ApiConstants.matchPlayerRole(groupId, matchId, matchPlayerId),
       data: {'isGoalkeeper': isGoalkeeper},
     );

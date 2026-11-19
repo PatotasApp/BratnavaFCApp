@@ -23,10 +23,8 @@ Contrato da API: **v6** de 27/10/2026 (antes: v3).
 - A feature seguirá a mesma separação `data/domain/presentation` já usada pelo app.
 - Enums serão serializados pelos valores inteiros exatos do contrato, sem nomes em JSON.
 - O mock será mutável em memória para permitir navegar pelo fluxo e testar ações sem backend.
-- A troca entre mock e API ficará concentrada em um provider/configuração da feature.
-- A flag será um `dart-define` explícito: ligada em `config/dev.json` e desligada em `config/prod.json`.
+- O aplicativo usa sempre a API real; o mock fica disponível apenas para testes automatizados.
 - O datasource API contém todas as rotas da v3; o mock usa os mesmos DTOs e oferece exemplos nos sete status.
-- O provider usado pelo app sempre consulta a API; o datasource mock fica restrito aos testes automatizados.
 - A entrada de Campeonatos fica no agrupamento Organização do menu Mais. A chave `CHAMPIONSHIPS_ENABLED` foi removida em 02/11/2026: com o backend em produção, campeonatos aparecem sempre.
 - A listagem usa os `ruleBadges` entregues pela API/mock como fonte de verdade e não tenta reconstruí-los no cliente.
 - O wizard expõe todos os campos de `ChampionshipRulesDto`, aplica apenas os dois presets definidos pelo contrato e valida as combinações antes do POST.
@@ -52,7 +50,7 @@ Contrato da API: **v6** de 27/10/2026 (antes: v3).
 | 14 | Seletor de jogadores da patota para convidado | ✅ |
 
 O que mudou:
-- Removidos o formato mata-mata (3), `ChampionshipEndMode` e `championshipEnd` (modelos, wizard e mock). O wizard explica que o campeonato termina em "Encerrar campeonato".
+- Removidos o formato mata-mata (3), `ChampionshipEndMode` e `championshipEnd` (modelos, wizard e fonte de teste). O wizard explica que o campeonato termina em "Encerrar campeonato".
 - Novo `WinnerStaysLimitRule` (`winnerStays.limitRule`): "Ao atingir o limite" aparece quando o limite de vitórias é maior que 0, com o aviso "Com 3 times não dá para saírem os dois; sai só o vencedor." Os presets usam `limitRule` 1. Se o JSON não trouxer `limitRule`, o app assume 1.
 - Desempate: "Pontos" fica travado em 1º (cadeado; os outros só se reordenam entre si). A validação exige `tiebreakers[0] == 1`.
 - `minGamesForPlacementResult` aparece no wizard com o texto "Quem jogou menos que isso conta só presença" (padrão 1; aceita >= 0, como o servidor).
@@ -70,7 +68,7 @@ O que mudou:
 ## O que falta
 
 - Etapa 12 (histórico com `includeChampionships=true`, cards 🏆 e `playerResult`) foi passada para outra IA, nos arquivos de `history/`, `player_history/` e `dashboard/`.
-- O fluxo com a API real foi validado; não existe seleção de datasource simulado em runtime.
+- O fluxo do aplicativo aponta sempre para a API real; o datasource mock é injetado somente pelos testes.
 
 ## Baseline
 

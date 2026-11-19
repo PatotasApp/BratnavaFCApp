@@ -52,13 +52,15 @@ class ModerationDataSource {
       'targetId': targetId,
       if (groupId != null && groupId.isNotEmpty) 'groupId': groupId,
       'reason': reason,
-      if (details != null && details.trim().isNotEmpty) 'details': details.trim(),
+      if (details != null && details.trim().isNotEmpty)
+        'details': details.trim(),
     });
   }
 
   Future<void> block(String userId) => _dio.post('/api/users/$userId/block');
 
-  Future<void> unblock(String userId) => _dio.delete('/api/users/$userId/block');
+  Future<void> unblock(String userId) =>
+      _dio.delete('/api/users/$userId/block');
 
   Future<List<BlockedUser>> blocked() async {
     final res = await _dio.get('/api/users/me/blocks');
@@ -67,13 +69,14 @@ class ModerationDataSource {
     if (list is! List) return const [];
     return [
       for (final e in list.whereType<Map>())
-        BlockedUser('${e['userId'] ?? e['UserId']}', '${e['name'] ?? e['Name'] ?? ''}'),
+        BlockedUser(
+            '${e['userId'] ?? e['UserId']}', '${e['name'] ?? e['Name'] ?? ''}'),
     ];
   }
 }
 
-final moderationDsProvider =
-    Provider<ModerationDataSource>((ref) => ModerationDataSource(ref.watch(dioProvider)));
+final moderationDsProvider = Provider<ModerationDataSource>(
+    (ref) => ModerationDataSource(ref.watch(dioProvider)));
 
 final blockedUsersProvider = FutureProvider.autoDispose<List<BlockedUser>>(
     (ref) => ref.watch(moderationDsProvider).blocked());
@@ -89,12 +92,14 @@ Future<void> showReportSheet(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => ReportSheet(target: target, targetId: targetId, groupId: groupId),
+    builder: (_) =>
+        ReportSheet(target: target, targetId: targetId, groupId: groupId),
   );
 }
 
 class ReportSheet extends ConsumerStatefulWidget {
-  const ReportSheet({super.key, required this.target, required this.targetId, this.groupId});
+  const ReportSheet(
+      {super.key, required this.target, required this.targetId, this.groupId});
 
   final ReportTarget target;
   final String targetId;
@@ -149,7 +154,8 @@ class _ReportSheetState extends ConsumerState<ReportSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Denunciar ${widget.target.label}', style: theme.textTheme.titleLarge),
+            Text('Denunciar ${widget.target.label}',
+                style: theme.textTheme.titleLarge),
             const SizedBox(height: 4),
             Text(
               'A denúncia é anônima para quem foi denunciado. Os administradores analisam em até 24 horas e removem o que violar os termos de uso.',
@@ -187,7 +193,9 @@ class _ReportSheetState extends ConsumerState<ReportSheet> {
               onPressed: _reason == null || _sending ? null : _send,
               icon: _sending
                   ? const SizedBox(
-                      width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.flag_rounded),
               label: const Text('Enviar denúncia'),
             ),
@@ -208,8 +216,12 @@ Future<bool> confirmBlockUser(BuildContext context, WidgetRef ref,
       content: const Text(
           'Vocês deixam de ver o perfil um do outro. Dá para desbloquear depois em Minha conta > Usuários bloqueados.'),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Bloquear')),
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar')),
+        FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Bloquear')),
       ],
     ),
   );
@@ -255,12 +267,15 @@ class BlockedUsersPage extends ConsumerWidget {
                       onPressed: () async {
                         final messenger = ScaffoldMessenger.of(context);
                         try {
-                          await ref.read(moderationDsProvider).unblock(u.userId);
+                          await ref
+                              .read(moderationDsProvider)
+                              .unblock(u.userId);
                           ref.invalidate(blockedUsersProvider);
-                          messenger.showSnackBar(
-                              SnackBar(content: Text('${u.name} foi desbloqueado.')));
+                          messenger.showSnackBar(SnackBar(
+                              content: Text('${u.name} foi desbloqueado.')));
                         } catch (e) {
-                          messenger.showSnackBar(SnackBar(content: Text(extractDioError(e))));
+                          messenger.showSnackBar(
+                              SnackBar(content: Text(extractDioError(e))));
                         }
                       },
                       child: const Text('Desbloquear'),

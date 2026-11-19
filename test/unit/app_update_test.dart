@@ -3,7 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:patotas_app/core/update/app_update.dart';
 
 void main() {
-  const store = 'https://play.google.com/store/apps/details?id=br.com.patotasapp';
+  const store =
+      'https://play.google.com/store/apps/details?id=br.com.patotasapp';
 
   test('abaixo da mínima bloqueia', () {
     final info = evaluateAppUpdate(

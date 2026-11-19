@@ -17,18 +17,21 @@ final seasonsGroupIdProvider = Provider<String>((ref) {
 });
 
 /// Temporadas da patota.
-final seasonsProvider = FutureProvider.autoDispose.family<SeasonsOverview, String>(
+final seasonsProvider =
+    FutureProvider.autoDispose.family<SeasonsOverview, String>(
   (ref, groupId) => ref.watch(seasonsDatasourceProvider).list(groupId),
 );
 
 /// Temporadas já carregadas (null enquanto carrega ou se falhar: a tela segue sem filtro).
-SeasonsOverview? seasonsOrNull(AsyncValue<SeasonsOverview> value) => value.valueOrNull;
+SeasonsOverview? seasonsOrNull(AsyncValue<SeasonsOverview> value) =>
+    value.valueOrNull;
 
 typedef SeasonSummaryArgs = ({String groupId, String seasonId});
 
 final seasonSummaryProvider =
     FutureProvider.autoDispose.family<SeasonSummary, SeasonSummaryArgs>(
-  (ref, args) => ref.watch(seasonsDatasourceProvider).summary(args.groupId, args.seasonId),
+  (ref, args) =>
+      ref.watch(seasonsDatasourceProvider).summary(args.groupId, args.seasonId),
 );
 
 /// Escolha do seletor por tela e patota ('stats:<groupId>', 'conquistas:<groupId>'...),

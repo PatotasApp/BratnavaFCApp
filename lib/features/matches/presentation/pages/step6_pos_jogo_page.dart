@@ -6,6 +6,7 @@ import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../domain/entities/match_models.dart';
+import '../../domain/entities/mvp_leaders.dart';
 import '../../domain/utils/match_participant_resolver.dart';
 import '../providers/match_provider.dart';
 import '../widgets/goal_entry_row.dart';
@@ -569,6 +570,27 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
   // ── View do admin ─────────────────────────────────────────────────────────
 
   Widget _buildAdminView(BuildContext context, MatchState s, GroupIcons icons) {
+    final previewLeaders = leadingMvpVoteCounts(s.voteCounts);
+    final previewPlayers = previewLeaders.isNotEmpty
+        ? previewLeaders.map((leader) {
+            final participant = s.participants
+                .where((p) => p.matchPlayerId == leader.matchPlayerId)
+                .firstOrNull;
+            return (
+              name: leader.playerName,
+              isGoalkeeper: participant?.isGoalkeeper ?? false,
+            );
+          }).toList()
+        : s.computedMvps.map((m) {
+            final participant = s.participants
+                .where((p) => p.playerId == m.playerId)
+                .firstOrNull;
+            return (
+              name: m.playerName,
+              isGoalkeeper: participant?.isGoalkeeper ?? false,
+            );
+          }).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -579,17 +601,9 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // MVP já definido
-              if (s.computedMvps.isNotEmpty) ...[
+              if (previewPlayers.isNotEmpty) ...[
                 _MvpResultCard(
-                  mvpPlayers: s.computedMvps.map((m) {
-                    final participant = s.participants
-                        .where((p) => p.playerId == m.playerId)
-                        .firstOrNull;
-                    return (
-                      name: m.playerName,
-                      isGoalkeeper: participant?.isGoalkeeper ?? false,
-                    );
-                  }).toList(),
+                  mvpPlayers: previewPlayers,
                   icons: icons,
                 ),
                 const SizedBox(height: 8),
@@ -667,7 +681,7 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'MVP atual: ${s.computedMvps.isNotEmpty ? s.computedMvps.map((m) => m.playerName).join(' & ') : "—"}',
+                      'MVP atual: ${previewPlayers.isNotEmpty ? previewPlayers.map((m) => m.name).join(' & ') : "—"}',
                       style: const TextStyle(
                           fontSize: 12, color: AppColors.slate500),
                     ),
@@ -721,7 +735,11 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
                                 false,
                             icons: icons,
                             iconSize: 13,
-                            style: const TextStyle(fontSize: 13),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.slate800,
+                            ),
                           ),
                         ),
                         Container(

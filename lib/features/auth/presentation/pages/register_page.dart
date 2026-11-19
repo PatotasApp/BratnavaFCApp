@@ -268,9 +268,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
             ),
             const SizedBox(height: 16),
             LegalNotice(
-                color: isDark
-                    ? AppColors.slate400
-                    : AppColors.lightTextSecondary),
+                color:
+                    isDark ? AppColors.slate400 : AppColors.lightTextSecondary),
           ],
         ),
       ),

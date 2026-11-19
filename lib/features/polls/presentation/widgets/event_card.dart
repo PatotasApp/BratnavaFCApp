@@ -110,7 +110,6 @@ class EventCard extends StatelessWidget {
                         hasVoted: poll.hasVoted,
                         completedLabel: 'Respondeu',
                       ),
-                      _StatusBadge(isOpen: poll.isOpen),
                       if (poll.allowGuests)
                         const _Pill(
                           label: 'Convidados',
@@ -195,32 +194,6 @@ class EventCard extends StatelessWidget {
 }
 
 // ── Internal helpers ───────────────────────────────────────────────────────────
-
-class _StatusBadge extends StatelessWidget {
-  final bool isOpen;
-  const _StatusBadge({required this.isOpen});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: isOpen ? AppColors.green50 : AppColors.slate100,
-        borderRadius: BorderRadius.circular(20),
-        border:
-            Border.all(color: isOpen ? AppColors.green200 : AppColors.slate200),
-      ),
-      child: Text(
-        isOpen ? 'Aberto' : 'Encerrado',
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: isOpen ? AppColors.primaryPressed : AppColors.slate500,
-        ),
-      ),
-    );
-  }
-}
 
 class _Pill extends StatelessWidget {
   final String label;

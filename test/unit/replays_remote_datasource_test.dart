@@ -66,7 +66,8 @@ void main() {
     });
 
     test('envelope com data: [ ... ] não tem total', () {
-      expect(ReplaysRemoteDataSource.extractTotal({'data': <dynamic>[]}), isNull);
+      expect(
+          ReplaysRemoteDataSource.extractTotal({'data': <dynamic>[]}), isNull);
     });
   });
 }

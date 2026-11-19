@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:patotas_app/core/theme/app_theme.dart';
-import 'package:patotas_app/features/championships/data/datasources/championship_mock_datasource.dart';
+import '../../../support/championship_test_datasource.dart';
 import 'package:patotas_app/features/championships/presentation/pages/championship_detail_page.dart';
 import 'package:patotas_app/features/championships/presentation/providers/championship_provider.dart';
 import 'package:patotas_app/features/replays/presentation/providers/replay_access_provider.dart';
@@ -13,14 +13,14 @@ void main() {
   setUpAll(() => initializeDateFormatting('pt_BR'));
 
   Future<void> pump(WidgetTester tester, String id,
-      {ChampionshipMockDataSource? dataSource, String groupId = 'g'}) async {
+      {ChampionshipTestDataSource? dataSource, String groupId = 'g'}) async {
     tester.view.physicalSize = const Size(1080, 4000);
     tester.view.devicePixelRatio = 2.5;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(ProviderScope(
       overrides: [
         championshipDataSourceProvider
-            .overrideWithValue(dataSource ?? ChampionshipMockDataSource()),
+            .overrideWithValue(dataSource ?? ChampionshipTestDataSource()),
         championshipGroupIdProvider.overrideWithValue(groupId),
         championshipIsAdminProvider.overrideWithValue(true),
         activeGroupReplayUiProvider.overrideWithValue(true),
@@ -42,7 +42,7 @@ void main() {
     await pump(tester, 'championship-1');
 
     expect(find.byIcon(Icons.more_vert), findsNothing);
-    // No mock todos já confirmaram: só aparece o botão de recusar.
+    // No cenário de teste todos já confirmaram: só aparece o botão de recusar.
     expect(find.byTooltip('Recusar Luis'), findsOneWidget);
     expect(find.byTooltip('Confirmar Luis'), findsNothing);
 
@@ -95,7 +95,7 @@ void main() {
 
   testWidgets('sorteio em abas como a partida, sem modal, e depois Times',
       (tester) async {
-    final dataSource = ChampionshipMockDataSource();
+    final dataSource = ChampionshipTestDataSource();
     await dataSource.stepBack('g', 'championship-2'); // Times → Sorteio
     await pump(tester, 'championship-2', dataSource: dataSource);
 

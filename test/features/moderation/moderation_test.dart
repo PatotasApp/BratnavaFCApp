@@ -18,7 +18,8 @@ class _Recorder extends Interceptor {
             ]
           }
         : {'success': true};
-    handler.resolve(Response(requestOptions: options, statusCode: 200, data: data));
+    handler.resolve(
+        Response(requestOptions: options, statusCode: 200, data: data));
   }
 }
 
@@ -68,10 +69,12 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [moderationDsProvider.overrideWithValue(ds)],
       child: const MaterialApp(
-          home: Scaffold(body: ReportSheet(target: ReportTarget.user, targetId: 'u9'))),
+          home: Scaffold(
+              body: ReportSheet(target: ReportTarget.user, targetId: 'u9'))),
     ));
 
-    FilledButton button() => tester.widget<FilledButton>(find.byType(FilledButton));
+    FilledButton button() =>
+        tester.widget<FilledButton>(find.byType(FilledButton));
     expect(find.text('Denunciar perfil'), findsOneWidget);
     expect(button().onPressed, isNull);
 

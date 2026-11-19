@@ -94,9 +94,7 @@ class _EditableProfileAvatarState extends ConsumerState<EditableProfileAvatar> {
         throw Exception('A foto deve ter no máximo 5 MB.');
       }
 
-      await ref
-          .read(membersDsProvider)
-          .uploadProfilePhoto(compressed);
+      await ref.read(membersDsProvider).uploadProfilePhoto(compressed);
       await _refreshPhoto();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

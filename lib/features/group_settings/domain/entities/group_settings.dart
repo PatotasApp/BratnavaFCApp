@@ -168,6 +168,7 @@ class GroupSettings {
   // Match defaults
   final String? defaultPlaceName;
   final int? defaultDayOfWeek; // 0=Sun…6=Sat, null=unset
+  final List<int> defaultDaysOfWeek;
   final String? defaultKickoffTime; // "HH:mm:ss" from API; display as "HH:mm"
 
   // Payment
@@ -220,6 +221,7 @@ class GroupSettings {
     this.maxPlayers = 6,
     this.defaultPlaceName,
     this.defaultDayOfWeek,
+    this.defaultDaysOfWeek = const [],
     this.defaultKickoffTime,
     this.paymentMode = 0,
     this.monthlyFee,
@@ -258,11 +260,22 @@ class GroupSettings {
         ? json['data'] as Map<String, dynamic>
         : json;
 
+    final legacyDay = j['defaultDayOfWeek'] as int?;
+    final days = ((j['defaultDaysOfWeek'] as List?) ?? const [])
+        .whereType<num>()
+        .map((value) => value.toInt())
+        .where((value) => value >= 0 && value <= 6)
+        .toSet()
+        .toList()
+      ..sort();
+    if (days.isEmpty && legacyDay != null) days.add(legacyDay);
+
     return GroupSettings(
       minPlayers: (j['minPlayers'] as int?) ?? 5,
       maxPlayers: (j['maxPlayers'] as int?) ?? 6,
       defaultPlaceName: j['defaultPlaceName'] as String?,
-      defaultDayOfWeek: j['defaultDayOfWeek'] as int?,
+      defaultDayOfWeek: days.isEmpty ? legacyDay : days.first,
+      defaultDaysOfWeek: days,
       defaultKickoffTime: j['defaultKickoffTime'] as String?,
       paymentMode: (j['paymentMode'] as int?) ?? 0,
       monthlyFee: (j['monthlyFee'] as num?)?.toDouble(),
@@ -305,7 +318,7 @@ class GroupSettings {
     required int minPlayers,
     required int maxPlayers,
     required String? defaultPlaceName,
-    required int? defaultDayOfWeek,
+    required List<int> defaultDaysOfWeek,
     required String? defaultKickoffTime, // already "HH:mm:ss"
     required int paymentMode,
     required double? monthlyFee,
@@ -339,7 +352,9 @@ class GroupSettings {
         'minPlayers': minPlayers,
         'maxPlayers': maxPlayers,
         'defaultPlaceName': defaultPlaceName,
-        'defaultDayOfWeek': defaultDayOfWeek,
+        'defaultDayOfWeek':
+            defaultDaysOfWeek.isEmpty ? null : defaultDaysOfWeek.first,
+        'defaultDaysOfWeek': defaultDaysOfWeek,
         'defaultKickoffTime': defaultKickoffTime,
         'goalIcon': goalIcon,
         'goalkeeperIcon': goalkeeperIcon,

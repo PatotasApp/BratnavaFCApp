@@ -1,5 +1,12 @@
 import Flutter
 import UIKit
+import FirebaseMessaging
+
+// Exposto para o Dart via canal de diagnóstico; limpado a cada inicialização.
+@objc class PushRegistrationState: NSObject {
+  static var apnsError: String? = nil
+  static var apnsReceived: Bool = false
+}
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -7,13 +14,64 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    PushRegistrationState.apnsError = nil
+    PushRegistrationState.apnsReceived = false
+    let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    // Garante o token APNs em todo launch. Idempotente: retorna cached token se já registrado.
+    // Necessário porque o Firebase só chama registerForRemoteNotifications via requestPermission(),
+    // que o Flutter pula quando a permissão já foi concedida em sessão anterior.
+    application.registerForRemoteNotifications()
+    return result
+  }
+
+  // Firebase não consegue sempre capturar o APNs token via swizzling (especialmente
+  // em iOS 26+). Encaminhar explicitamente garante que getAPNSToken() funcione.
+  override func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    PushRegistrationState.apnsReceived = true
+    Messaging.messaging().apnsToken = deviceToken
+    super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+  }
+
+  // Chamado quando o iOS rejeita o registro — normalmente indica entitlement
+  // ausente no provisioning profile (aps-environment não autorizado).
+  override func application(
+    _ application: UIApplication,
+    didFailToRegisterForRemoteNotificationsWithError error: Error
+  ) {
+    PushRegistrationState.apnsError = error.localizedDescription
+    super.application(application, didFailToRegisterForRemoteNotificationsWithError: error)
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PatotasImageShare") {
       ImageShareChannel.register(messenger: registrar.messenger())
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PushDiagnostics") {
+      PushDiagnosticsChannel.register(messenger: registrar.messenger())
+    }
+  }
+}
+
+/// Expõe o estado de registro APNs ao Dart para a tela de diagnóstico de push.
+enum PushDiagnosticsChannel {
+  static func register(messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(
+      name: "br.com.patotasapp/push_diagnostics",
+      binaryMessenger: messenger
+    )
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "getRegistrationState" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      result([
+        "apnsReceived": PushRegistrationState.apnsReceived,
+        "apnsError": PushRegistrationState.apnsError as Any,
+      ])
     }
   }
 }

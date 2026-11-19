@@ -398,7 +398,6 @@ class _TabBtn extends StatelessWidget {
   }
 }
 
-
 // ── Goal form sheet ───────────────────────────────────────────────────────────
 
 class GoalFormSheet extends StatefulWidget {

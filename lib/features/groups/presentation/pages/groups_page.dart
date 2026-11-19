@@ -8,9 +8,11 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../../../core/api/api_response.dart';
 import '../../../../core/errors/app_exception.dart';
+import '../../../../core/onboarding/new_group_tour_storage.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../billing/presentation/billing_widgets.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
@@ -637,9 +639,21 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
               .read(authNotifierProvider.notifier)
               .refreshGroupMembership();
           ref.invalidate(myPlayersProvider);
-          // Abre automaticamente se agora há exatamente uma patota
-          if (_myGroups.length == 1) {
-            _openGroup(_myGroups.first['groupId']!);
+
+          // A patota recém-criada passa a ser o contexto ativo mesmo quando o
+          // usuário já participa de outras. Além de atualizar a tela, a
+          // seleção fica persistida no AccountStore e sobrevive ao onboarding
+          // de planilhas e às próximas aberturas do app.
+          final newGroupId = createdId;
+          if (newGroupId != null && newGroupId.isNotEmpty) {
+            await ref.read(authNotifierProvider.notifier).selectActiveGroup(
+                  groupId: newGroupId,
+                );
+            await ref.read(newGroupTourStorageProvider).start(
+                  creatorUserId: account.userId,
+                  groupId: newGroupId,
+                );
+            if (mounted) await _openGroup(newGroupId);
           }
         },
       ),
@@ -651,6 +665,7 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     if (id != null && mounted) {
       await showSpreadsheetOnboardingSheet(context,
           groupId: id, groupName: createdName);
+      if (mounted) context.go('/app/settings?tour=true');
     }
   }
 
@@ -1026,6 +1041,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
             roleLabels: _roleLabels(),
           ),
         ),
+        // Só admin e financeiro: para o jogador comum o card não existe.
+        GroupPlanCard(groupId: groupId),
       ],
     );
   }
@@ -1110,23 +1127,29 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
               onInvite: () => _showInvite(groupId),
               onLeave: _showLeaveConfirm,
               groupContent: isExpanded
-                  ? _GroupContent(
-                      group: _group,
-                      groupLoading: _groupLoading,
-                      groupError: _groupError,
-                      activePlayers: _sortedActivePlayers,
-                      guestPlayers: _guestPlayers,
-                      inactivePlayers: _inactivePlayers,
-                      activePlayerId: _activePlayerId,
-                      isAdminHere: isAdminHere,
-                      isFinanceiroHere: _canSeePaymentStatus(groupId),
-                      paymentMap: _paymentMap,
-                      icons: expandedIcons,
-                      isDark: isDark,
-                      onEditPlayer: _showEditPlayer,
-                      onEditRatings: (p) =>
-                          _showEditPlayer(p, section: _EditSection.ratings),
-                      roleLabels: _roleLabels(),
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _GroupContent(
+                          group: _group,
+                          groupLoading: _groupLoading,
+                          groupError: _groupError,
+                          activePlayers: _sortedActivePlayers,
+                          guestPlayers: _guestPlayers,
+                          inactivePlayers: _inactivePlayers,
+                          activePlayerId: _activePlayerId,
+                          isAdminHere: isAdminHere,
+                          isFinanceiroHere: _canSeePaymentStatus(groupId),
+                          paymentMap: _paymentMap,
+                          icons: expandedIcons,
+                          isDark: isDark,
+                          onEditPlayer: _showEditPlayer,
+                          onEditRatings: (p) =>
+                              _showEditPlayer(p, section: _EditSection.ratings),
+                          roleLabels: _roleLabels(),
+                        ),
+                        GroupPlanCard(groupId: groupId),
+                      ],
                     )
                   : null,
             ),
@@ -4540,7 +4563,10 @@ class _InviteSheetState extends State<_InviteSheet> {
           _AppInput(
             controller: _searchCtrl,
             hint: 'Pesquisar...',
-            enabled: !_loading,
+            // A busca é disparada enquanto o usuário digita. Desabilitar o
+            // campo durante a requisição remove o foco e fecha o teclado,
+            // impedindo que o termo seja corrigido após o primeiro resultado.
+            enabled: true,
             isDark: isDark,
           ),
           if (_err != null) ...[

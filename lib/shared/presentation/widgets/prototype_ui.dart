@@ -46,6 +46,7 @@ class PrototypeSegmented extends StatelessWidget {
   final List<String> items;
   final String value;
   final ValueChanged<String> onChanged;
+  final String Function(String item)? labelBuilder;
 
   /// Rótulo do grupo para leitores de tela.
   final String semanticLabel;
@@ -55,6 +56,7 @@ class PrototypeSegmented extends StatelessWidget {
     required this.items,
     required this.value,
     required this.onChanged,
+    this.labelBuilder,
     this.semanticLabel = 'Opções',
   });
 
@@ -86,7 +88,7 @@ class PrototypeSegmented extends StatelessWidget {
               if (i > 0) const SizedBox(width: 4),
               Expanded(
                 child: _SegmentButton(
-                  label: items[i],
+                  label: labelBuilder?.call(items[i]) ?? items[i],
                   selected: items[i] == value,
                   activeBg: activeBg,
                   activeFg: activeFg,

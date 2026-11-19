@@ -10,9 +10,9 @@ import '../../data/datasources/championship_datasource.dart';
 import '../../domain/entities/championship_enums.dart';
 import '../../domain/entities/championship_models.dart';
 
-final championshipDataSourceProvider = Provider<ChampionshipDataSource>((ref) {
-  return ChampionshipApiDataSource(ref.watch(dioProvider));
-});
+final championshipDataSourceProvider = Provider<ChampionshipDataSource>(
+  (ref) => ChampionshipApiDataSource(ref.watch(dioProvider)),
+);
 
 final championshipGroupIdProvider = Provider<String>((ref) {
   final account = ref.watch(accountStoreProvider).activeAccount;

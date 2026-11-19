@@ -16,6 +16,8 @@ import '../../../group_settings/presentation/providers/group_settings_provider.d
 import '../../../members/presentation/providers/members_provider.dart';
 import '../../domain/entities/match_models.dart';
 import '../providers/match_provider.dart';
+import '../widgets/match_add_guest_sheet.dart';
+import '../widgets/match_player_role_toggle.dart';
 
 class Step2AceitacaoPage extends ConsumerStatefulWidget {
   final Widget? linkedPollStrip;
@@ -203,6 +205,19 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
     );
   }
 
+  Future<void> _addGuest(GroupIcons icons) async {
+    final added = await showMatchAddGuestSheet(
+      context: context,
+      icons: icons,
+      onSubmit: (name, isGoalkeeper, starRating) => ref
+          .read(matchNotifierProvider.notifier)
+          .addGuest(name, isGoalkeeper, starRating),
+    );
+    if (added == true && mounted) {
+      setState(() => _tab = _tabAccepted);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = ref.watch(matchNotifierProvider);
@@ -263,11 +278,29 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
                     const SizedBox(height: 10),
                     widget.linkedPollStrip!,
                   ],
+                  if (isAdmin) ...[
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: OutlinedButton.icon(
+                        key: const Key('add-match-guest-button'),
+                        onPressed: s.mutating ? null : () => _addGuest(icons),
+                        icon: const Icon(Icons.person_add_alt_1_outlined,
+                            size: 17),
+                        label: const Text('Adicionar convidado'),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   PrototypeSegmented(
                     items: _tabs,
                     value: _tab,
                     semanticLabel: 'Filtrar por resposta',
+                    labelBuilder: (tab) => switch (tab) {
+                      _tabRejected => '$tab · ${rejected.length}',
+                      _tabPending => '$tab · ${pending.length}',
+                      _ => '$tab · ${accepted.length}',
+                    },
                     onChanged: (t) => setState(() => _tab = t),
                   ),
                   const SizedBox(height: 12),
@@ -690,6 +723,11 @@ class _InviteCard extends StatelessWidget {
 
 class _PlayerRow extends StatelessWidget {
   static const double _avatarSize = 44;
+  static const double _identityLineHeight = 18;
+  static const double _metadataLineHeight = 24;
+  static const double _actionsGap = 6;
+  static const double _actionsWidth =
+      PrototypeLayout.minimumTouchTarget * 2 + _actionsGap;
 
   final MatchPlayerInfo player;
   final bool isMe;
@@ -793,124 +831,163 @@ class _PlayerRow extends StatelessWidget {
           ),
           const SizedBox(width: PrototypeLayout.rowGap),
 
-          // Nome + badges
+          // Template fixo de identidade: o nome sempre ocupa a primeira
+          // faixa; função e badges sempre ocupam a segunda. Assim nomes
+          // curtos, longos e convidados não deslocam os demais controles.
           Expanded(
-            child: Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 5,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                UserProfileLink(
-                  userId: player.userId,
-                  child: Text(
-                    player.playerName,
-                    style: TextStyle(
-                      // `.proto-list-row` usa 12/700 no nome, não 13/500.
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: isDark ? AppColors.onDark : AppColors.lightText,
-                    ),
-                  ),
-                ),
-                // Goleiro toggle (admin) ou ícone (não-admin)
-                if (isAdmin)
-                  GestureDetector(
-                    onTap: busy
-                        ? null
-                        : () => onSetRole(
-                            player.matchPlayerId, !player.isGoalkeeper),
-                    child: Opacity(
-                      opacity: busy ? 0.5 : 1,
-                      child: Tooltip(
-                        message: player.isGoalkeeper
-                            ? 'Goleiro – toque para mudar para linha'
-                            : 'Linha – toque para mudar para goleiro',
-                        child: renderGroupIcon(
-                          player.isGoalkeeper ? icons.goalkeeper : icons.player,
-                          size: 14,
-                          color: AppColors.slate400,
+                SizedBox(
+                  key: ValueKey('match-player-name-${player.matchPlayerId}'),
+                  height: _identityLineHeight,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: UserProfileLink(
+                      userId: player.userId,
+                      child: Text(
+                        player.playerName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color:
+                              isDark ? AppColors.onDark : AppColors.lightText,
                         ),
                       ),
                     ),
-                  )
-                else
-                  renderGroupIcon(
-                    player.isGoalkeeper ? icons.goalkeeper : icons.player,
-                    size: 14,
-                    color: AppColors.slate400,
                   ),
-
-                // `Badge tone="accent"` = `.proto-chip.active`: preenchido no
-                // accent com texto sobre ele. O azul não existe na paleta do
-                // protótipo.
-                if (isMe)
-                  Container(
-                    // Sem `alignment` e sem `height`: dentro de um `Wrap` o
-                    // filho recebe a largura máxima da linha, e um `Container`
-                    // com alignment vira um `Align` que a preenche inteira —
-                    // era isso que esticava o badge de ponta a ponta. Só com
-                    // padding ele encolhe para o texto.
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: AppColors.accentOf(theme.brightness),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    // `--on-accent` no tema claro é #17191e, quase preto — não
-                    // branco. Conferido com tools/resolve-style.mjs.
-                    child: Text('Você',
-                        style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            height: 1.2,
-                            color: AppColors.onAccentOf(theme.brightness))),
+                ),
+                const SizedBox(height: 2),
+                SizedBox(
+                  key:
+                      ValueKey('match-player-metadata-${player.matchPlayerId}'),
+                  height: _metadataLineHeight,
+                  child: Row(
+                    children: [
+                      if (isAdmin)
+                        MatchPlayerRoleToggle(
+                          playerName: player.playerName,
+                          isGoalkeeper: player.isGoalkeeper,
+                          icons: icons,
+                          busy: busy,
+                          onPressed: () => onSetRole(
+                              player.matchPlayerId, !player.isGoalkeeper),
+                        )
+                      else
+                        SizedBox(
+                          width: 74,
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: renderGroupIcon(
+                              player.isGoalkeeper
+                                  ? icons.goalkeeper
+                                  : icons.player,
+                              size: 14,
+                              color: AppColors.slate400,
+                            ),
+                          ),
+                        ),
+                      if (isMe) ...[
+                        const SizedBox(width: 5),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentOf(theme.brightness),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            'Você',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              height: 1.2,
+                              color: AppColors.onAccentOf(theme.brightness),
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (isGuest) ...[
+                        const SizedBox(width: 5),
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppColors.amber500.withValues(alpha: 0.25)
+                                  : AppColors.amber200,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: AppColors.warning.withValues(alpha: 0.5),
+                              ),
+                            ),
+                            child: const Text(
+                              'Convidado',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.warningLight,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                if (isGuest)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? AppColors.amber500.withValues(alpha: 0.25)
-                          : AppColors.amber200,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: AppColors.warning.withValues(alpha: 0.5)),
-                    ),
-                    child: const Text('Convidado',
-                        style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.warningLight)),
-                  ),
+                ),
               ],
             ),
           ),
+          const SizedBox(width: PrototypeLayout.rowGap),
 
-          // `.proto-icon-btn`: 44×44, raio 12, borda e fundo neutros, ícone em
-          // text-secondary. O protótipo não tinge esses botões de verde e
-          // vermelho — a ação já é clara pelo ícone e pela aba.
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (showReject)
-                _ActionBtn(
-                  icon: Icons.close,
-                  isDark: isDark,
-                  tooltip: 'Recusar',
-                  enabled: !busy,
-                  onTap: () => onReject(player.playerId),
+          // Com duas ações, recusar fica à esquerda e aceitar à direita. Se só
+          // houver uma ação, ela ocupa a coluna da direita.
+          SizedBox(
+            key: ValueKey('match-player-actions-${player.matchPlayerId}'),
+            width: _actionsWidth,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: PrototypeLayout.minimumTouchTarget,
+                  child: showReject && showAccept
+                      ? _ActionBtn(
+                          icon: Icons.close,
+                          isDark: isDark,
+                          tooltip: 'Recusar',
+                          enabled: !busy,
+                          onTap: () => onReject(player.playerId),
+                        )
+                      : null,
                 ),
-              if (showAccept) ...[
-                const SizedBox(width: 6),
-                _ActionBtn(
-                  icon: Icons.check,
-                  isDark: isDark,
-                  tooltip: 'Aceitar',
-                  enabled: !busy,
-                  onTap: () => onAccept(player.playerId),
+                const SizedBox(width: _actionsGap),
+                SizedBox(
+                  width: PrototypeLayout.minimumTouchTarget,
+                  child: showAccept
+                      ? _ActionBtn(
+                          icon: Icons.check,
+                          isDark: isDark,
+                          tooltip: 'Aceitar',
+                          enabled: !busy,
+                          onTap: () => onAccept(player.playerId),
+                        )
+                      : showReject
+                          ? _ActionBtn(
+                              icon: Icons.close,
+                              isDark: isDark,
+                              tooltip: 'Recusar',
+                              enabled: !busy,
+                              onTap: () => onReject(player.playerId),
+                            )
+                          : null,
                 ),
               ],
-            ],
+            ),
           ),
         ],
       ),

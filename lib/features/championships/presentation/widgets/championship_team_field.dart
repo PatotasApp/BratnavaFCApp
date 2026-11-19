@@ -272,9 +272,8 @@ class _Pin extends StatelessWidget {
                         : Text(
                             fieldInitials(player.name),
                             style: TextStyle(
-                              color: light
-                                  ? AppColors.slate900
-                                  : AppColors.onDark,
+                              color:
+                                  light ? AppColors.slate900 : AppColors.onDark,
                               fontSize: pinSize * .32,
                               fontWeight: FontWeight.w900,
                             ),
@@ -336,7 +335,11 @@ class _PitchPainter extends CustomPainter {
         ..shader = const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [AppColors.accentBackground, AppColors.primaryPressed, AppColors.accentBackground],
+          colors: [
+            AppColors.accentBackground,
+            AppColors.primaryPressed,
+            AppColors.accentBackground
+          ],
         ).createShader(rect),
     );
     // Faixas do gramado.

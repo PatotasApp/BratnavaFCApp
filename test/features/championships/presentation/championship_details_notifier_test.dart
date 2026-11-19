@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:patotas_app/features/championships/data/datasources/championship_mock_datasource.dart';
+import '../../../support/championship_test_datasource.dart';
 import 'package:patotas_app/features/championships/domain/entities/championship_enums.dart';
 import 'package:patotas_app/features/championships/domain/entities/championship_models.dart';
 import 'package:patotas_app/features/championships/presentation/providers/championship_provider.dart';
 
 void main() {
-  // No mock, o campeonato em TeamDraw tem 3 times de 3; o 1º de cada time é
+  // No cenário de teste, o campeonato em TeamDraw tem 3 times de 3; o 1º de cada time é
   // o goleiro (player-1, player-4 e player-7).
   const id = 'championship-2';
   String player(int index) => '$id-player-$index';
@@ -13,7 +13,7 @@ void main() {
 
   Future<ChampionshipDetailsNotifier> loaded() async {
     final notifier =
-        ChampionshipDetailsNotifier(ChampionshipMockDataSource(), 'g', id);
+        ChampionshipDetailsNotifier(ChampionshipTestDataSource(), 'g', id);
     await notifier.load();
     return notifier;
   }

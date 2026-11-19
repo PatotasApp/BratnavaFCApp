@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/errors/app_exception.dart';
+import '../../../../core/onboarding/new_group_tour_storage.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/no_active_group_view.dart';
+import '../../../../shared/presentation/widgets/new_group_tour_banner.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/datasources/team_color_remote_datasource.dart';
@@ -14,7 +17,9 @@ import '../providers/team_colors_provider.dart';
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 class TeamColorsPage extends ConsumerStatefulWidget {
-  const TeamColorsPage({super.key});
+  final bool onboarding;
+
+  const TeamColorsPage({super.key, this.onboarding = false});
 
   @override
   ConsumerState<TeamColorsPage> createState() => _TeamColorsPageState();
@@ -22,6 +27,18 @@ class TeamColorsPage extends ConsumerStatefulWidget {
 
 class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
   int _selectedIndex = 0;
+
+  Future<void> _continueTour() async {
+    await ref
+        .read(newGroupTourStorageProvider)
+        .moveTo(NewGroupTourStage.firstMatch);
+    if (mounted) context.go('/app/matches?tour=true');
+  }
+
+  Future<void> _skipTour() async {
+    await ref.read(newGroupTourStorageProvider).clear();
+    if (mounted) context.go('/app');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +55,7 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
         account.groupAdminIds.isNotEmpty;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return RefreshIndicator(
+    final page = RefreshIndicator(
       onRefresh: () async {
         if (groupIdNN != null) {
           ref.invalidate(teamColorsProvider(groupIdNN));
@@ -115,6 +132,39 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
           ],
         ),
       ),
+    );
+
+    if (!widget.onboarding || groupIdNN == null) return page;
+
+    final colors =
+        ref.watch(teamColorsProvider(groupIdNN)).valueOrNull ?? const [];
+    final count = colors.length;
+    return Stack(
+      children: [
+        page,
+        NewGroupTourOverlay(
+          step: 2,
+          title: 'Cadastre dois uniformes',
+          description:
+              'Use o botão abaixo para criar as duas cores da patota. Você verá os uniformes aparecendo na tela ao fundo.',
+          status: '${count.clamp(0, 2)}/2',
+          actionLabel: count >= 2
+              ? 'Continuar para a primeira partida'
+              : count == 0
+                  ? 'Cadastrar 1º uniforme'
+                  : 'Cadastrar 2º uniforme',
+          actionEnabled: canManage,
+          onAction: count >= 2
+              ? _continueTour
+              : () => _openEditSheet(
+                    context,
+                    groupId: groupIdNN,
+                    canManage: canManage,
+                    isDark: isDark,
+                  ),
+          onSkip: _skipTour,
+        ),
+      ],
     );
   }
 

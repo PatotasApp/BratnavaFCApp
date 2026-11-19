@@ -600,6 +600,7 @@ class _AbsenceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isMedical = absence.absenceType == 2;
     final dateLabel = absence.startDate == absence.endDate
         ? _formatDate(absence.startDate)
@@ -611,18 +612,22 @@ class _AbsenceCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
       decoration: BoxDecoration(
-        color: AppColors.onDark,
+        color: isDark ? AppColors.darkCard : AppColors.onDark,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: active ? AppColors.rose200 : AppColors.slate200,
+          color: active
+              ? AppColors.rose500.withValues(alpha: isDark ? .45 : 1)
+              : (isDark ? AppColors.darkBorder : AppColors.slate200),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.slate200.withAlpha(80),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: AppColors.slate200.withAlpha(80),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: Row(
         children: [
@@ -630,7 +635,11 @@ class _AbsenceCard extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: isMedical ? AppColors.rose50 : AppColors.slate100,
+              color: isMedical
+                  ? (isDark
+                      ? AppColors.dangerBackground
+                      : AppColors.rose50)
+                  : (isDark ? AppColors.darkElevated : AppColors.slate100),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
@@ -653,10 +662,10 @@ class _AbsenceCard extends StatelessWidget {
                         isGoalkeeper: absence.isGoalkeeper,
                         iconSize: 13,
                         maxLines: 1,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
-                          color: AppColors.slate900,
+                          color: isDark ? AppColors.darkText : AppColors.slate900,
                         ),
                       ),
                     ),
@@ -668,15 +677,19 @@ class _AbsenceCard extends StatelessWidget {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.slate100,
+                          color: isDark
+                              ? AppColors.darkElevated
+                              : AppColors.slate100,
                           borderRadius: BorderRadius.circular(999),
                         ),
-                        child: const Text(
+                        child: Text(
                           'você',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.slate500,
+                            color: isDark
+                                ? AppColors.darkTextSecondary
+                                : AppColors.slate500,
                           ),
                         ),
                       ),
@@ -692,9 +705,15 @@ class _AbsenceCard extends StatelessWidget {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.rose50,
+                          color: isDark
+                              ? AppColors.dangerBackground
+                              : AppColors.rose50,
                           borderRadius: BorderRadius.circular(999),
-                          border: Border.all(color: AppColors.rose200),
+                          border: Border.all(
+                            color: isDark
+                                ? AppColors.rose500.withValues(alpha: .45)
+                                : AppColors.rose200,
+                          ),
                         ),
                         child: const Text(
                           'Ativa',
@@ -716,9 +735,11 @@ class _AbsenceCard extends StatelessWidget {
                   '${absence.absenceTypeName} · $dateLabel',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: AppColors.slate500,
+                    color: isDark
+                        ? AppColors.darkTextMuted
+                        : AppColors.slate500,
                   ),
                 ),
                 if ((absence.description ?? '').trim().isNotEmpty) ...[
@@ -727,9 +748,11 @@ class _AbsenceCard extends StatelessWidget {
                     absence.description!.trim(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: AppColors.slate500,
+                      color: isDark
+                          ? AppColors.darkTextMuted
+                          : AppColors.slate500,
                     ),
                   ),
                 ],
@@ -769,6 +792,7 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -778,7 +802,11 @@ class _ActionButton extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: danger ? AppColors.rose200 : AppColors.slate200,
+            color: danger
+                ? (isDark
+                    ? AppColors.rose500.withValues(alpha: .45)
+                    : AppColors.rose200)
+                : (isDark ? AppColors.darkBorder : AppColors.slate200),
           ),
         ),
         child: Icon(
@@ -828,28 +856,33 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 42, horizontal: 24),
       decoration: BoxDecoration(
-        color: AppColors.onDark,
+        color: isDark ? AppColors.darkCard : AppColors.onDark,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.slate200),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.slate200,
+        ),
       ),
-      child: const Column(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             Icons.event_busy_outlined,
             size: 36,
-            color: AppColors.slate300,
+            color: isDark ? AppColors.darkTextMuted : AppColors.slate300,
           ),
-          SizedBox(height: 12),
+          const SizedBox(height: 12),
           Text(
             'Nenhuma ausência ativa ou futura.',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w500,
-              color: AppColors.slate500,
+              color: isDark
+                  ? AppColors.darkTextSecondary
+                  : AppColors.slate500,
             ),
           ),
         ],
@@ -881,6 +914,7 @@ class _SkeletonList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: EdgeInsets.fromLTRB(24, compact ? 0 : 16, 24, 0),
       child: Column(
@@ -889,7 +923,7 @@ class _SkeletonList extends StatelessWidget {
             Container(
               height: 64,
               decoration: BoxDecoration(
-                color: AppColors.slate100,
+                color: isDark ? AppColors.darkCard : AppColors.slate100,
                 borderRadius: BorderRadius.circular(14),
               ),
             ),

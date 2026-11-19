@@ -184,7 +184,8 @@ class _ChampionshipGoalsSectionState extends State<ChampionshipGoalsSection> {
                 items: [for (final g in games) 'Jogo ${g.order}'],
                 value: 'Jogo ${game.order}',
                 onChanged: (label) => setState(() {
-                  _gameId = games.firstWhere((g) => 'Jogo ${g.order}' == label).id;
+                  _gameId =
+                      games.firstWhere((g) => 'Jogo ${g.order}' == label).id;
                   _teamTab = 0;
                 }),
                 semanticLabel: 'Jogo do campeonato',
@@ -208,14 +209,15 @@ class _ChampionshipGoalsSectionState extends State<ChampionshipGoalsSection> {
             bName: teamB?.name ?? 'Time B',
             isDark: isDark,
             icons: widget.icons,
-            goalkeeperByName: {for (final p in players) p.playerName: p.isGoalkeeper},
+            goalkeeperByName: {
+              for (final p in players) p.playerName: p.isGoalkeeper
+            },
             isAdmin: widget.isAdmin,
             onAddGoal: widget.isAdmin ? () => _openForm(game) : null,
             onEditGoal: widget.isAdmin
                 ? (goal) => _openForm(game, editing: goal)
                 : null,
-            onDeleteGoal:
-                widget.isAdmin ? (goal) => _delete(game, goal) : null,
+            onDeleteGoal: widget.isAdmin ? (goal) => _delete(game, goal) : null,
           ),
           const SizedBox(height: 16),
         ],

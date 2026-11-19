@@ -4,8 +4,8 @@ import 'package:patotas_app/features/auth/presentation/widgets/legal_notice.dart
 
 void main() {
   testWidgets('aviso de aceite cita os termos e a política', (tester) async {
-    await tester.pumpWidget(
-        const MaterialApp(home: Scaffold(body: LegalNotice())));
+    await tester
+        .pumpWidget(const MaterialApp(home: Scaffold(body: LegalNotice())));
 
     expect(
       find.text(

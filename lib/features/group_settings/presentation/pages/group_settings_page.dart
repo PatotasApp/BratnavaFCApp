@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/errors/app_exception.dart';
+import '../../../../core/onboarding/new_group_tour_storage.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/entities/account.dart';
 import '../../../auth/presentation/providers/account_store.dart';
@@ -16,6 +17,8 @@ import '../providers/group_settings_provider.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/no_active_group_view.dart';
+import '../../../../shared/presentation/widgets/new_group_tour_banner.dart';
+import '../../../../core/share/share_links.dart';
 import '../../../group_spreadsheets/presentation/group_spreadsheets_page.dart';
 import '../../../discovery/presentation/widgets/group_discovery_settings_card.dart';
 
@@ -218,7 +221,14 @@ const _kDayLabels = <String>[
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 class GroupSettingsPage extends ConsumerStatefulWidget {
-  const GroupSettingsPage({super.key});
+  final bool onboarding;
+  final int initialTourTab;
+
+  const GroupSettingsPage({
+    super.key,
+    this.onboarding = false,
+    this.initialTourTab = 0,
+  });
 
   @override
   ConsumerState<GroupSettingsPage> createState() =>
@@ -299,6 +309,8 @@ class _GroupSettingsPageWrapperState extends ConsumerState<GroupSettingsPage> {
         detailAsync: detailAsync,
         groupId: groupId,
         account: account,
+        onboarding: widget.onboarding,
+        initialTourTab: widget.initialTourTab,
       ),
     );
   }
@@ -331,12 +343,16 @@ class _SettingsBody extends ConsumerStatefulWidget {
   final AsyncValue<GroupDetail> detailAsync;
   final String groupId;
   final Account account;
+  final bool onboarding;
+  final int initialTourTab;
 
   const _SettingsBody({
     required this.settings,
     required this.detailAsync,
     required this.groupId,
     required this.account,
+    required this.onboarding,
+    required this.initialTourTab,
   });
 
   @override
@@ -344,6 +360,7 @@ class _SettingsBody extends ConsumerStatefulWidget {
 }
 
 class _SettingsBodyState extends ConsumerState<_SettingsBody> {
+  final ScrollController _scrollController = ScrollController();
   // ── Form state ────────────────────────────────────────────────────────────
   late final TextEditingController _placeCtrl;
   late final TextEditingController _minCtrl;
@@ -351,7 +368,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
   late final TextEditingController _feeCtrl;
   late final TextEditingController _goalkeeperFeeCtrl;
 
-  late int? _dayOfWeek; // null = "Sem padrão"
+  late Set<int> _daysOfWeek;
   late String? _kickoffTime; // "HH:mm" for display; saved as "HH:mm:ss"
   late int _paymentMode;
 
@@ -393,6 +410,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   // ── Tab state ─────────────────────────────────────────────────────────────
   int _activeTab = 0;
+  int _tourTabIndex = 0;
 
   // ── Save state ────────────────────────────────────────────────────────────
   bool _saving = false;
@@ -404,6 +422,10 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
   @override
   void initState() {
     super.initState();
+    if (widget.onboarding) {
+      _tourTabIndex = widget.initialTourTab.clamp(0, _kTabLabels.length - 1);
+      _activeTab = _tourTabIndex;
+    }
     _initFromSettings(widget.settings);
   }
 
@@ -419,7 +441,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
           ? s.goalkeeperMonthlyFee!.toStringAsFixed(2)
           : '',
     );
-    _dayOfWeek = s.defaultDayOfWeek;
+    _daysOfWeek = s.defaultDaysOfWeek.toSet();
     // API stores "HH:mm:ss" — display only "HH:mm"
     _kickoffTime = s.defaultKickoffTime
         ?.substring(0, 5.clamp(0, s.defaultKickoffTime!.length));
@@ -518,7 +540,6 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Divider(color: isDark ? AppColors.slate700 : AppColors.slate100),
         Text(
           'Abas disponiveis',
           style: TextStyle(
@@ -557,6 +578,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _placeCtrl.dispose();
     _minCtrl.dispose();
     _maxCtrl.dispose();
@@ -569,7 +591,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   // ── Save ──────────────────────────────────────────────────────────────────
 
-  Future<void> _save() async {
+  Future<bool> _save() async {
+    var saved = false;
     setState(() {
       _saving = true;
       _saveMsg = null;
@@ -601,7 +624,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
         minPlayers: min,
         maxPlayers: max,
         defaultPlaceName: place,
-        defaultDayOfWeek: _dayOfWeek,
+        defaultDaysOfWeek: _daysOfWeek.toList()..sort(),
         defaultKickoffTime: kickoff,
         paymentMode: _paymentMode,
         monthlyFee: fee,
@@ -636,6 +659,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
         manualMatchSchedules: _manualMatchSchedules,
       );
       ref.invalidate(groupSettingsProvider(widget.groupId));
+      saved = true;
       if (mounted) {
         setState(() {
           _isPersisted = true;
@@ -656,6 +680,39 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+    return saved;
+  }
+
+  Future<void> _advanceSettingsTour() async {
+    if (_tourTabIndex < _kTabLabels.length - 1) {
+      final nextTab = _tourTabIndex + 1;
+      await ref.read(newGroupTourStorageProvider).updateSettingsTab(nextTab);
+      if (!mounted) return;
+      setState(() {
+        _tourTabIndex = nextTab;
+        _activeTab = _tourTabIndex;
+      });
+      if (_scrollController.hasClients) {
+        await _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+      }
+      return;
+    }
+
+    final saved = await _save();
+    if (!saved) return;
+    await ref
+        .read(newGroupTourStorageProvider)
+        .moveTo(NewGroupTourStage.uniforms);
+    if (mounted) context.go('/app/team-colors?tour=true');
+  }
+
+  Future<void> _skipTour() async {
+    await ref.read(newGroupTourStorageProvider).clear();
+    if (mounted) context.go('/app');
   }
 
   // ── Time picker ───────────────────────────────────────────────────────────
@@ -1017,53 +1074,72 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     final detail = detailAsync.valueOrNull;
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          // ── 1. Header ────────────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: _buildHeader(detail?.name),
-          ),
-
-          // ── 2. Configurações (tabbed) ─────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  GroupDiscoverySettingsCard(
-                    groupId: widget.groupId,
-                    publicPageEnabled: _publicPageEnabled,
-                    onPublicPageChanged: (v) =>
-                        setState(() => _publicPageEnabled = v),
-                    onSaveSettings: _save,
-                  ),
-                  const SizedBox(height: 16),
-                  _buildTabbedSettings(
-                    isDark,
-                    detail: detail,
-                    detailAsync: detailAsync,
-                  ),
-                ],
+      body: Stack(
+        children: [
+          CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              // ── 1. Header ────────────────────────────────────────────────────
+              SliverToBoxAdapter(
+                child: _buildHeader(detail?.name),
               ),
-            ),
-          ),
 
-          // ── 3. Equipe da patota ───────────────────────────────────────────
-          // A equipe agora é exibida dentro da aba própria, acima.
-          if (_activeTab == -1)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
-                child: _CardSection(
-                  iconBg: AppColors.darkBorder,
-                  icon: Icons.group_outlined,
-                  title: 'Equipe da patota',
-                  subtitle: 'Administradores e responsáveis financeiros',
-                  child: _buildTeam(isDark,
-                      detail: detail, detailAsync: detailAsync),
+              // ── 2. Configurações (tabbed) ─────────────────────────────────────
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      GroupDiscoverySettingsCard(
+                        groupId: widget.groupId,
+                        publicPageEnabled: _publicPageEnabled,
+                        onPublicPageChanged: (v) =>
+                            setState(() => _publicPageEnabled = v),
+                        onSaveSettings: _save,
+                      ),
+                      const SizedBox(height: 16),
+                      _buildTabbedSettings(
+                        isDark,
+                        detail: detail,
+                        detailAsync: detailAsync,
+                      ),
+                    ],
+                  ),
                 ),
               ),
+
+              // ── 3. Equipe da patota ───────────────────────────────────────────
+              // A equipe agora é exibida dentro da aba própria, acima.
+              if (_activeTab == -1)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+                    child: _CardSection(
+                      iconBg: AppColors.darkBorder,
+                      icon: Icons.group_outlined,
+                      title: 'Equipe da patota',
+                      subtitle: 'Administradores e responsáveis financeiros',
+                      child: _buildTeam(isDark,
+                          detail: detail, detailAsync: detailAsync),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (widget.onboarding)
+            NewGroupTourOverlay(
+              step: 1,
+              title: 'Configurações · ${_kTabLabels[_activeTab]}',
+              description:
+                  'Ajuste os campos desta tela ao fundo. Vamos passar pelas cinco áreas para você conhecer tudo antes dos uniformes.',
+              status: '${_tourTabIndex + 1}/${_kTabLabels.length} abas',
+              actionLabel: _tourTabIndex == _kTabLabels.length - 1
+                  ? 'Salvar e ir para uniformes'
+                  : 'Próxima: ${_kTabLabels[_tourTabIndex + 1]}',
+              actionEnabled: !_saving,
+              onAction: _advanceSettingsTour,
+              onSkip: _skipTour,
             ),
         ],
       ),
@@ -1285,8 +1361,9 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   Widget _buildTabBtn(int idx, String label, bool isDark) {
     final sel = _activeTab == idx;
+    final enabled = !widget.onboarding || idx <= _tourTabIndex;
     return InkWell(
-      onTap: () => setState(() => _activeTab = idx),
+      onTap: enabled ? () => setState(() => _activeTab = idx) : null,
       borderRadius: BorderRadius.circular(7),
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 44),
@@ -1478,28 +1555,22 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                 _labeledInput(
                   label: 'Local padrão',
                   ctrl: _placeCtrl,
-                  hint: 'Ex: Boca Jrs',
+                  hint: 'Ex: Arena Municipal',
                   isDark: isDark,
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                        child: _DayDropdown(
-                      label: 'Dia',
-                      value: _dayOfWeek,
-                      isDark: isDark,
-                      onChanged: (v) => setState(() => _dayOfWeek = v),
-                    )),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: _TimeField(
-                      label: 'Horário',
-                      value: _kickoffTime,
-                      isDark: isDark,
-                      onTap: _pickTime,
-                    )),
-                  ],
+                _DaysSelector(
+                  label: 'Dias',
+                  values: _daysOfWeek,
+                  isDark: isDark,
+                  onChanged: (values) => setState(() => _daysOfWeek = values),
+                ),
+                const SizedBox(height: 12),
+                _TimeField(
+                  label: 'Horário',
+                  value: _kickoffTime,
+                  isDark: isDark,
+                  onTap: _pickTime,
                 ),
               ],
             ),
@@ -1807,6 +1878,13 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                Divider(
+                  height: 1,
+                  color: isDark ? AppColors.slate700 : AppColors.slate200,
+                ),
+                const SizedBox(height: 12),
+                _statsTabChips(isDark),
               ],
             ),
           ),
@@ -1873,17 +1951,6 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
             ),
             const SizedBox(height: 12),
           ],
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.slate900 : AppColors.onDark,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: isDark ? AppColors.slate700 : AppColors.slate200),
-            ),
-            padding: const EdgeInsets.all(16),
-            child: _statsTabChips(isDark),
-          ),
         ],
       );
 
@@ -1992,7 +2059,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
             SizedBox(
               height: 44,
               child: FilledButton.icon(
-                onPressed: _saving ? null : _save,
+                onPressed: _saving ? null : () => _save(),
                 icon: _saving
                     ? const SizedBox(
                         width: 14,
@@ -2094,28 +2161,22 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                 _labeledInput(
                   label: 'Local padrão',
                   ctrl: _placeCtrl,
-                  hint: 'Ex: Boca Jrs',
+                  hint: 'Ex: Arena Municipal',
                   isDark: isDark,
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                        child: _DayDropdown(
-                      label: 'Dia',
-                      value: _dayOfWeek,
-                      isDark: isDark,
-                      onChanged: (v) => setState(() => _dayOfWeek = v),
-                    )),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: _TimeField(
-                      label: 'Horário',
-                      value: _kickoffTime,
-                      isDark: isDark,
-                      onTap: _pickTime,
-                    )),
-                  ],
+                _DaysSelector(
+                  label: 'Dias',
+                  values: _daysOfWeek,
+                  isDark: isDark,
+                  onChanged: (values) => setState(() => _daysOfWeek = values),
+                ),
+                const SizedBox(height: 12),
+                _TimeField(
+                  label: 'Horário',
+                  value: _kickoffTime,
+                  isDark: isDark,
+                  onTap: _pickTime,
                 ),
               ],
             ),
@@ -2288,19 +2349,6 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
             ),
           ),
 
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.slate900 : AppColors.onDark,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: isDark ? AppColors.slate700 : AppColors.slate200),
-            ),
-            padding: const EdgeInsets.all(16),
-            child: _statsTabChips(isDark), // Conteúdo da seção geral.
-          ),
-
           const SizedBox(height: 20),
 
           // ── Save button + status ──────────────────────────────────────────────
@@ -2311,7 +2359,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                 SizedBox(
                   height: 44,
                   child: FilledButton.icon(
-                    onPressed: _saving ? null : _save,
+                    onPressed: _saving ? null : () => _save(),
                     icon: _saving
                         ? const SizedBox(
                             width: 14,
@@ -3497,6 +3545,69 @@ class _IconRenderer extends StatelessWidget {
 
 // ── Day Dropdown ──────────────────────────────────────────────────────────────
 
+class _DaysSelector extends StatelessWidget {
+  final String label;
+  final Set<int> values;
+  final bool isDark;
+  final ValueChanged<Set<int>> onChanged;
+
+  const _DaysSelector({
+    required this.label,
+    required this.values,
+    required this.isDark,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: isDark ? AppColors.slate400 : AppColors.slate500,
+            )),
+        const SizedBox(height: 5),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: List.generate(7, (index) {
+            const labels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+            final selected = values.contains(index);
+            return FilterChip(
+              key: ValueKey('default-match-day-$index'),
+              label: Text(labels[index]),
+              selected: selected,
+              showCheckmark: false,
+              visualDensity: VisualDensity.compact,
+              onSelected: (enabled) {
+                final next = Set<int>.from(values);
+                enabled ? next.add(index) : next.remove(index);
+                onChanged(next);
+              },
+            );
+          }),
+        ),
+        if (values.isEmpty) ...[
+          const SizedBox(height: 5),
+          Text(
+            'Sem dias padrão',
+            style: TextStyle(
+              fontSize: 11,
+              color: isDark ? AppColors.slate500 : AppColors.slate400,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ── Due Day Dropdown ──────────────────────────────────────────────────────────
+
+// The automatic match scheduler still has one execution weekday of its own.
 class _DayDropdown extends StatelessWidget {
   final String label;
   final int? value;
@@ -3512,6 +3623,15 @@ class _DayDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const labels = [
+      'Domingo',
+      'Segunda-feira',
+      'Terça-feira',
+      'Quarta-feira',
+      'Quinta-feira',
+      'Sexta-feira',
+      'Sábado',
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3551,22 +3671,13 @@ class _DayDropdown extends StatelessWidget {
                               ? AppColors.slate500
                               : AppColors.slate400)),
                 ),
-                // 0=Domingo … 6=Sábado (mirrors site's DAY_OPTIONS)
-                ...List.generate(7, (i) {
-                  const labels = [
-                    'Domingo',
-                    'Segunda-feira',
-                    'Terça-feira',
-                    'Quarta-feira',
-                    'Quinta-feira',
-                    'Sexta-feira',
-                    'Sábado',
-                  ];
-                  return DropdownMenuItem<int?>(
-                    value: i,
-                    child: Text(labels[i]),
-                  );
-                }),
+                ...List.generate(
+                  labels.length,
+                  (index) => DropdownMenuItem<int?>(
+                    value: index,
+                    child: Text(labels[index]),
+                  ),
+                ),
               ],
             ),
           ),
@@ -3575,8 +3686,6 @@ class _DayDropdown extends StatelessWidget {
     );
   }
 }
-
-// ── Due Day Dropdown ──────────────────────────────────────────────────────────
 
 class _DueDayDropdown extends StatelessWidget {
   final String label;

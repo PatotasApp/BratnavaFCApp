@@ -235,17 +235,17 @@ class _Step4State extends ConsumerState<Step4JogoPage> {
                       ),
                       const SizedBox(height: 16),
                       if (canSeeReplays) ...[
-                      _ReplaySection(
-                        publishingType: _publishingReplayType,
-                        teamAName: s.teamAColor?.name ?? 'Time A',
-                        teamBName: s.teamBColor?.name ?? 'Time B',
-                        teamAColor: s.teamAColor?.color,
-                        teamBColor: s.teamBColor?.color,
-                        onGolA: () => _triggerReplay('GolTimeA'),
-                        onGolB: () => _triggerReplay('GolTimeB'),
-                        onJogada: () => _triggerReplay('Jogada'),
-                      ),
-                      const SizedBox(height: 16),
+                        _ReplaySection(
+                          publishingType: _publishingReplayType,
+                          teamAName: s.teamAColor?.name ?? 'Time A',
+                          teamBName: s.teamBColor?.name ?? 'Time B',
+                          teamAColor: s.teamAColor?.color,
+                          teamBColor: s.teamBColor?.color,
+                          onGolA: () => _triggerReplay('GolTimeA'),
+                          onGolB: () => _triggerReplay('GolTimeB'),
+                          onJogada: () => _triggerReplay('Jogada'),
+                        ),
+                        const SizedBox(height: 16),
                       ],
                       // Gols ao vivo: aparece sempre, mesmo vazio, para quem
                       // registra saber onde conferir e corrigir cada gol.
@@ -1106,19 +1106,27 @@ class _ReplayButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isLightColor = color.computeLuminance() > 0.6;
+    final foregroundColor =
+        isLightColor ? AppColors.slate900 : AppColors.onDark;
+
     return FilledButton.icon(
       style: FilledButton.styleFrom(
         backgroundColor: color,
+        foregroundColor: foregroundColor,
+        side: isLightColor
+            ? const BorderSide(color: AppColors.slate300)
+            : null,
         padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 10),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       onPressed: disabled ? null : onPressed,
       icon: loading
-          ? const SizedBox(
+          ? SizedBox(
               width: 18,
               height: 18,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: AppColors.onDark),
+                  strokeWidth: 2, color: foregroundColor),
             )
           : Icon(icon, size: 18),
       label: Text(

@@ -106,8 +106,7 @@ class FirebaseAuthService {
     final user = _auth.currentUser;
     if (user == null) return;
 
-    final hasApple =
-        user.providerData.any((p) => p.providerId == 'apple.com');
+    final hasApple = user.providerData.any((p) => p.providerId == 'apple.com');
     if (!hasApple) return;
 
     final credential =

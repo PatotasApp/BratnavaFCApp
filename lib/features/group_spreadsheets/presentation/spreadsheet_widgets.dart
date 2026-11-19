@@ -20,7 +20,9 @@ Future<PickedSpreadsheet?> pickSpreadsheetFile() async {
   final error = SpreadsheetFileRules.validate(file.name, file.size);
   if (error != null) throw FormatException(error);
   final bytes = file.bytes;
-  if (bytes == null) throw const FormatException('Não foi possível ler o arquivo. Tente de novo.');
+  if (bytes == null)
+    throw const FormatException(
+        'Não foi possível ler o arquivo. Tente de novo.');
   return PickedSpreadsheet(file.name, bytes);
 }
 
@@ -124,7 +126,8 @@ class SpreadsheetStatusChip extends StatelessWidget {
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
+      decoration:
+          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
       child: Text(
         status.label,
         style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fg),
@@ -162,7 +165,8 @@ class SpreadsheetUploadForm extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<SpreadsheetUploadForm> createState() => _SpreadsheetUploadFormState();
+  ConsumerState<SpreadsheetUploadForm> createState() =>
+      _SpreadsheetUploadFormState();
 }
 
 class _SpreadsheetUploadFormState extends ConsumerState<SpreadsheetUploadForm> {
@@ -217,7 +221,8 @@ class _SpreadsheetUploadFormState extends ConsumerState<SpreadsheetUploadForm> {
     } catch (e) {
       ref.invalidate(groupSpreadsheetsProvider(widget.groupId));
       if (mounted) {
-        setState(() => _error = extractDioError(e, 'Não foi possível enviar a planilha.'));
+        setState(() =>
+            _error = extractDioError(e, 'Não foi possível enviar a planilha.'));
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -261,14 +266,19 @@ class _SpreadsheetUploadFormState extends ConsumerState<SpreadsheetUploadForm> {
         ),
         if (_error != null) ...[
           const SizedBox(height: 10),
-          Text(_error!, style: const TextStyle(color: AppColors.prototypeDanger, fontSize: 13)),
+          Text(_error!,
+              style: const TextStyle(
+                  color: AppColors.prototypeDanger, fontSize: 13)),
         ],
         const SizedBox(height: 16),
         FilledButton.icon(
           key: const Key('spreadsheet-submit'),
           onPressed: _sending || _files.isEmpty ? null : _submit,
           icon: _sending
-              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.cloud_upload_outlined),
           label: Text(widget.submitLabel),
         ),
@@ -303,12 +313,16 @@ Future<void> showSpreadsheetOnboardingSheet(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.table_chart_outlined, size: 36, color: AppColors.emerald500),
+            const Icon(Icons.table_chart_outlined,
+                size: 36, color: AppColors.emerald500),
             const SizedBox(height: 10),
             Text(
               'A $groupName já tinha planilhas?',
               textAlign: TextAlign.center,
-              style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              style: Theme.of(sheetContext)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
             const Text(
@@ -325,7 +339,8 @@ Future<void> showSpreadsheetOnboardingSheet(
               onSkip: () {
                 Navigator.pop(sheetContext);
                 ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
-                  content: Text('Você pode enviar depois em Configurações da patota > Planilhas antigas.'),
+                  content: Text(
+                      'Você pode enviar depois em Configurações da patota > Planilhas antigas.'),
                 ));
               },
               onSent: (sent) {
