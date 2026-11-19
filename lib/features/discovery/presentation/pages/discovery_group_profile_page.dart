@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -9,8 +10,13 @@ import '../../data/discovery_datasource.dart';
 import '../../domain/discovery_models.dart';
 
 class DiscoveryGroupProfilePage extends ConsumerStatefulWidget {
-  const DiscoveryGroupProfilePage({super.key, required this.groupId});
+  const DiscoveryGroupProfilePage({
+    super.key,
+    required this.groupId,
+    this.groupName,
+  });
   final String groupId;
+  final String? groupName;
   @override
   ConsumerState<DiscoveryGroupProfilePage> createState() =>
       _DiscoveryGroupProfilePageState();
@@ -20,6 +26,7 @@ class _DiscoveryGroupProfilePageState
     extends ConsumerState<DiscoveryGroupProfilePage> {
   DiscoveryGroupProfile? data;
   bool loading = true;
+  bool isPrivate = false;
   String? busy;
   DiscoveryDataSource get api => DiscoveryDataSource(ref.read(dioProvider));
   @override
@@ -32,6 +39,12 @@ class _DiscoveryGroupProfilePageState
     try {
       final value = await api.group(widget.groupId);
       if (mounted) setState(() => data = value);
+    } on DioException catch (e) {
+      // A API responde 404 tanto para patota inexistente quanto para privada.
+      final msg = '${e.response?.data}'.toLowerCase();
+      if (mounted && e.response?.statusCode == 404 && msg.contains('privada')) {
+        setState(() => isPrivate = true);
+      }
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -112,12 +125,45 @@ class _DiscoveryGroupProfilePageState
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     final p = data;
+    if (p == null && isPrivate) {
+      final c = Theme.of(context).colorScheme;
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.groupName ?? 'Patota')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.lock_outline_rounded,
+                    size: 52, color: c.onSurfaceVariant),
+                const SizedBox(height: 14),
+                Text('Esta patota é privada',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w900)),
+                const SizedBox(height: 6),
+                Text(
+                  'Só quem faz parte vê os detalhes. Para entrar, peça o '
+                  'código ou o link a um administrador.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: c.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     if (p == null) {
       return const Scaffold(
         body: Center(child: Text('Patota não encontrada.')),
       );
     }
-    final isOwnGroup = ref.watch(accountStoreProvider).activeAccount?.activeGroupId == widget.groupId;
+    final isOwnGroup =
+        ref.watch(accountStoreProvider).activeAccount?.activeGroupId ==
+            widget.groupId;
     final c = Theme.of(context).colorScheme;
     return Scaffold(
       body: RefreshIndicator(
@@ -490,7 +536,7 @@ class _MatchCard extends StatelessWidget {
               ),
             ],
           ),
-          if (match.applicationStatus != null)
+          if (match.participating || match.applicationStatus != null)
             Padding(
               padding: const EdgeInsets.only(top: 12),
               child: Container(
@@ -501,7 +547,11 @@ class _MatchCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(13),
                 ),
                 child: Text(
-                  'Sua candidatura está em andamento',
+                  match.participating || match.applicationStatus == 3
+                      ? 'Você foi aceito nessa partida'
+                      : match.applicationStatus == 2
+                          ? 'Você foi aprovado · confirme sua presença'
+                          : 'Sua candidatura está em andamento',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
@@ -551,7 +601,9 @@ class _MatchCard extends StatelessWidget {
               ),
             ),
           ],
-          if (canApply && match.applicationStatus == null) ...[
+          if (canApply &&
+              !match.participating &&
+              match.applicationStatus == null) ...[
             const SizedBox(height: 14),
             SizedBox(
                 width: double.infinity,

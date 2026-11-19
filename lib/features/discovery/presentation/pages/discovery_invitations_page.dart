@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -34,6 +35,59 @@ class _State extends ConsumerState<DiscoveryInvitationsPage> {
       _loading = false;
     });
   }
+
+  bool _finished(MatchApplication x) => x.matchStatus >= 4;
+
+  /// A partida ainda aceita respostas (criada ou em aceitação). Depois que a
+  /// patota passa para a formação dos times, o convite não pode mais ser aceito.
+  bool _open(MatchApplication x) => x.matchStatus <= 1;
+
+  /// Aguardando resposta ou partida ainda por jogar. O que pede resposta vem primeiro.
+  List<MatchApplication> get _active => (_items
+      .where((x) =>
+          (x.status == 3 && !_finished(x)) ||
+          ((x.status == 1 || x.status == 2) && _open(x)))
+      .toList()
+    ..sort((a, b) {
+      int rank(MatchApplication x) => x.status == 2 ? 0 : 1;
+      final byRank = rank(a).compareTo(rank(b));
+      return byRank != 0 ? byRank : a.playedAt.compareTo(b.playedAt);
+    }));
+
+  /// Partidas em que jogou. Nos primeiros 7 dias ficam em destaque; depois, só no histórico.
+  List<MatchApplication> _played({required bool recent}) {
+    final limit = DateTime.now().subtract(const Duration(days: 7));
+    return (_items
+        .where((x) =>
+            x.status == 3 &&
+            _finished(x) &&
+            (x.playedAt.isAfter(limit) == recent))
+        .toList()
+      ..sort((a, b) => b.playedAt.compareTo(a.playedAt)));
+  }
+
+  /// Recusadas, canceladas e as que nunca chegaram a ser respondidas. Nada some.
+  List<MatchApplication> get _notConcluded => (_items
+      .where((x) => x.status >= 4 || (x.status < 3 && !_open(x)))
+      .toList()
+    ..sort((a, b) => b.playedAt.compareTo(a.playedAt)));
+
+  List<Object> get _rows => [
+        if (_active.isNotEmpty) 'PRÓXIMAS',
+        ..._active,
+        if (_played(recent: true).isNotEmpty) 'ENCERRADAS RECENTEMENTE',
+        ..._played(recent: true),
+        if (_played(recent: false).isNotEmpty) 'JOGOS QUE JOGUEI',
+        ..._played(recent: false),
+        if (_notConcluded.isNotEmpty) _notConcluded,
+      ];
+
+  Widget _card(MatchApplication item) => _InvitationCard(
+        item: item,
+        loading: _answering == item.id,
+        onAccept: () => _answer(item, true),
+        onReject: () => _answer(item, false),
+      );
 
   Future<void> _answer(MatchApplication item, bool accept) async {
     setState(() => _answering = item.id);
@@ -79,16 +133,49 @@ class _State extends ConsumerState<DiscoveryInvitationsPage> {
                       )
                     : ListView.separated(
                         padding: const EdgeInsets.all(16),
-                        itemCount: _items.length,
+                        itemCount: _rows.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (_, index) {
-                          final item = _items[index];
-                          return _InvitationCard(
-                            item: item,
-                            loading: _answering == item.id,
-                            onAccept: () => _answer(item, true),
-                            onReject: () => _answer(item, false),
-                          );
+                          final row = _rows[index];
+                          if (row is String) {
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                row,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelLarge
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w900,
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                    ),
+                              ),
+                            );
+                          }
+                          if (row is List<MatchApplication>) {
+                            return ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              shape: const Border(),
+                              collapsedShape: const Border(),
+                              title: Text(
+                                'NÃO CONCLUÍDOS (${row.length})',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelLarge
+                                    ?.copyWith(fontWeight: FontWeight.w900),
+                              ),
+                              childrenPadding: EdgeInsets.zero,
+                              children: [
+                                for (final item in row)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: _card(item),
+                                  ),
+                              ],
+                            );
+                          }
+                          return _card(row as MatchApplication);
                         },
                       ),
               ),
@@ -111,8 +198,12 @@ class _InvitationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final needsAnswer = item.status == 2;
+    final open = item.matchStatus <= 1;
+    final needsAnswer = item.status == 2 && open;
     final status = switch (item.status) {
+      1 when !open => 'Sem análise · a partida seguiu sem essa candidatura',
+      2 when !open =>
+        'Você foi aceito, mas não respondeu a tempo · a partida já seguiu',
       1 => 'Aguardando análise da patota',
       2 => 'Você foi aceito · confirme sua presença',
       3 => 'Presença confirmada',
@@ -192,6 +283,24 @@ class _InvitationCard extends StatelessWidget {
                     color: colors.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(14)),
                 child: Text((item.decisionReason ?? item.message)!.trim()),
+              ),
+            ],
+            // Os dados da partida só abrem para quem jogou (confirmado) ou
+            // enquanto ainda dá para responder. Quem ficou de fora vê só o status.
+            if (item.matchId.isNotEmpty &&
+                (item.status == 3 ||
+                    ((item.status == 2 || item.status == 5) && open))) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () =>
+                      context.push('/app/guest-match/${item.matchId}'),
+                  icon: const Icon(Icons.visibility_outlined),
+                  label: Text(item.matchStatus >= 4
+                      ? 'Ver resultado'
+                      : 'Acompanhar partida'),
+                ),
               ),
             ],
             if (needsAnswer) ...[

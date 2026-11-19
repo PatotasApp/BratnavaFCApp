@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../features/auth/presentation/providers/account_store.dart';
+import '../../features/discovery/presentation/pages/guest_match_page.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/moderation/moderation.dart';
@@ -174,6 +176,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (isAuthRoute || path == '/splash')
         return pendingShare.take() ?? '/app';
 
+      // Convidado de fora (sem patota ativa): notificações de partida levam à
+      // tela dele, não às telas da patota, que ele não enxerga.
+      final account = ref.read(accountStoreProvider).activeAccount;
+      if (account != null && account.activeGroupId == null) {
+        final matchId = state.uri.queryParameters['matchId'];
+        if (path == '/app/matches' && matchId != null && matchId.isNotEmpty) {
+          return '/app/guest-match/$matchId';
+        }
+        final history =
+            RegExp(r'^/app/history/[^/]+/([^/]+)$').firstMatch(path);
+        if (history != null) return '/app/guest-match/${history.group(1)}';
+      }
+
       return null;
     },
     routes: [
@@ -248,6 +263,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/app/discover/groups/:groupId',
             builder: (_, state) => DiscoveryGroupProfilePage(
               groupId: state.pathParameters['groupId'] ?? '',
+              groupName: state.uri.queryParameters['name'],
             ),
           ),
           GoRoute(
@@ -257,6 +273,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/app/match-invitations',
             builder: (_, __) => const DiscoveryInvitationsPage(),
+          ),
+          GoRoute(
+            path: '/app/guest-match/:matchId',
+            builder: (_, state) =>
+                GuestMatchPage(matchId: state.pathParameters['matchId']!),
           ),
           GoRoute(
             path: '/app/history',
@@ -327,9 +348,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/app/replays',
-            redirect: (_, __) => ref.read(activeGroupReplayUiProvider)
-                ? null
-                : '/app',
+            redirect: (_, __) =>
+                ref.read(activeGroupReplayUiProvider) ? null : '/app',
             builder: (_, __) => const ReplayVaultPage(),
           ),
           GoRoute(

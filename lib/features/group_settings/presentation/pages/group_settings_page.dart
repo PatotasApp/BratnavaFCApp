@@ -16,7 +16,6 @@ import '../providers/group_settings_provider.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/no_active_group_view.dart';
-import '../../../../core/share/share_links.dart';
 import '../../../group_spreadsheets/presentation/group_spreadsheets_page.dart';
 import '../../../discovery/presentation/widgets/group_discovery_settings_card.dart';
 
@@ -1032,7 +1031,13 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  GroupDiscoverySettingsCard(groupId: widget.groupId),
+                  GroupDiscoverySettingsCard(
+                    groupId: widget.groupId,
+                    publicPageEnabled: _publicPageEnabled,
+                    onPublicPageChanged: (v) =>
+                        setState(() => _publicPageEnabled = v),
+                    onSaveSettings: _save,
+                  ),
                   const SizedBox(height: 16),
                   _buildTabbedSettings(
                     isDark,
@@ -1420,7 +1425,8 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
               child: OutlinedButton.icon(
                 key: const Key('settings-spreadsheets'),
                 onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => GroupSpreadsheetsPage(groupId: widget.groupId),
+                  builder: (_) =>
+                      GroupSpreadsheetsPage(groupId: widget.groupId),
                 )),
                 icon: const Icon(Icons.cloud_upload_outlined, size: 18),
                 label: const Text('Enviar ou acompanhar planilhas'),
@@ -1864,13 +1870,6 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 12),
-            _PublicPageCard(
-              value: _publicPageEnabled,
-              onChanged: (v) => setState(() => _publicPageEnabled = v),
-              groupId:
-                  ref.read(accountStoreProvider).activeAccount?.activeGroupId,
             ),
             const SizedBox(height: 12),
           ],
@@ -4425,48 +4424,6 @@ class _ErrorState extends StatelessWidget {
                 icon: const Icon(Icons.refresh_rounded, size: 16),
                 label: const Text('Tentar novamente'),
               ),
-            ],
-          ),
-        ),
-      );
-}
-
-/// Página pública da patota (link compartilhado) + botão de compartilhar.
-class _PublicPageCard extends StatelessWidget {
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  final String? groupId;
-
-  const _PublicPageCard(
-      {required this.value, required this.onChanged, required this.groupId});
-
-  @override
-  Widget build(BuildContext context) => Card(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SwitchListTile.adaptive(
-                title: const Text('Página pública da patota'),
-                subtitle: const Text(
-                    'Quem abrir o link vê nome, logo, desde quando existe, '
-                    'integrantes, jogos e gols, dia, horário e local. Partidas, '
-                    'enquetes, financeiro e presenças nunca aparecem.'),
-                value: value,
-                onChanged: onChanged,
-              ),
-              if (groupId != null && groupId!.isNotEmpty)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: () => shareLink(
-                        context, ShareLinks.group(groupId!),
-                        text: 'Conheça nossa patota no PatotasApp'),
-                    icon: const Icon(Icons.share_outlined, size: 18),
-                    label: const Text('Compartilhar patota'),
-                  ),
-                ),
             ],
           ),
         ),

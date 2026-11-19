@@ -42,15 +42,30 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
 
   Future<void> _manageOpenings(String groupId, String matchId) async {
     final api = DiscoveryDataSource(ref.read(dioProvider));
-    var profile = await api.group(groupId);
+    final messenger = ScaffoldMessenger.of(context);
+    var profile = await api.group(groupId).catchError((Object e) {
+      debugPrint('[Completar partida] falha ao carregar a patota: $e');
+      messenger.showSnackBar(SnackBar(
+          content: Text('Não foi possível carregar as vagas da partida. $e')));
+      throw e;
+    });
     DiscoveryMatch? current;
     for (final match in profile.matches) {
-      if (match.id == matchId) {
+      if (match.id.toLowerCase() == matchId.toLowerCase()) {
         current = match;
         break;
       }
     }
-    if (!mounted || current == null) return;
+    if (!mounted) return;
+    if (current == null) {
+      debugPrint('[Completar partida] partida $matchId não veio em '
+          'upcomingMatches (${profile.matches.map((m) => m.id).toList()})');
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Esta partida não está disponível para receber '
+              'jogadores de fora (precisa estar em aceitação e ainda não ter '
+              'começado).')));
+      return;
+    }
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,

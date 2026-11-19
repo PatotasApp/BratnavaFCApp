@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/errors/app_exception.dart';
@@ -6,6 +7,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../../shared/presentation/widgets/image_lightbox.dart';
 import '../../../account/presentation/widgets/editable_profile_avatar.dart';
+import '../../../groups/presentation/pages/groups_page.dart'
+    show inviteUserToActiveGroup, activeGroupNameProvider;
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../domain/entities/conquista_models.dart';
 import '../providers/conquistas_provider.dart';
@@ -81,11 +84,30 @@ class PublicProfilePage extends ConsumerWidget {
                             textAlign: TextAlign.center),
                       ],
                     ),
-                    data: (profile) => _ProfileBody(
-                      profile: profile,
-                      isOwner: isOwner,
-                      ownerEmail: isOwner ? account?.email : null,
-                    ),
+                    data: (profile) {
+                      final activeGroupId = account?.activeGroupId;
+                      final isAdminHere = !isOwner &&
+                          activeGroupId != null &&
+                          (account?.isGroupAdmin(activeGroupId) ?? false);
+                      // Quem já está na patota ativa não precisa de convite.
+                      final alreadyMember = profile.patotas
+                          .any((p) => p.groupId == activeGroupId);
+                      return _ProfileBody(
+                        profile: profile,
+                        isOwner: isOwner,
+                        ownerEmail: isOwner ? account?.email : null,
+                        inviteGroupName: isAdminHere && !alreadyMember
+                            ? (ref.watch(activeGroupNameProvider).valueOrNull ??
+                                'sua patota')
+                            : null,
+                        onInvite: () => inviteUserToActiveGroup(
+                          context,
+                          ref,
+                          userId: userId,
+                          displayName: profile.name,
+                        ),
+                      );
+                    },
                   ),
             ),
           ),
@@ -142,10 +164,17 @@ class _ProfileBody extends StatelessWidget {
   final bool isOwner;
   final String? ownerEmail;
 
+  /// Preenchido só para o administrador da patota ativa vendo o perfil de
+  /// outra pessoa: mostra o botão de convidar.
+  final String? inviteGroupName;
+  final VoidCallback? onInvite;
+
   const _ProfileBody({
     required this.profile,
     required this.isOwner,
     this.ownerEmail,
+    this.inviteGroupName,
+    this.onInvite,
   });
 
   @override
@@ -215,6 +244,17 @@ class _ProfileBody extends StatelessWidget {
               ],
               const SizedBox(height: 12),
               _PositionLabel(position: p.position),
+              if (inviteGroupName != null) ...[
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: onInvite,
+                    icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                    label: Text('Convidar para a patota $inviteGroupName'),
+                  ),
+                ),
+              ],
               if (isOwner && (ownerEmail?.trim().isNotEmpty ?? false)) ...[
                 const SizedBox(height: 6),
                 Text(
@@ -358,6 +398,18 @@ class _PatotaCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final achievements = topConquistas(patota.conquistas, 5);
+    final groupId = patota.groupId;
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: groupId == null || groupId.isEmpty
+          ? null
+          : () => context.push(
+              '/app/discover/groups/$groupId?name=${Uri.encodeComponent(patota.groupName)}'),
+      child: _card(context, achievements),
+    );
+  }
+
+  Widget _card(BuildContext context, List<Conquista> achievements) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

@@ -58,7 +58,10 @@ class DiscoveryDataSource {
   Future<void> deleteOpening(String groupId, String openingId) =>
       _dio.delete('/api/discovery/groups/$groupId/openings/$openingId');
   Future<List<MatchApplication>> applications(String groupId) async {
-    final r = await _dio.get('/api/discovery/groups/$groupId/applications');
+    final r = await _dio.get(
+      '/api/discovery/groups/$groupId/applications',
+      queryParameters: {'history': true},
+    );
     return ((_data(r) as List?) ?? [])
         .map(
           (e) => MatchApplication.fromJson(Map<String, dynamic>.from(e as Map)),
@@ -92,12 +95,28 @@ class DiscoveryDataSource {
         data: {'reason': reason},
       );
   Future<List<MatchApplication>> myApplications() async {
-    final r = await _dio.get('/api/discovery/applications/mine');
+    final r = await _dio.get(
+      '/api/discovery/applications/mine',
+      queryParameters: {'history': true},
+    );
     return ((_data(r) as List?) ?? [])
         .map(
           (e) => MatchApplication.fromJson(Map<String, dynamic>.from(e as Map)),
         )
         .toList();
+  }
+
+  Future<GuestMatch> guestMatch(String matchId) async {
+    final r = await _dio.get('/api/discovery/guest-matches/$matchId');
+    return GuestMatch.fromJson(Map<String, dynamic>.from(_data(r) as Map));
+  }
+
+  Future<GuestMatch> setGuestAttendance(String matchId, bool going) async {
+    final r = await _dio.patch(
+      '/api/discovery/guest-matches/$matchId/attendance',
+      data: {'going': going},
+    );
+    return GuestMatch.fromJson(Map<String, dynamic>.from(_data(r) as Map));
   }
 
   Future<void> acceptInvitation(String applicationId) =>
@@ -121,6 +140,7 @@ class DiscoveryDataSource {
     required bool isPublic,
     required bool accepting,
     required bool showMembers,
+    bool showGoalsToGuests = false,
     String? description,
     String? city,
   }) =>
@@ -130,6 +150,7 @@ class DiscoveryDataSource {
           'isPublic': isPublic,
           'isAcceptingPlayers': accepting,
           'showMembers': showMembers,
+          'showGoalsToGuests': showGoalsToGuests,
           'description': description,
           'city': city,
         },

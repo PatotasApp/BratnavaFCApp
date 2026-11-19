@@ -7,10 +7,11 @@ class DiscoveryGroupItem {
     this.city,
     required this.accepting,
     required this.members,
+    this.isMember = false,
   });
   final String id, name, code;
   final String? logoUrl, city;
-  final bool accepting;
+  final bool accepting, isMember;
   final int members;
   factory DiscoveryGroupItem.fromJson(Map<String, dynamic> j) =>
       DiscoveryGroupItem(
@@ -21,6 +22,7 @@ class DiscoveryGroupItem {
         city: j['city'] as String?,
         accepting: j['isAcceptingPlayers'] == true,
         members: (j['memberCount'] as num?)?.toInt() ?? 0,
+        isMember: j['isMember'] == true,
       );
 }
 
@@ -73,12 +75,16 @@ class DiscoveryMatch {
     this.placeName,
     this.applicationStatus,
     required this.openings,
+    this.participating = false,
   });
   final String id;
   final DateTime playedAt;
   final String? placeName;
   final int? applicationStatus;
   final List<MatchOpening> openings;
+
+  /// O visitante já está confirmado nesta partida (mensalista ou convidado).
+  final bool participating;
   factory DiscoveryMatch.fromJson(Map<String, dynamic> j) => DiscoveryMatch(
         id: j['matchId'] as String,
         playedAt: DateTime.parse(j['playedAt'] as String).toLocal(),
@@ -88,6 +94,7 @@ class DiscoveryMatch {
             .map((e) =>
                 MatchOpening.fromJson(Map<String, dynamic>.from(e as Map)))
             .toList(),
+        participating: j['participating'] == true,
       );
 }
 
@@ -105,6 +112,7 @@ class DiscoveryGroupProfile {
     required this.isPublic,
     required this.accepting,
     required this.showMembers,
+    this.showGoalsToGuests = false,
     required this.matches,
     required this.people,
   });
@@ -113,7 +121,7 @@ class DiscoveryGroupProfile {
   final int? defaultDayOfWeek;
   final String? defaultKickoffTime;
   final int members;
-  final bool isPublic, accepting, showMembers;
+  final bool isPublic, accepting, showMembers, showGoalsToGuests;
   final List<DiscoveryMatch> matches;
   final List<DiscoveryPlayerItem> people;
   factory DiscoveryGroupProfile.fromJson(Map<String, dynamic> j) =>
@@ -130,6 +138,7 @@ class DiscoveryGroupProfile {
         isPublic: j['isPublic'] != false,
         accepting: j['isAcceptingPlayers'] == true,
         showMembers: j['showMembers'] == true,
+        showGoalsToGuests: j['showGoalsToGuests'] == true,
         matches: ((j['upcomingMatches'] as List?) ?? [])
             .map(
               (e) =>
@@ -154,6 +163,9 @@ class MatchApplication {
     required this.name,
     required this.userName,
     required this.groupName,
+    this.groupId = '',
+    this.matchId = '',
+    this.matchStatus = 0,
     this.photoUrl,
     this.placeName,
     required this.playedAt,
@@ -163,6 +175,10 @@ class MatchApplication {
     this.decisionReason,
   });
   final String id, userId, name, userName, groupName;
+  final String groupId, matchId;
+
+  /// Situação da partida (4 = encerrada, 5 = pós-jogo, 6 = finalizada).
+  final int matchStatus;
   final String? photoUrl, placeName;
   final DateTime playedAt;
   final int status;
@@ -174,6 +190,9 @@ class MatchApplication {
         name: j['playerName'] as String,
         userName: j['userName'] as String,
         groupName: j['groupName'] as String? ?? '',
+        groupId: j['groupId'] as String? ?? '',
+        matchId: j['matchId'] as String? ?? '',
+        matchStatus: (j['matchStatus'] as num?)?.toInt() ?? 0,
         photoUrl: j['photoUrl'] as String?,
         placeName: j['placeName'] as String?,
         playedAt: DateTime.parse(j['playedAt'] as String).toLocal(),
@@ -199,5 +218,122 @@ class GuestCandidate {
         name: j['name'] as String,
         origin: (j['origin'] as num).toInt(),
         linked: j['linkedToThisUser'] == true,
+      );
+}
+
+class GuestMatchColor {
+  const GuestMatchColor({required this.name, required this.hexValue});
+  final String name, hexValue;
+  factory GuestMatchColor.fromJson(Map<String, dynamic> j) => GuestMatchColor(
+        name: j['name'] as String? ?? '',
+        hexValue: j['hexValue'] as String? ?? '',
+      );
+}
+
+class GuestMatchPlayer {
+  const GuestMatchPlayer({
+    required this.name,
+    this.photoUrl,
+    required this.team,
+    required this.isGoalkeeper,
+    required this.isMe,
+    this.isMvp = false,
+  });
+  final String name;
+  final String? photoUrl;
+  final int team;
+  final bool isGoalkeeper, isMe, isMvp;
+  factory GuestMatchPlayer.fromJson(Map<String, dynamic> j) => GuestMatchPlayer(
+        name: j['name'] as String? ?? '',
+        photoUrl: j['photoUrl'] as String?,
+        team: (j['team'] as num?)?.toInt() ?? 0,
+        isGoalkeeper: j['isGoalkeeper'] == true,
+        isMe: j['isMe'] == true,
+        isMvp: j['isMvp'] == true,
+      );
+}
+
+/// Partida vista por quem foi aceito como convidado (somente leitura).
+class GuestMatch {
+  const GuestMatch({
+    required this.groupName,
+    required this.matchId,
+    required this.playedAt,
+    this.placeName,
+    required this.matchStatus,
+    this.teamAGoals,
+    this.teamBGoals,
+    this.teamAColor,
+    this.teamBColor,
+    required this.myResponse,
+    required this.canChangeAttendance,
+    required this.players,
+    this.goalsVisible = false,
+    this.goals = const [],
+    this.myGoals,
+    this.myAssists,
+  });
+  final String groupName, matchId;
+  final DateTime playedAt;
+  final String? placeName;
+  final int matchStatus;
+  final int? teamAGoals, teamBGoals;
+  final GuestMatchColor? teamAColor, teamBColor;
+
+  /// "pending", "going" ou "not_going".
+  final String myResponse;
+  final bool canChangeAttendance;
+  final List<GuestMatchPlayer> players;
+
+  /// A patota habilitou a exibição de gols para convidados.
+  final bool goalsVisible;
+  final List<GuestMatchGoal> goals;
+  final int? myGoals, myAssists;
+
+  static GuestMatchColor? _color(Object? v) =>
+      v is Map ? GuestMatchColor.fromJson(Map<String, dynamic>.from(v)) : null;
+
+  factory GuestMatch.fromJson(Map<String, dynamic> j) => GuestMatch(
+        groupName: j['groupName'] as String? ?? '',
+        matchId: j['matchId'] as String,
+        playedAt: DateTime.parse(j['playedAt'] as String).toLocal(),
+        placeName: j['placeName'] as String?,
+        matchStatus: (j['matchStatus'] as num?)?.toInt() ?? 0,
+        teamAGoals: (j['teamAGoals'] as num?)?.toInt(),
+        teamBGoals: (j['teamBGoals'] as num?)?.toInt(),
+        teamAColor: _color(j['teamAColor']),
+        teamBColor: _color(j['teamBColor']),
+        myResponse: j['myResponse'] as String? ?? 'pending',
+        canChangeAttendance: j['canChangeAttendance'] == true,
+        players: ((j['players'] as List?) ?? [])
+            .map((e) =>
+                GuestMatchPlayer.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+        goalsVisible: j['goalsVisible'] == true,
+        goals: ((j['goals'] as List?) ?? [])
+            .map((e) =>
+                GuestMatchGoal.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+        myGoals: (j['myGoals'] as num?)?.toInt(),
+        myAssists: (j['myAssists'] as num?)?.toInt(),
+      );
+}
+
+class GuestMatchGoal {
+  const GuestMatchGoal({
+    required this.scorer,
+    this.assist,
+    required this.team,
+    required this.ownGoal,
+  });
+  final String scorer;
+  final String? assist;
+  final int team;
+  final bool ownGoal;
+  factory GuestMatchGoal.fromJson(Map<String, dynamic> j) => GuestMatchGoal(
+        scorer: j['scorer'] as String? ?? '',
+        assist: j['assist'] as String?,
+        team: (j['team'] as num?)?.toInt() ?? 0,
+        ownGoal: j['ownGoal'] == true,
       );
 }

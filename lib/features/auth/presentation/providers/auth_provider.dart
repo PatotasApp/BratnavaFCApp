@@ -50,7 +50,30 @@ final authInterceptorProvider = Provider<AuthInterceptor>((ref) {
 // ── Dio configurado com AuthInterceptor ───────────────────────────────────────
 
 final dioProvider = Provider<Dio>((ref) {
-  return buildDio(authInterceptor: ref.watch(authInterceptorProvider));
+  final dio = buildDio(authInterceptor: ref.watch(authInterceptorProvider));
+
+  // Se a API recusa (403) uma rota da patota que o app acha que está ativa, a
+  // seleção local ficou velha: a pessoa não é mais membro (ex.: era só
+  // convidada numa partida). Reconcilia com o servidor em vez de insistir na
+  // patota errada. No máximo uma vez a cada 30 s.
+  DateTime? lastReconcile;
+  dio.interceptors.add(InterceptorsWrapper(onError: (error, handler) {
+    final groupId = ref.read(accountStoreProvider).activeAccount?.activeGroupId;
+    final stale = error.response?.statusCode == 403 &&
+        groupId != null &&
+        groupId.isNotEmpty &&
+        error.requestOptions.path.toLowerCase().contains(groupId.toLowerCase());
+    final now = DateTime.now();
+    if (stale &&
+        (lastReconcile == null ||
+            now.difference(lastReconcile!) > const Duration(seconds: 30))) {
+      lastReconcile = now;
+      Future.microtask(() =>
+          ref.read(authNotifierProvider.notifier).refreshGroupMembership());
+    }
+    handler.next(error);
+  }));
+  return dio;
 });
 
 // ── Acesso ao perfil ─────────────────────────────────────────────────────────

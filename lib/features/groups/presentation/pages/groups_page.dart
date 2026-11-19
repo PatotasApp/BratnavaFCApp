@@ -649,7 +649,8 @@ class _GroupsPageState extends ConsumerState<GroupsPage> {
     // envio também fica em Configurações > Planilhas antigas.
     final id = createdId;
     if (id != null && mounted) {
-      await showSpreadsheetOnboardingSheet(context, groupId: id, groupName: createdName);
+      await showSpreadsheetOnboardingSheet(context,
+          groupId: id, groupName: createdName);
     }
   }
 
@@ -2579,7 +2580,8 @@ class _PlayerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMe = player.id == activePlayerId;
-    final canEdit = isAdminHere;
+    // Admin edita qualquer um; o mensalista edita o próprio apelido na patota.
+    final canEdit = isAdminHere || (isMe && !player.isGuest);
 
     final parts = player.name.trim().split(RegExp(r'\s+'));
     final initials = parts.take(2).map((w) => w[0]).join().toUpperCase();
@@ -5197,3 +5199,90 @@ String _extractError(Object e) {
   }
   return 'Ocorreu um erro. Tente novamente.';
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Convite a partir do perfil público
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Convida [userId] para a patota ativa, pelo mesmo fluxo da tela de Patotas
+/// (`_InviteSheet._invite`): se a patota tem convidados, pergunta se o novo
+/// membro deve ser vinculado a um deles ou entrar como perfil novo; depois
+/// envia o convite para a pessoa aceitar.
+///
+/// Só faz algo se a conta ativa for administradora da patota ativa. Devolve
+/// `true` quando o convite foi enviado.
+Future<bool> inviteUserToActiveGroup(
+  BuildContext context,
+  WidgetRef ref, {
+  required String userId,
+  required String displayName,
+}) async {
+  final account = ref.read(accountStoreProvider).activeAccount;
+  final groupId = account?.activeGroupId;
+  if (groupId == null || !(account?.isGroupAdmin(groupId) ?? false)) {
+    return false;
+  }
+  final dio = ref.read(_dioProv);
+  final messenger = ScaffoldMessenger.of(context);
+
+  void toast(String text, {required bool error}) => messenger
+    ..clearSnackBars()
+    ..showSnackBar(SnackBar(
+      content: Text(text),
+      backgroundColor:
+          error ? AppColors.prototypeDanger : AppColors.primaryPressed,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ));
+
+  List<_PlayerDto> guests;
+  try {
+    final res = await dio.get(ApiConstants.groupById(groupId));
+    final data = res.data;
+    final raw = data is Map && data['data'] != null ? data['data'] : data;
+    guests = _GroupDto.fromJson(raw as Map<String, dynamic>)
+        .players
+        .where((p) => p.status == 1 && p.isGuest)
+        .toList();
+  } catch (e) {
+    toast(_extractError(e), error: true);
+    return false;
+  }
+
+  String? guestPlayerId;
+  if (guests.isNotEmpty) {
+    if (!context.mounted) return false;
+    final picked = await showDialog<_PlayerDto?>(
+      context: context,
+      builder: (_) => _LinkGuestDialog(userName: displayName, guests: guests),
+    );
+    if (picked == null) return false; // cancelou
+    if (picked != _LinkGuestDialog.sentinel) guestPlayerId = picked.id;
+  }
+
+  try {
+    await dio.post(
+      ApiConstants.groupInvites(groupId),
+      data: {
+        'targetUserId': userId,
+        if (guestPlayerId != null) 'guestPlayerId': guestPlayerId,
+      },
+    );
+    toast('Convite enviado para $displayName.', error: false);
+    return true;
+  } catch (e) {
+    toast(_extractError(e), error: true);
+    return false;
+  }
+}
+
+/// Nome da patota ativa, para rótulos como "Convidar para a patota X".
+final activeGroupNameProvider =
+    FutureProvider.autoDispose<String?>((ref) async {
+  final groupId = ref.watch(accountStoreProvider).activeAccount?.activeGroupId;
+  if (groupId == null) return null;
+  final res = await ref.read(_dioProv).get(ApiConstants.groupById(groupId));
+  final data = res.data;
+  final raw = data is Map && data['data'] != null ? data['data'] : data;
+  return (raw is Map ? raw['name'] : null) as String?;
+});

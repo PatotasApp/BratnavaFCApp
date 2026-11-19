@@ -25,6 +25,19 @@ class _State extends ConsumerState<DiscoveryApplicantsPage> {
     Future.microtask(load);
   }
 
+  /// Pendentes primeiro; o histórico (confirmadas, recusadas, canceladas)
+  /// vem depois e nunca some da lista.
+  List<Object> get _rows {
+    final open = items.where((x) => x.status == 1 || x.status == 2).toList();
+    final done = items.where((x) => x.status >= 3).toList();
+    return [
+      if (open.isNotEmpty) 'PENDENTES',
+      ...open,
+      if (done.isNotEmpty) 'HISTÓRICO',
+      ...done,
+    ];
+  }
+
   Future<void> load() async {
     final value = groupId.isEmpty
         ? <MatchApplication>[]
@@ -113,12 +126,45 @@ class _State extends ConsumerState<DiscoveryApplicantsPage> {
         ),
       ),
     );
+    final note = reason.text.trim();
+    reason.dispose();
     if (ok == true) {
-      await api.approve(groupId, item.id, selected,
-          reason: reason.text.trim().isEmpty ? null : reason.text.trim());
+      final done = await _run(
+        () => api.approve(groupId, item.id, selected,
+            reason: note.isEmpty ? null : note),
+        'Não foi possível aprovar ${item.name}. A solicitação pode já ter sido '
+        'respondida.',
+      );
+      if (done) {
+        _toast('${item.name} aprovado. Agora ele precisa confirmar que vai '
+            'jogar.');
+      }
       await load();
     }
-    reason.dispose();
+  }
+
+  /// Executa a ação e avisa o administrador se falhar, em vez de deixar a
+  /// exceção solta (o botão parecia não fazer nada ou repetia o erro).
+  Future<bool> _run(Future<void> Function() action, String error) async {
+    try {
+      await action();
+      return true;
+    } catch (_) {
+      if (mounted) _toast(error, isError: true);
+      return false;
+    }
+  }
+
+  void _toast(String text, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 5),
+        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
+        content: Text(text),
+      ));
   }
 
   Future<void> reject(MatchApplication item) async {
@@ -145,9 +191,14 @@ class _State extends ConsumerState<DiscoveryApplicantsPage> {
       controller.dispose();
       return;
     }
-    await api.reject(groupId, item.id,
-        reason: controller.text.trim().isEmpty ? null : controller.text.trim());
+    final note = controller.text.trim();
     controller.dispose();
+    final done = await _run(
+      () => api.reject(groupId, item.id, reason: note.isEmpty ? null : note),
+      'Não foi possível recusar ${item.name}. A solicitação pode já ter sido '
+      'respondida.',
+    );
+    if (done) _toast('Solicitação de ${item.name} recusada.');
     await load();
   }
 
@@ -172,62 +223,164 @@ class _State extends ConsumerState<DiscoveryApplicantsPage> {
                       )
                     : ListView.separated(
                         padding: const EdgeInsets.all(16),
-                        itemCount: items.length,
+                        itemCount: _rows.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 10),
                         itemBuilder: (_, i) {
-                          final x = items[i];
+                          final row = _rows[i];
+                          if (row is String) {
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                row,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelLarge
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w900,
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                    ),
+                              ),
+                            );
+                          }
+                          final x = row as MatchApplication;
                           return Card(
                             child: Padding(
                               padding: const EdgeInsets.all(14),
-                              child: Row(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  AvatarWidget(
-                                    name: x.name,
-                                    photoUrl: x.photoUrl,
-                                    size: 52,
-                                    borderRadius: 16,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
+                                  Row(
+                                    children: [
+                                      AvatarWidget(
+                                        name: x.name,
+                                        photoUrl: x.photoUrl,
+                                        size: 52,
+                                        borderRadius: 16,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              x.name,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w900,
+                                              ),
+                                            ),
+                                            Text(
+                                              '@${x.userName}',
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.bodySmall,
+                                            ),
+                                            const SizedBox(height: 5),
+                                            Text(
+                                              '${DateFormat('dd/MM · HH:mm').format(x.playedAt)}${x.position == null ? '' : ' · ${x.position == 2 ? 'Linha' : x.position == 3 ? 'Goleiro' : 'Qualquer posição'}'}',
+                                              style: Theme.of(
+                                                context,
+                                              ).textTheme.labelSmall,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (x.status == 3 ||
+                                          x.status == 4 ||
+                                          x.status == 5)
+                                        // Histórico: a solicitação foi
+                                        // concluída, mas continua visível.
                                         Text(
-                                          x.name,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w900,
+                                          x.status == 3
+                                              ? 'Confirmado'
+                                              : x.status == 4
+                                                  ? 'Recusado'
+                                                  : 'Cancelado',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 12,
+                                            color: x.status == 3
+                                                ? Theme.of(context)
+                                                    .colorScheme
+                                                    .primary
+                                                : Theme.of(context)
+                                                    .colorScheme
+                                                    .error,
                                           ),
+                                        )
+                                      else if (x.status == 2)
+                                        // PendingPlayer: o administrador já
+                                        // aprovou; falta o jogador confirmar.
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.hourglass_top_rounded,
+                                              size: 16,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .primary,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Aguardando\no jogador',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 12,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .primary,
+                                              ),
+                                            ),
+                                          ],
+                                        )
+                                      else ...[
+                                        IconButton(
+                                          onPressed: () => reject(x),
+                                          icon: Icon(
+                                            Icons.close_rounded,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .error,
+                                          ),
+                                          tooltip: 'Recusar',
                                         ),
-                                        Text(
-                                          '@${x.userName}',
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.bodySmall,
-                                        ),
-                                        const SizedBox(height: 5),
-                                        Text(
-                                          '${DateFormat('dd/MM · HH:mm').format(x.playedAt)}${x.position == null ? '' : ' · ${x.position == 2 ? 'Linha' : x.position == 3 ? 'Goleiro' : 'Qualquer posição'}'}',
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.labelSmall,
+                                        const SizedBox(width: 12),
+                                        FilledButton.tonal(
+                                          onPressed: () => approve(x),
+                                          child: const Text('Aprovar'),
                                         ),
                                       ],
+                                    ],
+                                  ),
+                                  if (x.status >= 3 &&
+                                      x.decisionReason?.trim().isNotEmpty ==
+                                          true) ...[
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Motivo: ${x.decisionReason!.trim()}',
+                                      style:
+                                          Theme.of(context).textTheme.bodySmall,
                                     ),
-                                  ),
-                                  IconButton(
-                                    onPressed: () => reject(x),
-                                    icon: Icon(
-                                      Icons.close_rounded,
-                                      color:
-                                          Theme.of(context).colorScheme.error,
+                                  ],
+                                  if (x.message?.trim().isNotEmpty == true) ...[
+                                    const SizedBox(height: 10),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .surfaceContainerHighest
+                                            .withValues(alpha: 0.5),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text('“${x.message!.trim()}”'),
                                     ),
-                                    tooltip: 'Recusar',
-                                  ),
-                                  FilledButton.tonal(
-                                    onPressed: () => approve(x),
-                                    child: const Text('Aprovar'),
-                                  ),
+                                  ],
                                 ],
                               ),
                             ),

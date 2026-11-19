@@ -1877,7 +1877,8 @@ class _DashboardEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const NoActiveGroupView(
-      message: 'Selecione uma patota para acessar o dashboard.',
+      message: 'Você ainda não está vinculado a nenhuma patota.',
+      showMatchInvitesShortcut: true,
     );
   }
 }

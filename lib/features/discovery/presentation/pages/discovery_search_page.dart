@@ -28,6 +28,9 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
   int _searchVersion = 0;
   List<DiscoveryGroupItem> _groups = [];
   List<DiscoveryPlayerItem> _players = [];
+  // Jogadores que já receberam convite nesta tela: mostra "Convite enviado" na
+  // linha para o administrador ver que a ação foi concluída.
+  final Set<String> _invited = {};
 
   @override
   void initState() {
@@ -111,7 +114,8 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
     DiscoveryMatch? match;
     if (widget.preferredMatchId != null) {
       for (final candidate in profile.matches) {
-        if (candidate.id == widget.preferredMatchId) {
+        if (candidate.id.toLowerCase() ==
+            widget.preferredMatchId!.toLowerCase()) {
           match = candidate;
           break;
         }
@@ -146,7 +150,7 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
                   '${item.playedAt.minute.toString().padLeft(2, '0')}',
                 ),
                 subtitle: item.placeName == null ? null : Text(item.placeName!),
-                trailing: const Icon(Icons.send_rounded),
+                trailing: const Icon(Icons.chevron_right_rounded),
               ),
             ),
           ],
@@ -182,10 +186,9 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
                   maxLines: 3,
                   decoration:
                       const InputDecoration(labelText: 'Mensagem (opcional)')),
-              FilledButton.icon(
+              FilledButton(
                   onPressed: () => Navigator.pop(ctx, true),
-                  icon: const Icon(Icons.send_rounded),
-                  label: const Text('Enviar convite')),
+                  child: const Text('Enviar convite')),
             ]),
       ),
     );
@@ -193,17 +196,38 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
       message.dispose();
       return;
     }
-    await _api.invite(groupId, match.id, player.id,
-        openingId: widget.openingId,
-        message: message.text.trim().isEmpty ? null : message.text.trim());
+    final text = message.text.trim();
     message.dispose();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Convite enviado. O jogador precisa confirmar.'),
-        ),
-      );
+    try {
+      await _api.invite(groupId, match.id, player.id,
+          openingId: widget.openingId, message: text.isEmpty ? null : text);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Theme.of(context).colorScheme.error,
+            content: Text('Não foi possível enviar o convite a '
+                '${player.name}. Tente novamente.'),
+          ));
+      }
+      return;
     }
+    if (!mounted) return;
+    setState(() => _invited.add(player.id));
+    final scheduled = '${match.playedAt.day.toString().padLeft(2, '0')}/'
+        '${match.playedAt.month.toString().padLeft(2, '0')} às '
+        '${match.playedAt.hour.toString().padLeft(2, '0')}:'
+        '${match.playedAt.minute.toString().padLeft(2, '0')}';
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 5),
+        content: Text('Convite enviado a ${player.name} para a partida de '
+            '$scheduled. Agora ele precisa aceitar.'),
+      ));
   }
 
   @override
@@ -364,13 +388,22 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
               '@${player.userName}'
               '${player.position == null ? '' : ' · ${player.position}'}',
             ),
-            trailing: canInvite
-                ? IconButton.filledTonal(
-                    onPressed: () => _invite(player),
-                    tooltip: 'Convidar para uma partida',
-                    icon: const Icon(Icons.send_rounded, size: 18),
-                  )
-                : const Icon(Icons.chevron_right_rounded),
+            trailing: _invited.contains(player.id)
+                ? Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.check_circle_rounded,
+                        size: 18, color: colors.primary),
+                    const SizedBox(width: 4),
+                    Text('Convidado',
+                        style: TextStyle(
+                            color: colors.primary,
+                            fontWeight: FontWeight.w800)),
+                  ])
+                : canInvite
+                    ? FilledButton.tonal(
+                        onPressed: () => _invite(player),
+                        child: const Text('Convidar'),
+                      )
+                    : const Icon(Icons.chevron_right_rounded),
           );
         },
         separatorBuilder: (_, __) => const SizedBox(height: 9),
@@ -465,7 +498,16 @@ class _GroupCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (item.accepting)
+                        if (item.isMember)
+                          Text(
+                            'SUA PATOTA',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900,
+                              color: colors.primary,
+                            ),
+                          )
+                        else if (item.accepting)
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,

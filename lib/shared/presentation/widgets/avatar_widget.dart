@@ -122,10 +122,18 @@ class AvatarWidget extends StatelessWidget {
   }
 
   static String _initials(String name) {
-    final parts = name.trim().split(' ');
+    // Ignora pedaços sem letra nem número (ex.: o "-" que contas antigas têm
+    // como sobrenome), para não virar iniciais como "P-".
+    final parts = name
+        .trim()
+        .split(' ')
+        .where((p) =>
+            p.isNotEmpty && RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(p))
+        .toList();
     if (parts.length >= 2) {
       return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
     }
+    if (parts.isNotEmpty) return parts.first[0].toUpperCase();
     return name.isNotEmpty ? name[0].toUpperCase() : '?';
   }
 
