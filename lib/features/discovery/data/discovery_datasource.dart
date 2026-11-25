@@ -19,10 +19,14 @@ class DiscoveryDataSource {
         .toList();
   }
 
-  Future<List<DiscoveryPlayerItem>> players(String q) async {
+  Future<List<DiscoveryPlayerItem>> players(String q, {String? groupId}) async {
     final r = await _dio.get(
       '/api/discovery/players',
-      queryParameters: {'q': q, 'pageSize': 30},
+      queryParameters: {
+        'q': q,
+        'pageSize': 30,
+        if (groupId != null && groupId.isNotEmpty) 'groupId': groupId,
+      },
     );
     final d = _data(r) as Map;
     return ((d['items'] as List?) ?? [])

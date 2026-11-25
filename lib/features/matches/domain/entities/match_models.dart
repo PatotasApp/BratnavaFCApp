@@ -104,7 +104,7 @@ String matchStepLabel(String? stepOrStatus) {
   };
 }
 
-enum InviteResponse { pending, accepted, declined }
+enum InviteResponse { pending, accepted, declined, waiting }
 
 // ── Cor do time ───────────────────────────────────────────────────────────────
 
@@ -136,6 +136,9 @@ class MatchHeaderDto {
   final String groupId;
   final DateTime playedAt;
   final String placeName;
+  final String? placeAddress;
+  final double? placeLatitude;
+  final double? placeLongitude;
   final int status;
   final String statusName;
   final String stepKey;
@@ -150,6 +153,9 @@ class MatchHeaderDto {
     required this.groupId,
     required this.playedAt,
     required this.placeName,
+    this.placeAddress,
+    this.placeLatitude,
+    this.placeLongitude,
     required this.status,
     required this.statusName,
     required this.stepKey,
@@ -167,6 +173,12 @@ class MatchHeaderDto {
         groupId: (j['groupId'] ?? j['GroupId'] ?? '').toString(),
         playedAt: parseApiDate((j['playedAt'] ?? j['PlayedAt'])?.toString()),
         placeName: j['placeName'] as String? ?? j['PlaceName'] as String? ?? '',
+        placeAddress:
+            j['placeAddress'] as String? ?? j['PlaceAddress'] as String?,
+        placeLatitude:
+            ((j['placeLatitude'] ?? j['PlaceLatitude']) as num?)?.toDouble(),
+        placeLongitude:
+            ((j['placeLongitude'] ?? j['PlaceLongitude']) as num?)?.toDouble(),
         status: j['status'] as int? ?? j['Status'] as int? ?? 0,
         statusName:
             j['statusName'] as String? ?? j['StatusName'] as String? ?? '',
@@ -223,6 +235,7 @@ class MatchPlayerInfo {
     final n = v is int ? v : int.tryParse(v?.toString() ?? '') ?? 0;
     if (n == 3) return InviteResponse.accepted; // backend: Accepted = 3
     if (n == 2) return InviteResponse.declined; // backend: Rejected = 2
+    if (n == 4) return InviteResponse.waiting; // backend: Waiting = 4
     return InviteResponse.pending; // backend: None = 1
   }
 
@@ -493,23 +506,31 @@ class TeamGenOption {
 // ── Configurações do grupo (relevantes para partida) ──────────────────────────
 
 class MatchGroupSettings {
+  final String? groupCity;
   final int? minPlayers;
   final int? maxPlayers;
   final String? defaultPlaceName;
+  final String? defaultPlaceAddress;
+  final double? defaultPlaceLatitude;
+  final double? defaultPlaceLongitude;
   final List<int> defaultDaysOfWeek;
   final String? defaultKickoffTime; // formato "HH:mm:ss"
 
   const MatchGroupSettings({
+    this.groupCity,
     this.minPlayers,
     this.maxPlayers,
     this.defaultPlaceName,
+    this.defaultPlaceAddress,
+    this.defaultPlaceLatitude,
+    this.defaultPlaceLongitude,
     this.defaultDaysOfWeek = const [],
     this.defaultKickoffTime,
   });
 
   factory MatchGroupSettings.fromJson(Map<String, dynamic> j) {
-    final legacyDay = j['defaultDayOfWeek'] as int? ??
-        j['DefaultDayOfWeek'] as int?;
+    final legacyDay =
+        j['defaultDayOfWeek'] as int? ?? j['DefaultDayOfWeek'] as int?;
     final days = ((j['defaultDaysOfWeek'] ?? j['DefaultDaysOfWeek']) as List? ??
             const [])
         .whereType<num>()
@@ -521,12 +542,21 @@ class MatchGroupSettings {
     if (days.isEmpty && legacyDay != null) days.add(legacyDay);
 
     return MatchGroupSettings(
+      groupCity: j['groupCity'] as String? ?? j['GroupCity'] as String?,
       minPlayers: j['minPlayers'] as int? ?? j['MinPlayers'] as int?,
       maxPlayers: j['maxPlayers'] as int? ?? j['MaxPlayers'] as int?,
       defaultPlaceName: j['defaultPlaceName'] as String? ??
           j['DefaultPlaceName'] as String? ??
           j['placeName'] as String? ??
           j['PlaceName'] as String?,
+      defaultPlaceAddress: j['defaultPlaceAddress'] as String? ??
+          j['DefaultPlaceAddress'] as String?,
+      defaultPlaceLatitude: (j['defaultPlaceLatitude'] as num? ??
+              j['DefaultPlaceLatitude'] as num?)
+          ?.toDouble(),
+      defaultPlaceLongitude: (j['defaultPlaceLongitude'] as num? ??
+              j['DefaultPlaceLongitude'] as num?)
+          ?.toDouble(),
       defaultDaysOfWeek: days,
       defaultKickoffTime: j['defaultKickoffTime'] as String? ??
           j['DefaultKickoffTime'] as String?,
@@ -547,6 +577,9 @@ class MatchState {
     this.step = MatchStep.create,
     this.playedAt,
     this.placeName,
+    this.placeAddress,
+    this.placeLatitude,
+    this.placeLongitude,
     this.canRewind = false,
     this.linkedPollId,
     this.actualStartTime,
@@ -557,6 +590,7 @@ class MatchState {
     this.acceptedPlayers = const [],
     this.rejectedPlayers = const [],
     this.pendingPlayers = const [],
+    this.waitingPlayers = const [],
     this.maxPlayers = 14,
     this.acceptedOverLimit = false,
     this.canAdvanceToMatchmaking = false,
@@ -605,6 +639,9 @@ class MatchState {
   final MatchStep step;
   final DateTime? playedAt;
   final String? placeName;
+  final String? placeAddress;
+  final double? placeLatitude;
+  final double? placeLongitude;
   final bool canRewind;
 
   /// Id da votação/evento vinculado a esta partida (null = sem vínculo).
@@ -621,6 +658,7 @@ class MatchState {
   final List<MatchPlayerInfo> acceptedPlayers;
   final List<MatchPlayerInfo> rejectedPlayers;
   final List<MatchPlayerInfo> pendingPlayers;
+  final List<MatchPlayerInfo> waitingPlayers;
   final int maxPlayers;
   final bool acceptedOverLimit;
 
@@ -701,6 +739,9 @@ class MatchState {
     MatchStep? step,
     DateTime? playedAt,
     String? placeName,
+    Object? placeAddress = _unset,
+    Object? placeLatitude = _unset,
+    Object? placeLongitude = _unset,
     bool? canRewind,
     Object? linkedPollId = _unset,
     DateTime? actualStartTime,
@@ -711,6 +752,7 @@ class MatchState {
     List<MatchPlayerInfo>? acceptedPlayers,
     List<MatchPlayerInfo>? rejectedPlayers,
     List<MatchPlayerInfo>? pendingPlayers,
+    List<MatchPlayerInfo>? waitingPlayers,
     int? maxPlayers,
     bool? acceptedOverLimit,
     bool? canAdvanceToMatchmaking,
@@ -747,6 +789,15 @@ class MatchState {
         step: step ?? this.step,
         playedAt: playedAt ?? this.playedAt,
         placeName: placeName ?? this.placeName,
+        placeAddress: identical(placeAddress, _unset)
+            ? this.placeAddress
+            : placeAddress as String?,
+        placeLatitude: identical(placeLatitude, _unset)
+            ? this.placeLatitude
+            : placeLatitude as double?,
+        placeLongitude: identical(placeLongitude, _unset)
+            ? this.placeLongitude
+            : placeLongitude as double?,
         canRewind: canRewind ?? this.canRewind,
         linkedPollId: identical(linkedPollId, _unset)
             ? this.linkedPollId
@@ -759,6 +810,7 @@ class MatchState {
         acceptedPlayers: acceptedPlayers ?? this.acceptedPlayers,
         rejectedPlayers: rejectedPlayers ?? this.rejectedPlayers,
         pendingPlayers: pendingPlayers ?? this.pendingPlayers,
+        waitingPlayers: waitingPlayers ?? this.waitingPlayers,
         maxPlayers: maxPlayers ?? this.maxPlayers,
         acceptedOverLimit: acceptedOverLimit ?? this.acceptedOverLimit,
         canAdvanceToMatchmaking:
@@ -833,6 +885,12 @@ class UpcomingMatchDetails {
   int get pendingCount => _acceptationOpen
       ? allPlayers
           .where((p) => p.inviteResponse == InviteResponse.pending)
+          .length
+      : 0;
+
+  int get waitingCount => _acceptationOpen
+      ? allPlayers
+          .where((p) => p.inviteResponse == InviteResponse.waiting)
           .length
       : 0;
 

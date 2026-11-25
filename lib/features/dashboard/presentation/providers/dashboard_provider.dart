@@ -95,6 +95,9 @@ Future<UpcomingMatchDetails> _loadMatchDetails(MatchRemoteDataSource matchDs,
             acceptData['rejectedPlayers'] ?? acceptData['RejectedPlayers'], 0,
             forceInviteResponse: 2),
         ...parsePlayers(
+            acceptData['waitingPlayers'] ?? acceptData['WaitingPlayers'], 0,
+            forceInviteResponse: 4),
+        ...parsePlayers(
           acceptData['pendingPlayers'] ??
               acceptData['PendingPlayers'] ??
               acceptData['unrespondedPlayers'] ??
@@ -116,6 +119,9 @@ Future<UpcomingMatchDetails> _loadMatchDetails(MatchRemoteDataSource matchDs,
         ...parsePlayers(
             acceptData['rejectedPlayers'] ?? acceptData['RejectedPlayers'], 0,
             forceInviteResponse: 2),
+        ...parsePlayers(
+            acceptData['waitingPlayers'] ?? acceptData['WaitingPlayers'], 0,
+            forceInviteResponse: 4),
         ...parsePlayers(
           acceptData['pendingPlayers'] ??
               acceptData['PendingPlayers'] ??

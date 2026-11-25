@@ -7,6 +7,7 @@ import '../../../../core/realtime/realtime_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
+import '../../../../shared/presentation/widgets/participation_history_sheet.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../matches/domain/entities/match_models.dart';
 import '../../../matches/presentation/providers/match_provider.dart';
@@ -646,6 +647,12 @@ class _PollDetailSheetState extends ConsumerState<PollDetailSheet>
                       onPickImage: _pickImage,
                       onAddOption: _addOption,
                       onAdminVote: _adminVote,
+                      onHistory: (member) => showParticipationHistorySheet(
+                        context: context,
+                        playerName: member.playerName,
+                        history: _ds.fetchParticipationHistory(
+                            widget.groupId, _poll.id, member.playerId),
+                      ),
                       onClose: _closePoll,
                       onReopen: _reopenPoll,
                       onDelete: _deletePoll,
@@ -1022,6 +1029,7 @@ class _AdminPollPanel extends StatelessWidget {
   final VoidCallback onPickImage;
   final VoidCallback onAddOption;
   final Function(String playerId, List<String> optionIds) onAdminVote;
+  final ValueChanged<PollMemberVote> onHistory;
   final VoidCallback onClose;
   final VoidCallback onReopen;
   final VoidCallback onDelete;
@@ -1042,6 +1050,7 @@ class _AdminPollPanel extends StatelessWidget {
     required this.onPickImage,
     required this.onAddOption,
     required this.onAdminVote,
+    required this.onHistory,
     required this.onClose,
     required this.onReopen,
     required this.onDelete,
@@ -1111,7 +1120,8 @@ class _AdminPollPanel extends StatelessWidget {
                       poll: poll,
                       saving: saving,
                       isDark: isDark,
-                      onAdminVote: onAdminVote),
+                      onAdminVote: onAdminVote,
+                      onHistory: onHistory),
                 ],
               ),
             ),
@@ -1290,13 +1300,15 @@ class _ResultTab extends StatelessWidget {
   final bool saving;
   final bool isDark;
   final Function(String playerId, List<String> optionIds) onAdminVote;
+  final ValueChanged<PollMemberVote> onHistory;
 
   const _ResultTab(
       {required this.groupId,
       required this.poll,
       required this.saving,
       required this.isDark,
-      required this.onAdminVote});
+      required this.onAdminVote,
+      required this.onHistory});
 
   @override
   Widget build(BuildContext context) {
@@ -1325,6 +1337,12 @@ class _ResultTab extends StatelessWidget {
                   color: isDark ? AppColors.slate200 : AppColors.slate700,
                 ),
               ),
+            ),
+            IconButton(
+              tooltip: 'Ver histórico de ações',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => onHistory(m),
+              icon: const Icon(Icons.info_outline_rounded, size: 18),
             ),
             DropdownButton<String>(
               value:

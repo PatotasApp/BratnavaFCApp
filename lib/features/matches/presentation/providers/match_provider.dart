@@ -69,6 +69,16 @@ class MatchNotifier extends StateNotifier<MatchState> {
       placeName: d['placeName'] as String? ??
           d['PlaceName'] as String? ??
           state.placeName,
+      placeAddress:
+          d.containsKey('placeAddress') || d.containsKey('PlaceAddress')
+              ? d['placeAddress'] as String? ?? d['PlaceAddress'] as String?
+              : state.placeAddress,
+      placeLatitude:
+          ((d['placeLatitude'] ?? d['PlaceLatitude']) as num?)?.toDouble() ??
+              state.placeLatitude,
+      placeLongitude:
+          ((d['placeLongitude'] ?? d['PlaceLongitude']) as num?)?.toDouble() ??
+              state.placeLongitude,
       playedAt: playedAt ?? state.playedAt,
       canRewind: d['canRewind'] as bool? ?? d['CanRewind'] as bool? ?? false,
       teamAGoals:
@@ -89,6 +99,7 @@ class MatchNotifier extends StateNotifier<MatchState> {
       rejectedPlayers:
           _parsePlayers(d['rejectedPlayers'] ?? d['RejectedPlayers']),
       pendingPlayers: _parsePlayers(d['pendingPlayers'] ?? d['PendingPlayers']),
+      waitingPlayers: _parsePlayers(d['waitingPlayers'] ?? d['WaitingPlayers']),
       maxPlayers:
           (d['maxPlayers'] ?? d['MaxPlayers']) as int? ?? state.maxPlayers,
       acceptedOverLimit: d['acceptedOverLimit'] as bool? ??
@@ -246,6 +257,10 @@ class MatchNotifier extends StateNotifier<MatchState> {
       if (settings != null) {
         state = state.copyWith(
           placeName: state.placeName ?? settings.defaultPlaceName,
+          placeAddress: state.placeAddress ?? settings.defaultPlaceAddress,
+          placeLatitude: state.placeLatitude ?? settings.defaultPlaceLatitude,
+          placeLongitude:
+              state.placeLongitude ?? settings.defaultPlaceLongitude,
         );
       }
 
@@ -280,6 +295,9 @@ class MatchNotifier extends StateNotifier<MatchState> {
         step: header.step,
         selectedMatchIdx: idx,
         placeName: header.placeName,
+        placeAddress: header.placeAddress,
+        placeLatitude: header.placeLatitude,
+        placeLongitude: header.placeLongitude,
         canRewind: header.canRewind,
         teamAGoals: header.teamAGoals,
         teamBGoals: header.teamBGoals,
@@ -374,10 +392,23 @@ class MatchNotifier extends StateNotifier<MatchState> {
 
   // ── Step 1 – Criar ────────────────────────────────────────────────────────
 
-  Future<bool> createMatch(String placeName, DateTime playedAt) async {
+  Future<bool> createMatch(
+    String placeName,
+    DateTime playedAt, {
+    String? placeAddress,
+    double? placeLatitude,
+    double? placeLongitude,
+  }) async {
     state = state.copyWith(mutating: true, error: null);
     try {
-      await _ds.createMatch(groupId, placeName, playedAt);
+      await _ds.createMatch(
+        groupId,
+        placeName,
+        playedAt,
+        placeAddress: placeAddress,
+        placeLatitude: placeLatitude,
+        placeLongitude: placeLongitude,
+      );
       await loadInitial();
       return true;
     } catch (e) {
@@ -915,6 +946,9 @@ class MatchNotifier extends StateNotifier<MatchState> {
       selectedMatchIdx: -1,
       linkedPollId: null,
       placeName: state.groupSettings?.defaultPlaceName,
+      placeAddress: state.groupSettings?.defaultPlaceAddress,
+      placeLatitude: state.groupSettings?.defaultPlaceLatitude,
+      placeLongitude: state.groupSettings?.defaultPlaceLongitude,
     );
   }
 
@@ -928,6 +962,9 @@ class MatchNotifier extends StateNotifier<MatchState> {
       matchId: header.matchId,
       step: header.step,
       placeName: header.placeName,
+      placeAddress: header.placeAddress,
+      placeLatitude: header.placeLatitude,
+      placeLongitude: header.placeLongitude,
       canRewind: header.canRewind,
       teamAGoals: header.teamAGoals,
       teamBGoals: header.teamBGoals,

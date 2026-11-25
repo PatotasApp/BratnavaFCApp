@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/errors/app_exception.dart';
+import '../../../../core/location/app_location_service.dart';
 import '../../../../core/onboarding/new_group_tour_storage.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/entities/account.dart';
@@ -18,7 +21,6 @@ import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../../shared/presentation/widgets/new_group_tour_banner.dart';
-import '../../../../core/share/share_links.dart';
 import '../../../group_spreadsheets/presentation/group_spreadsheets_page.dart';
 import '../../../discovery/presentation/widgets/group_discovery_settings_card.dart';
 
@@ -363,7 +365,18 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
   final ScrollController _scrollController = ScrollController();
   // ── Form state ────────────────────────────────────────────────────────────
   late final TextEditingController _placeCtrl;
-  late final TextEditingController _minCtrl;
+  late final TextEditingController _placeAddressCtrl;
+  double? _placeLatitude;
+  double? _placeLongitude;
+  bool _locating = false;
+  bool _searchingLocation = false;
+  bool _settingAddress = false;
+  bool _placeNameWasManuallyEdited = false;
+  final FocusNode _locationFocusNode = FocusNode();
+  Timer? _locationSearchDebounce;
+  List<AppLocationResult> _locationSuggestions = const [];
+  String? _locationSearchMessage;
+  int _locationSearchGeneration = 0;
   late final TextEditingController _maxCtrl;
   late final TextEditingController _feeCtrl;
   late final TextEditingController _goalkeeperFeeCtrl;
@@ -431,7 +444,18 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   void _initFromSettings(GroupSettings s) {
     _placeCtrl = TextEditingController(text: s.defaultPlaceName ?? '');
-    _minCtrl = TextEditingController(text: s.minPlayers.toString());
+    _placeNameWasManuallyEdited = _placeCtrl.text.trim().isNotEmpty;
+    _placeAddressCtrl =
+        TextEditingController(text: s.defaultPlaceAddress ?? '');
+    _placeLatitude = s.defaultPlaceLatitude;
+    _placeLongitude = s.defaultPlaceLongitude;
+    _placeAddressCtrl.addListener(() {
+      if (!_settingAddress) {
+        _placeLatitude = null;
+        _placeLongitude = null;
+        if (mounted) setState(() {});
+      }
+    });
     _maxCtrl = TextEditingController(text: s.maxPlayers.toString());
     _feeCtrl = TextEditingController(
       text: s.monthlyFee != null ? s.monthlyFee!.toStringAsFixed(2) : '',
@@ -576,11 +600,278 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     );
   }
 
+  Future<void> _useCurrentLocation() async {
+    setState(() => _locating = true);
+    try {
+      final result = await AppLocationService.current();
+      if (!mounted) return;
+      _settingAddress = true;
+      _placeAddressCtrl.text = result.address;
+      if (!_placeNameWasManuallyEdited || _placeCtrl.text.trim().isEmpty) {
+        _placeCtrl.text = (result.name ?? '').trim().isNotEmpty
+            ? result.name!.trim()
+            : result.address.split(',').first.trim();
+      }
+      _settingAddress = false;
+      setState(() {
+        _placeLatitude = result.latitude;
+        _placeLongitude = result.longitude;
+        _locationSuggestions = const [];
+        _locationSearchMessage = null;
+      });
+      _locationFocusNode.unfocus();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+      );
+    } finally {
+      _settingAddress = false;
+      if (mounted) setState(() => _locating = false);
+    }
+  }
+
+  void _onLocationQueryChanged(String value) {
+    _locationSearchDebounce?.cancel();
+    final query = value.trim();
+    setState(() {
+      _locationSuggestions = const [];
+      _locationSearchMessage = null;
+    });
+    if (query.length < 3) {
+      setState(() => _searchingLocation = false);
+      return;
+    }
+    _locationSearchDebounce = Timer(
+      const Duration(milliseconds: 450),
+      () => _searchLocation(query),
+    );
+  }
+
+  Future<void> _searchLocation([String? requestedQuery]) async {
+    _locationSearchDebounce?.cancel();
+    final query = (requestedQuery ?? _placeAddressCtrl.text).trim();
+    if (query.length < 3) return;
+    final generation = ++_locationSearchGeneration;
+    setState(() => _searchingLocation = true);
+    try {
+      final results = await AppLocationService.search(
+        query,
+        city: widget.settings.groupCity,
+      );
+      if (!mounted || generation != _locationSearchGeneration) return;
+      setState(() {
+        _locationSuggestions = results;
+        _locationSearchMessage = results.isEmpty
+            ? 'Nenhum local encontrado. Tente incluir a cidade.'
+            : null;
+      });
+    } catch (_) {
+      if (!mounted || generation != _locationSearchGeneration) return;
+      setState(() {
+        _locationSuggestions = const [];
+        _locationSearchMessage = 'Não foi possível buscar agora.';
+      });
+    } finally {
+      if (mounted && generation == _locationSearchGeneration) {
+        setState(() => _searchingLocation = false);
+      }
+    }
+  }
+
+  void _selectLocation(AppLocationResult result) {
+    final resultName = (result.name ?? '').trim();
+    _settingAddress = true;
+    _placeAddressCtrl.text = result.address;
+    if (!_placeNameWasManuallyEdited || _placeCtrl.text.trim().isEmpty) {
+      _placeCtrl.text = resultName.isNotEmpty
+          ? resultName
+          : result.address.split(',').first.trim();
+    }
+    _settingAddress = false;
+    setState(() {
+      _placeLatitude = result.latitude;
+      _placeLongitude = result.longitude;
+      _locationSuggestions = const [];
+      _locationSearchMessage = null;
+    });
+    _locationFocusNode.unfocus();
+  }
+
+  Widget _locationFields(bool isDark) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _labeledInput(
+            label: 'Nome do local',
+            ctrl: _placeCtrl,
+            hint: 'Ex: Arena Municipal',
+            isDark: isDark,
+            helper: 'É o nome que ficará registrado na partida.',
+            onChanged: (_) => _placeNameWasManuallyEdited = true,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Endereço',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: isDark ? AppColors.slate400 : AppColors.slate500,
+            ),
+          ),
+          const SizedBox(height: 5),
+          TextField(
+            controller: _placeAddressCtrl,
+            focusNode: _locationFocusNode,
+            textInputAction: TextInputAction.search,
+            onChanged: _onLocationQueryChanged,
+            onSubmitted: (_) => _searchLocation(),
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark ? AppColors.slate100 : AppColors.slate800,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Digite um lugar ou endereço',
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              suffixIcon: IconButton(
+                tooltip: 'Usar minha localização',
+                onPressed: _locating ? null : _useCurrentLocation,
+                icon: _locating
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.my_location_rounded, size: 20),
+              ),
+              filled: true,
+              fillColor: isDark ? AppColors.slate800 : AppColors.slate50,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(
+                  color: isDark ? AppColors.slate700 : AppColors.slate200,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(
+                  color: isDark ? AppColors.slate700 : AppColors.slate200,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide:
+                    const BorderSide(color: AppColors.blue500, width: 1.5),
+              ),
+            ),
+          ),
+          if (_searchingLocation)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+          if (_locationSuggestions.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(top: 6),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.slate800 : AppColors.onDark,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isDark ? AppColors.slate700 : AppColors.slate200,
+                ),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _locationSuggestions.length,
+                separatorBuilder: (_, __) => Divider(
+                  height: 1,
+                  indent: 48,
+                  color: isDark ? AppColors.slate700 : AppColors.slate200,
+                ),
+                itemBuilder: (_, index) {
+                  final option = _locationSuggestions[index];
+                  final optionName = (option.name ?? '').trim();
+                  return ListTile(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    leading: const Icon(Icons.place_outlined, size: 20),
+                    title: Text(
+                      optionName.isEmpty
+                          ? option.address.split(',').first
+                          : optionName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    subtitle: Text(
+                      option.address,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                    onTap: () => _selectLocation(option),
+                  );
+                },
+              ),
+            ),
+          if (_locationSearchMessage != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6, left: 2),
+              child: Text(
+                _locationSearchMessage!,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark ? AppColors.slate400 : AppColors.slate500,
+                ),
+              ),
+            )
+          else if (_placeLatitude != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6, left: 2),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded,
+                      size: 14, color: AppColors.green600),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      '${_placeCtrl.text} selecionado',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.green600,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(top: 6, left: 2),
+              child: Text(
+                'As opções aparecem enquanto você digita.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark ? AppColors.slate400 : AppColors.slate500,
+                ),
+              ),
+            ),
+        ],
+      );
+
   @override
   void dispose() {
     _scrollController.dispose();
+    _locationSearchDebounce?.cancel();
+    _locationFocusNode.dispose();
     _placeCtrl.dispose();
-    _minCtrl.dispose();
+    _placeAddressCtrl.dispose();
     _maxCtrl.dispose();
     _feeCtrl.dispose();
     _goalkeeperFeeCtrl.dispose();
@@ -599,7 +890,6 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     });
     try {
       final ds = ref.read(groupSettingsDsProvider);
-      final min = int.tryParse(_minCtrl.text) ?? 5;
       final max = int.tryParse(_maxCtrl.text) ?? 6;
 
       // "HH:mm" → "HH:mm:ss" (mirrors site: `${defaultKickoffTime}:00`)
@@ -609,6 +899,9 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
       final place =
           _placeCtrl.text.trim().isEmpty ? null : _placeCtrl.text.trim();
+      final placeAddress = _placeAddressCtrl.text.trim().isEmpty
+          ? null
+          : _placeAddressCtrl.text.trim();
 
       final fee = (_paymentMode == 0 && _feeCtrl.text.isNotEmpty)
           ? double.tryParse(_feeCtrl.text.replaceAll(',', '.'))
@@ -621,9 +914,14 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
       await ds.updateGroupSettings(
         widget.groupId,
-        minPlayers: min,
+        // Campo legado mantido no contrato por compatibilidade. A quantidade
+        // mínima não bloqueia mais o fluxo e não é configurável na interface.
+        minPlayers: widget.settings.minPlayers,
         maxPlayers: max,
         defaultPlaceName: place,
+        defaultPlaceAddress: placeAddress,
+        defaultPlaceLatitude: _placeLatitude,
+        defaultPlaceLongitude: _placeLongitude,
         defaultDaysOfWeek: _daysOfWeek.toList()..sort(),
         defaultKickoffTime: kickoff,
         paymentMode: _paymentMode,
@@ -1091,14 +1389,28 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      GroupDiscoverySettingsCard(
-                        groupId: widget.groupId,
-                        publicPageEnabled: _publicPageEnabled,
-                        onPublicPageChanged: (v) =>
-                            setState(() => _publicPageEnabled = v),
-                        onSaveSettings: _save,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _navTile(
+                              isDark,
+                              icon: Icons.lock_outline_rounded,
+                              title: 'Privacidade',
+                              onTap: _openPrivacy,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _navTile(
+                              isDark,
+                              icon: Icons.date_range_outlined,
+                              title: 'Temporadas',
+                              onTap: () => context.push('/app/seasons'),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
                       _buildTabbedSettings(
                         isDark,
                         detail: detail,
@@ -1417,29 +1729,71 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     );
   }
 
+  /// Abre a tela de Privacidade. O interruptor do link compartilhado é uma
+  /// configuração geral e é salvo por [_save], então a tela reaproveita o
+  /// estado desta página.
+  void _openPrivacy() {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setLocal) => Scaffold(
+          appBar: AppBar(title: const Text('Privacidade')),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: GroupDiscoverySettingsCard(
+              groupId: widget.groupId,
+              embedded: true,
+              publicPageEnabled: _publicPageEnabled,
+              onPublicPageChanged: (v) {
+                setState(() => _publicPageEnabled = v);
+                setLocal(() {});
+              },
+              onSaveSettings: _save,
+            ),
+          ),
+        ),
+      ),
+    ));
+  }
+
+  Widget _navTile(bool isDark,
+          {required IconData icon,
+          required String title,
+          required VoidCallback onTap}) =>
+      InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.slate900 : AppColors.onDark,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: isDark ? AppColors.slate700 : AppColors.slate200),
+          ),
+          child: Row(
+            children: [
+              Icon(icon,
+                  size: 18,
+                  color: isDark ? AppColors.slate300 : AppColors.slate700),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(title,
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w700)),
+              ),
+              Icon(Icons.chevron_right_rounded,
+                  size: 18,
+                  color: isDark ? AppColors.slate400 : AppColors.slate500),
+            ],
+          ),
+        ),
+      );
+
   // ── Tab 0: Geral ──────────────────────────────────────────────────────────
 
   Widget _buildTabGeral(bool isDark, GroupDetail? detail) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Temporadas: tela própria (as ações valem na hora, sem o Salvar).
-          _subCard(
-            isDark: isDark,
-            accentBg: AppColors.emerald50,
-            accentFg: AppColors.emerald500,
-            icon: Icons.date_range_outlined,
-            title: 'Temporadas',
-            subtitle: 'Fechar, renomear e pré-temporada',
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: () => context.push('/app/seasons'),
-                icon: const Icon(Icons.chevron_right_rounded),
-                label: const Text('Gerenciar temporadas'),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
           _subCard(
             isDark: isDark,
             accentBg: AppColors.emerald50,
@@ -1518,28 +1872,15 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
             icon: Icons.group_outlined,
             title: 'Jogadores',
             subtitle: 'Por partida',
-            child: Row(
-              children: [
-                Expanded(
-                    child: _labeledInput(
-                  label: 'Mínimo',
-                  ctrl: _minCtrl,
-                  hint: '5',
-                  isDark: isDark,
-                  type: TextInputType.number,
-                  fmts: [FilteringTextInputFormatter.digitsOnly],
-                )),
-                const SizedBox(width: 12),
-                Expanded(
-                    child: _labeledInput(
-                  label: 'Máximo',
-                  ctrl: _maxCtrl,
-                  hint: '6',
-                  isDark: isDark,
-                  type: TextInputType.number,
-                  fmts: [FilteringTextInputFormatter.digitsOnly],
-                )),
-              ],
+            child: _labeledInput(
+              label: 'Máximo de jogadores',
+              ctrl: _maxCtrl,
+              hint: '14',
+              isDark: isDark,
+              type: TextInputType.number,
+              fmts: [FilteringTextInputFormatter.digitsOnly],
+              helper:
+                  'Depois desse limite, as confirmações entram na lista de espera.',
             ),
           ),
           const SizedBox(height: 12),
@@ -1552,12 +1893,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
             subtitle: 'Local, dia e horário',
             child: Column(
               children: [
-                _labeledInput(
-                  label: 'Local padrão',
-                  ctrl: _placeCtrl,
-                  hint: 'Ex: Arena Municipal',
-                  isDark: isDark,
-                ),
+                _locationFields(isDark),
                 const SizedBox(height: 12),
                 _DaysSelector(
                   label: 'Dias',
@@ -2122,28 +2458,15 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
             icon: Icons.group_outlined,
             title: 'Jogadores',
             subtitle: 'Por partida',
-            child: Row(
-              children: [
-                Expanded(
-                    child: _labeledInput(
-                  label: 'Mínimo',
-                  ctrl: _minCtrl,
-                  hint: '5',
-                  isDark: isDark,
-                  type: TextInputType.number,
-                  fmts: [FilteringTextInputFormatter.digitsOnly],
-                )),
-                const SizedBox(width: 12),
-                Expanded(
-                    child: _labeledInput(
-                  label: 'Máximo',
-                  ctrl: _maxCtrl,
-                  hint: '6',
-                  isDark: isDark,
-                  type: TextInputType.number,
-                  fmts: [FilteringTextInputFormatter.digitsOnly],
-                )),
-              ],
+            child: _labeledInput(
+              label: 'Máximo de jogadores',
+              ctrl: _maxCtrl,
+              hint: '14',
+              isDark: isDark,
+              type: TextInputType.number,
+              fmts: [FilteringTextInputFormatter.digitsOnly],
+              helper:
+                  'Depois desse limite, as confirmações entram na lista de espera.',
             ),
           ),
 
@@ -2158,12 +2481,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
             subtitle: 'Local, dia e horário',
             child: Column(
               children: [
-                _labeledInput(
-                  label: 'Local padrão',
-                  ctrl: _placeCtrl,
-                  hint: 'Ex: Arena Municipal',
-                  isDark: isDark,
-                ),
+                _locationFields(isDark),
                 const SizedBox(height: 12),
                 _DaysSelector(
                   label: 'Dias',
@@ -3294,6 +3612,7 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     TextInputType? type,
     List<TextInputFormatter>? fmts,
     ValueChanged<String>? onChanged,
+    String? helper,
   }) =>
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3336,6 +3655,17 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
                       const BorderSide(color: AppColors.blue500, width: 1.5)),
             ),
           ),
+          if (helper != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              helper,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.35,
+                color: isDark ? AppColors.slate400 : AppColors.slate500,
+              ),
+            ),
+          ],
         ],
       );
 

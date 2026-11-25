@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/onboarding/new_group_tour_storage.dart';
+import '../../../../core/location/app_location_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/realtime/realtime_provider.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
@@ -50,6 +51,11 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
   // ── Formulário Step 1 ─────────────────────────────────────────────────────
   final _formKey = GlobalKey<FormState>();
   final _placeCtrl = TextEditingController();
+  final _placeAddressCtrl = TextEditingController();
+  double? _placeLatitude;
+  double? _placeLongitude;
+  bool _locating = false;
+  bool _settingAddress = false;
   DateTime _date = DateTime.now();
   TimeOfDay _time = TimeOfDay.now();
   bool _formInited = false;
@@ -63,6 +69,12 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
   @override
   void initState() {
     super.initState();
+    _placeAddressCtrl.addListener(() {
+      if (_settingAddress) return;
+      _placeLatitude = null;
+      _placeLongitude = null;
+      if (mounted) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final id = widget.initialMatchId;
       if (id != null && id.isNotEmpty) {
@@ -76,6 +88,7 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
   @override
   void dispose() {
     _placeCtrl.dispose();
+    _placeAddressCtrl.dispose();
     super.dispose();
   }
 
@@ -89,6 +102,14 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
     );
     if (s.groupSettings?.defaultPlaceName != null && _placeCtrl.text.isEmpty) {
       _placeCtrl.text = s.groupSettings!.defaultPlaceName!;
+    }
+    if (s.groupSettings?.defaultPlaceAddress != null &&
+        _placeAddressCtrl.text.isEmpty) {
+      _settingAddress = true;
+      _placeAddressCtrl.text = s.groupSettings!.defaultPlaceAddress!;
+      _settingAddress = false;
+      _placeLatitude = s.groupSettings!.defaultPlaceLatitude;
+      _placeLongitude = s.groupSettings!.defaultPlaceLongitude;
     }
     final raw = s.groupSettings?.defaultKickoffTime;
     if (raw != null) {
@@ -110,11 +131,30 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
   Future<void> _createMatch() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final placeName = _placeCtrl.text.trim();
+    final placeAddress = _placeAddressCtrl.text.trim();
+    if (placeAddress.isNotEmpty &&
+        (_placeLatitude == null || _placeLongitude == null)) {
+      try {
+        final resolved = await AppLocationService.fromAddress(
+          placeAddress,
+          city: ref.read(matchNotifierProvider).groupSettings?.groupCity,
+        );
+        _placeLatitude = resolved?.latitude;
+        _placeLongitude = resolved?.longitude;
+      } catch (_) {
+        // Mantém o endereço informado mesmo quando o serviço de geocodificação
+        // do aparelho não consegue obter coordenadas.
+      }
+    }
     final playedAt =
         DateTime(_date.year, _date.month, _date.day, _time.hour, _time.minute);
-    final created = await ref
-        .read(matchNotifierProvider.notifier)
-        .createMatch(placeName, playedAt);
+    final created = await ref.read(matchNotifierProvider.notifier).createMatch(
+          placeName,
+          playedAt,
+          placeAddress: placeAddress.isEmpty ? null : placeAddress,
+          placeLatitude: _placeLatitude,
+          placeLongitude: _placeLongitude,
+        );
     if (!created) return;
     if (widget.onboarding) {
       await ref.read(newGroupTourStorageProvider).clear();
@@ -285,6 +325,44 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
     if (t != null) setState(() => _time = t);
   }
 
+  Future<void> _useCurrentLocation() async {
+    setState(() => _locating = true);
+    try {
+      final result = await AppLocationService.current();
+      if (!mounted) return;
+      _settingAddress = true;
+      _placeAddressCtrl.text = result.address;
+      _settingAddress = false;
+      setState(() {
+        _placeLatitude = result.latitude;
+        _placeLongitude = result.longitude;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+      );
+    } finally {
+      _settingAddress = false;
+      if (mounted) setState(() => _locating = false);
+    }
+  }
+
+  Future<void> _openLocationMap() async {
+    try {
+      await AppLocationService.openMap(
+        address: _placeAddressCtrl.text,
+        latitude: _placeLatitude,
+        longitude: _placeLongitude,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
+      );
+    }
+  }
+
   // ── Conteúdo por etapa ────────────────────────────────────────────────────
   Widget _buildStepContent(MatchState s, bool isAdmin, String groupId) {
     if (!s.hasMatch || _creatingNew) {
@@ -292,6 +370,11 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
           ? _CreateMatchView(
               formKey: _formKey,
               placeCtrl: _placeCtrl,
+              placeAddressCtrl: _placeAddressCtrl,
+              hasCoordinates: _placeLatitude != null && _placeLongitude != null,
+              locating: _locating,
+              onUseCurrentLocation: _useCurrentLocation,
+              onOpenMap: _openLocationMap,
               date: _date,
               time: _time,
               onPickDate: _pickDate,
@@ -314,6 +397,12 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
             ? _CreateMatchView(
                 formKey: _formKey,
                 placeCtrl: _placeCtrl,
+                placeAddressCtrl: _placeAddressCtrl,
+                hasCoordinates:
+                    _placeLatitude != null && _placeLongitude != null,
+                locating: _locating,
+                onUseCurrentLocation: _useCurrentLocation,
+                onOpenMap: _openLocationMap,
                 date: _date,
                 time: _time,
                 onPickDate: _pickDate,
@@ -685,6 +774,28 @@ class _MatchBanner extends StatelessWidget {
       title: 'Partidas',
       icon: Icons.sports_soccer_rounded,
       footer: AppPageHeaderActionBar(actions: [
+        if ((s.placeAddress ?? '').trim().isNotEmpty ||
+            (s.placeLatitude != null && s.placeLongitude != null))
+          OutlinedButton.icon(
+            onPressed: () async {
+              try {
+                await AppLocationService.openMap(
+                  address: s.placeAddress ?? s.placeName,
+                  latitude: s.placeLatitude,
+                  longitude: s.placeLongitude,
+                );
+              } catch (_) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context)
+                  ..hideCurrentSnackBar()
+                  ..showSnackBar(const SnackBar(
+                    content: Text('Não foi possível abrir o mapa.'),
+                  ));
+              }
+            },
+            icon: const Icon(Icons.map_outlined, size: 18),
+            label: const Text('Abrir mapa'),
+          ),
         PopupMenuButton<_MatchHeaderAction>(
           tooltip: 'Mais ações',
           onSelected: (action) {
@@ -1427,6 +1538,11 @@ class _PreviewBanner extends StatelessWidget {
 class _CreateMatchView extends StatelessWidget {
   final GlobalKey<FormState> formKey;
   final TextEditingController placeCtrl;
+  final TextEditingController placeAddressCtrl;
+  final bool hasCoordinates;
+  final bool locating;
+  final VoidCallback onUseCurrentLocation;
+  final VoidCallback onOpenMap;
   final DateTime date;
   final TimeOfDay time;
   final VoidCallback onPickDate;
@@ -1440,6 +1556,11 @@ class _CreateMatchView extends StatelessWidget {
   const _CreateMatchView({
     required this.formKey,
     required this.placeCtrl,
+    required this.placeAddressCtrl,
+    required this.hasCoordinates,
+    required this.locating,
+    required this.onUseCurrentLocation,
+    required this.onOpenMap,
     required this.date,
     required this.time,
     required this.onPickDate,
@@ -1490,6 +1611,51 @@ class _CreateMatchView extends StatelessWidget {
                             validator: (v) => (v?.trim().isEmpty ?? true)
                                 ? 'Informe o local'
                                 : null,
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: placeAddressCtrl,
+                            decoration: InputDecoration(
+                              labelText: 'Endereço',
+                              hintText: 'Rua, número, bairro e cidade',
+                              prefixIcon: const Icon(Icons.map_outlined),
+                              suffixIcon: hasCoordinates
+                                  ? const Icon(Icons.check_circle_rounded,
+                                      color: AppColors.accent)
+                                  : null,
+                              border: const OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed:
+                                      locating ? null : onUseCurrentLocation,
+                                  icon: locating
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2),
+                                        )
+                                      : const Icon(Icons.my_location_rounded,
+                                          size: 18),
+                                  label: Text(locating
+                                      ? 'Localizando...'
+                                      : 'Usar localização atual'),
+                                ),
+                              ),
+                              if (placeAddressCtrl.text.trim().isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                IconButton.outlined(
+                                  tooltip: 'Ver no mapa',
+                                  onPressed: onOpenMap,
+                                  icon: const Icon(Icons.map_outlined),
+                                ),
+                              ],
+                            ],
                           ),
                           const SizedBox(height: 16),
                           // Data

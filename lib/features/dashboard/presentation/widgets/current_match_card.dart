@@ -464,6 +464,12 @@ class _InviteBadge extends StatelessWidget {
           AppColors.rose50,
           AppColors.rose200
         ),
+      InviteResponse.waiting => (
+          'Lista de espera',
+          AppColors.amber800,
+          AppColors.amber50,
+          AppColors.amber200
+        ),
       _ => (
           'Pendente',
           AppColors.amber500,

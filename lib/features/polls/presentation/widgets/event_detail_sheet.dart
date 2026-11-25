@@ -4,6 +4,7 @@ import '../../../../core/realtime/realtime_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/confirm_dialog.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
+import '../../../../shared/presentation/widgets/participation_history_sheet.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/datasources/polls_remote_datasource.dart';
@@ -804,6 +805,13 @@ class _EventDetailSheetState extends ConsumerState<EventDetailSheet> {
                               saving: _saving,
                               selections: _memberSelections,
                               onVote: _adminVote,
+                              onHistory: (member) =>
+                                  showParticipationHistorySheet(
+                                context: context,
+                                playerName: member.playerName,
+                                history: _ds.fetchParticipationHistory(
+                                    widget.groupId, _poll.id, member.playerId),
+                              ),
                               onClose: _closePoll,
                               onReopen: _reopenPoll,
                               onDelete: _deletePoll,
@@ -1523,6 +1531,7 @@ class _AdminContent extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onEditDetails;
   final VoidCallback onToggleAllowGuests;
+  final ValueChanged<PollMemberVote> onHistory;
   final bool isDark;
 
   const _AdminContent({
@@ -1536,6 +1545,7 @@ class _AdminContent extends StatelessWidget {
     required this.onDelete,
     required this.onEditDetails,
     required this.onToggleAllowGuests,
+    required this.onHistory,
     required this.isDark,
   });
 
@@ -1578,6 +1588,12 @@ class _AdminContent extends StatelessWidget {
                               isDark ? AppColors.slate200 : AppColors.slate700,
                         ),
                       ),
+                    ),
+                    IconButton(
+                      tooltip: 'Ver histórico de ações',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => onHistory(m),
+                      icon: const Icon(Icons.info_outline_rounded, size: 18),
                     ),
                     DropdownButton<String?>(
                       value: current,

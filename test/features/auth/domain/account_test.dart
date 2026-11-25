@@ -2,6 +2,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:patotas_app/features/auth/domain/entities/account.dart';
 
 void main() {
+  test('distingue convidado sem patota de usuário novo', () {
+    const guest = Account(
+      userId: 'guest',
+      name: 'Convidado',
+      email: 'guest@test.com',
+      roles: [],
+      hasGuestActivity: true,
+    );
+    const newcomer = Account(
+      userId: 'new',
+      name: 'Novo',
+      email: 'new@test.com',
+      roles: [],
+    );
+
+    expect(guest.isGuestOnly, isTrue);
+    expect(newcomer.isGuestOnly, isFalse);
+    expect(guest.copyWith(activeGroupId: 'group-1').isGuestOnly, isFalse);
+  });
+
   const account = Account(
     userId: 'user-1',
     name: 'Usuário',

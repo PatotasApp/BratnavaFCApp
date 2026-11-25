@@ -25,6 +25,8 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
   Timer? _timer;
   bool _showGroups = true;
   bool _loading = false;
+  bool _waitingForDebounce = false;
+  String? _error;
   int _searchVersion = 0;
   List<DiscoveryGroupItem> _groups = [];
   List<DiscoveryPlayerItem> _players = [];
@@ -49,16 +51,22 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
 
   void _onQueryChanged(String value) {
     _timer?.cancel();
-    setState(() {});
     if (value.trim().isEmpty) {
+      setState(() => _waitingForDebounce = false);
       _search();
       return;
     }
-    _timer = Timer(const Duration(milliseconds: 280), _search);
+    // Dá retorno visual já no primeiro caractere e espera apenas o suficiente
+    // para não disparar uma requisição para cada tecla. Os 280 ms anteriores,
+    // somados à chamada HTTP, faziam uma busca local parecer lenta e ainda
+    // exibiam o estado vazio antes de a consulta começar.
+    setState(() => _waitingForDebounce = true);
+    _timer = Timer(const Duration(milliseconds: 120), _search);
   }
 
   void _selectTab(bool groups) {
     if (_showGroups == groups) return;
+    _timer?.cancel();
     setState(() => _showGroups = groups);
     _search();
   }
@@ -70,7 +78,9 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
 
     if (term.isEmpty) {
       setState(() {
+        _waitingForDebounce = false;
         _loading = false;
+        _error = null;
         if (groupsTab) {
           _groups = [];
         } else {
@@ -80,16 +90,28 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
       return;
     }
 
-    setState(() => _loading = true);
+    setState(() {
+      _waitingForDebounce = false;
+      _loading = true;
+      _error = null;
+    });
     try {
       if (groupsTab) {
         final results = await _api.groups(term);
         if (!mounted || version != _searchVersion) return;
         _groups = results;
       } else {
-        final results = await _api.players(term);
+        final results = await _api.players(term,
+            groupId:
+                ref.read(accountStoreProvider).activeAccount?.activeGroupId);
         if (!mounted || version != _searchVersion) return;
         _players = results;
+      }
+    } catch (_) {
+      if (mounted && version == _searchVersion) {
+        setState(() {
+          _error = 'Não foi possível fazer a busca. Verifique sua conexão.';
+        });
       }
     } finally {
       if (mounted && version == _searchVersion) {
@@ -234,6 +256,7 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final hasQuery = _query.text.trim().isNotEmpty;
+    final isSearching = _waitingForDebounce || _loading;
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: _search,
@@ -243,10 +266,32 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
               padding: const EdgeInsets.fromLTRB(18, 22, 18, 10),
               sliver: SliverToBoxAdapter(child: _header(context, colors)),
             ),
-            if (hasQuery && _loading)
+            if (hasQuery && isSearching)
               const SliverFillRemaining(
                 hasScrollBody: false,
                 child: Center(child: CircularProgressIndicator()),
+              )
+            else if (hasQuery && _error != null)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _SearchState(
+                  icon: Icons.cloud_off_outlined,
+                  message: _error!,
+                  action: OutlinedButton.icon(
+                    onPressed: _search,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Tentar novamente'),
+                  ),
+                ),
+              )
+            else if (hasQuery &&
+                (_showGroups ? _groups.isEmpty : _players.isEmpty))
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: _SearchState(
+                  icon: Icons.search_off_rounded,
+                  message: 'Nenhum perfil encontrado para essa busca.',
+                ),
               )
             else if (hasQuery)
               SliverPadding(
@@ -336,7 +381,7 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
                   : IconButton(
                       onPressed: () {
                         _query.clear();
-                        _search();
+                        _onQueryChanged('');
                       },
                       icon: const Icon(Icons.close_rounded),
                     ),
@@ -365,7 +410,8 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
           final groupId = account?.activeGroupId;
           final canInvite = groupId != null &&
               (account?.isGroupAdmin(groupId) ?? false) &&
-              player.id != account?.userId;
+              player.id != account?.userId &&
+              !player.inGroup;
           return ListTile(
             onTap: () => context.push('/app/profile/${player.id}'),
             contentPadding:
@@ -398,15 +444,53 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
                             color: colors.primary,
                             fontWeight: FontWeight.w800)),
                   ])
-                : canInvite
-                    ? FilledButton.tonal(
-                        onPressed: () => _invite(player),
-                        child: const Text('Convidar'),
-                      )
-                    : const Icon(Icons.chevron_right_rounded),
+                : player.inGroup
+                    ? Text('Na patota',
+                        style: TextStyle(
+                            color: colors.onSurfaceVariant,
+                            fontWeight: FontWeight.w800))
+                    : canInvite
+                        ? FilledButton.tonal(
+                            onPressed: () => _invite(player),
+                            child: const Text('Convidar'),
+                          )
+                        : const Icon(Icons.chevron_right_rounded),
           );
         },
         separatorBuilder: (_, __) => const SizedBox(height: 9),
+      );
+}
+
+class _SearchState extends StatelessWidget {
+  const _SearchState({
+    required this.icon,
+    required this.message,
+    this.action,
+  });
+
+  final IconData icon;
+  final String message;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+              const SizedBox(height: 12),
+              Text(message, textAlign: TextAlign.center),
+              if (action != null) ...[
+                const SizedBox(height: 16),
+                action!,
+              ],
+            ],
+          ),
+        ),
       );
 }
 

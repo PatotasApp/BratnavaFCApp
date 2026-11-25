@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../../../core/api/api_constants.dart';
+import '../../../../shared/domain/participation_history_item.dart';
 import '../../domain/entities/poll_detail.dart';
 import '../../domain/entities/poll_summary.dart';
 
@@ -196,6 +197,17 @@ class PollsRemoteDataSource {
       data: {'playerId': playerId, 'optionIds': optionIds},
     );
     return PollDetail.fromJson(_unwrapMap(res.data)!);
+  }
+
+  Future<List<ParticipationHistoryItem>> fetchParticipationHistory(
+      String groupId, String pollId, String playerId) async {
+    final res = await _dio.get(
+      ApiConstants.pollParticipationHistory(groupId, pollId, playerId),
+    );
+    return _unwrapList(res.data)
+        .map((e) => ParticipationHistoryItem.fromJson(
+            Map<String, dynamic>.from(e as Map)))
+        .toList();
   }
 
   // ── Guests ────────────────────────────────────────────────────────────────

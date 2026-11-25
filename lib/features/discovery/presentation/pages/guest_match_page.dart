@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:dio/dio.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
@@ -31,6 +32,7 @@ class GuestMatchPage extends ConsumerStatefulWidget {
 class _GuestMatchPageState extends ConsumerState<GuestMatchPage> {
   GuestMatch? _match;
   String? _error;
+  bool _accessDenied = false;
   bool _loading = true;
   bool _saving = false;
   Timer? _timer;
@@ -57,16 +59,22 @@ class _GuestMatchPageState extends ConsumerState<GuestMatchPage> {
       setState(() {
         _match = match;
         _error = null;
+        _accessDenied = false;
         _loading = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
+      final status = e is DioException ? e.response?.statusCode : null;
+      final accessDenied = status == 403 || status == 404;
       setState(() {
         // Mantém o que já estava na tela se for só uma falha de rede.
         _error = _match == null
-            ? 'Você não tem acesso aos dados desta partida. '
-                'Eles ficam disponíveis para quem jogou.'
+            ? accessDenied
+                ? 'Você não tem acesso aos dados desta partida. '
+                    'Eles ficam disponíveis para quem jogou.'
+                : 'Não foi possível carregar a partida. Verifique sua conexão.'
             : null;
+        _accessDenied = accessDenied;
         _loading = false;
       });
     }
@@ -75,6 +83,7 @@ class _GuestMatchPageState extends ConsumerState<GuestMatchPage> {
   Future<void> _answer(bool going) async {
     setState(() => _saving = true);
     final messenger = ScaffoldMessenger.of(context);
+    final errorColor = Theme.of(context).colorScheme.error;
     try {
       final match = await _api.setGuestAttendance(widget.matchId, going);
       if (!mounted) return;
@@ -92,7 +101,7 @@ class _GuestMatchPageState extends ConsumerState<GuestMatchPage> {
         ..clearSnackBars()
         ..showSnackBar(SnackBar(
           behavior: SnackBarBehavior.floating,
-          backgroundColor: Theme.of(context).colorScheme.error,
+          backgroundColor: errorColor,
           content: const Text(
               'Não foi possível salvar. A partida pode já ter começado.'),
         ));
@@ -113,10 +122,26 @@ class _GuestMatchPageState extends ConsumerState<GuestMatchPage> {
               onRefresh: _load,
               child: m == null
                   ? ListView(padding: const EdgeInsets.all(32), children: [
-                      const Icon(Icons.lock_outline_rounded, size: 44),
+                      Icon(
+                        _accessDenied
+                            ? Icons.lock_outline_rounded
+                            : Icons.cloud_off_outlined,
+                        size: 44,
+                      ),
                       const SizedBox(height: 12),
                       Text(_error ?? 'Partida não encontrada.',
                           textAlign: TextAlign.center),
+                      if (!_accessDenied) ...[
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            setState(() => _loading = true);
+                            _load();
+                          },
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Tentar novamente'),
+                        ),
+                      ],
                     ])
                   : ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
@@ -202,6 +227,7 @@ class _InfoBand extends StatelessWidget {
     final time = DateFormat('HH:mm').format(match.playedAt);
     final (label, tone) = switch (match.myResponse) {
       'going' => ('Confirmado', PrototypeBadgeTone.success),
+      'waiting' => ('Lista de espera', PrototypeBadgeTone.accent),
       'not_going' => ('Você não vai', PrototypeBadgeTone.danger),
       _ => ('Aguardando você', PrototypeBadgeTone.accent),
     };
@@ -212,8 +238,8 @@ class _InfoBand extends StatelessWidget {
         children: [
           Row(
             children: [
-              PrototypeIconBox(
-                icon: const Icon(Icons.sports_soccer_rounded),
+              const PrototypeIconBox(
+                icon: Icon(Icons.sports_soccer_rounded),
                 size: 38,
               ),
               const SizedBox(width: 10),
@@ -293,6 +319,7 @@ class _AttendanceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final going = response == 'going';
+    final waiting = response == 'waiting';
     final notGoing = response == 'not_going';
     return PrototypeCard(
       padding: const EdgeInsets.all(14),
@@ -302,15 +329,19 @@ class _AttendanceCard extends StatelessWidget {
           Text(
             going
                 ? 'Presença confirmada'
-                : notGoing
-                    ? 'Você avisou que não vai'
-                    : 'Você vai jogar?',
+                : waiting
+                    ? 'Você está na lista de espera'
+                    : notGoing
+                        ? 'Você avisou que não vai'
+                        : 'Você vai jogar?',
             style: theme.textTheme.titleMedium
                 ?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 2),
           Text(
-            'Dá para mudar de ideia até a patota fechar as confirmações.',
+            waiting
+                ? 'Se uma vaga abrir, sua presença será confirmada automaticamente e você receberá uma notificação.'
+                : 'Dá para mudar de ideia até a patota fechar as confirmações.',
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: context.appTextSecondary),
           ),
@@ -318,7 +349,7 @@ class _AttendanceCard extends StatelessWidget {
           Row(children: [
             Expanded(
               child: _ChoiceButton(
-                label: 'Não vou',
+                label: waiting ? 'Sair da fila' : 'Não vou',
                 icon: Icons.close_rounded,
                 selected: notGoing,
                 color: theme.colorScheme.error,
@@ -328,12 +359,14 @@ class _AttendanceCard extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: _ChoiceButton(
-                label: 'Vou',
-                icon: Icons.check_rounded,
-                selected: going,
+                label: waiting ? 'Na fila' : 'Vou',
+                icon:
+                    waiting ? Icons.hourglass_top_rounded : Icons.check_rounded,
+                selected: going || waiting,
                 color: theme.colorScheme.primary,
                 loading: saving,
-                onPressed: saving || going ? null : () => onAnswer(true),
+                onPressed:
+                    saving || going || waiting ? null : () => onAnswer(true),
               ),
             ),
           ]),
@@ -376,7 +409,7 @@ class _ChoiceButton extends StatelessWidget {
           );
     const shape = RoundedRectangleBorder(
         borderRadius: BorderRadius.all(Radius.circular(14)));
-    final size = const Size.fromHeight(52);
+    const size = Size.fromHeight(52);
     return selected
         ? FilledButton(
             onPressed: null,

@@ -50,6 +50,7 @@ class AuthRemoteDataSource {
             : (userName.isNotEmpty ? userName : email),
         email: email,
         roles: _parseRoles(data['role']),
+        hasGuestActivity: data['hasGuestActivity'] as bool? ?? false,
         // URL absoluta do bucket público; nula quando o usuário não tem foto.
         photoUrl: (data['photoUrl'] as String?)?.trim().isNotEmpty == true
             ? (data['photoUrl'] as String).trim()

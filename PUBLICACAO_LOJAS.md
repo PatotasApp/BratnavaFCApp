@@ -170,8 +170,22 @@ pendências conhecidas e a API responde `/api/app/version` em prod.
 | Categoria | Esportes | Esportes |
 
 Dados a declarar (ambas): e-mail, nome, foto, ID de usuário, token de push,
-conteúdo do usuário (fotos/vídeos/enquetes), dados de uso no app. Sem rastreio
-para publicidade → sem ATT.
+conteúdo do usuário (fotos/vídeos/enquetes), dados de uso no app e **localização
+precisa opcional**, usada para preencher o local da patota/partida. A localização
+fica vinculada à patota, é usada somente para funcionalidade do app e não para
+rastreamento ou publicidade.
+
+Configuração manual de localização nas lojas:
+
+- **App Store Connect → App Privacy:** marcar `Precise Location`, coletada,
+  vinculada à identidade/patota, finalidade `App Functionality`, sem tracking.
+- **Google Play Console → App content → Data safety:** marcar `Precise location`
+  como coleta opcional, finalidade `App functionality`, sem publicidade. Revisar
+  a resposta de compartilhamento conforme o provedor de geocodificação adotado.
+- Atualizar `https://patotasapp.com.br/privacidade.html` explicando GPS opcional,
+  armazenamento do local da patota/partida e os provedores de busca de endereços.
+- Não declarar localização em segundo plano: o app solicita somente enquanto
+  está em uso e apenas quando a pessoa toca em **Usar meu GPS**.
 
 **Conta demo para revisores:** criar em **prod** um usuário e-mail/senha com uma
 patota cheia (jogadores, partidas finalizadas, estatísticas, uma partida
@@ -197,6 +211,8 @@ apagá-la. Sem isso a revisão costuma ser recusada por "não foi possível test
    - [ ] Nenhuma tela "em construção" ou botão morto
    - [ ] Push chegando no iPhone
    - [ ] App funciona sem permissão de notificação/câmera concedida
+   - [ ] App funciona com localização negada e permite digitar/pesquisar endereço
+   - [ ] App Privacy/Data safety e política pública incluem localização precisa
 5. Enviar para produção: Play com **lançamento gradual** (10% → 50% → 100%);
    Apple com **liberação manual** após aprovação, para sincronizar as duas lojas.
 

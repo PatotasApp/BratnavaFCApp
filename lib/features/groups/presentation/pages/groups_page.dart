@@ -4281,6 +4281,7 @@ class _InviteSheetState extends State<_InviteSheet> {
 
   final _searchCtrl = TextEditingController();
   Timer? _debounce;
+  int _searchGeneration = 0;
   bool _loading = false;
   bool _pendingLoading = false;
   bool _hasTried = false;
@@ -4317,16 +4318,18 @@ class _InviteSheetState extends State<_InviteSheet> {
 
   void _onTextChanged() {
     _debounce?.cancel();
+    _searchGeneration++;
     final term = _searchCtrl.text.trim();
     if (term.length < 2) {
       setState(() {
         _results = [];
         _err = null;
         _hasTried = false;
+        _loading = false;
       });
       return;
     }
-    _debounce = Timer(const Duration(milliseconds: 400), _search);
+    _debounce = Timer(const Duration(milliseconds: 120), _search);
   }
 
   @override
@@ -4340,6 +4343,7 @@ class _InviteSheetState extends State<_InviteSheet> {
   Future<void> _search() async {
     final term = _searchCtrl.text.trim();
     if (term.length < 2) return;
+    final generation = _searchGeneration;
 
     setState(() {
       _loading = true;
@@ -4359,11 +4363,17 @@ class _InviteSheetState extends State<_InviteSheet> {
           .map((e) => _UserResult.fromJson(e as Map<String, dynamic>))
           .toList();
 
-      if (mounted) setState(() => _results = list);
+      if (mounted && generation == _searchGeneration) {
+        setState(() => _results = list);
+      }
     } catch (e) {
-      if (mounted) setState(() => _err = _extractError(e));
+      if (mounted && generation == _searchGeneration) {
+        setState(() => _err = _extractError(e));
+      }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && generation == _searchGeneration) {
+        setState(() => _loading = false);
+      }
     }
   }
 

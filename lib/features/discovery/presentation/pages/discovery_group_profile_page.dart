@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/providers/account_store.dart';
@@ -289,6 +290,7 @@ class _DiscoveryGroupProfilePageState
                     else
                       ...p.people.map(
                         (x) => ListTile(
+                          onTap: () => context.push('/app/profile/${x.id}'),
                           contentPadding: EdgeInsets.zero,
                           leading: AvatarWidget(
                             name: x.name,
@@ -560,6 +562,17 @@ class _MatchCard extends StatelessWidget {
                 ),
               ),
             ),
+          if (match.applicationStatus == 2 && !match.participating) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => context.push('/app/guest-match/${match.id}'),
+                icon: const Icon(Icons.check_circle_outline_rounded),
+                label: const Text('Confirmar presença'),
+              ),
+            ),
+          ],
           if (match.openings.isNotEmpty) ...[
             const SizedBox(height: 12),
             ...match.openings.map(

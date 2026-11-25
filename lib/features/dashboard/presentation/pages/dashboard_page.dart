@@ -907,6 +907,7 @@ class _NextMatchBandState extends State<_NextMatchBand> {
                   _InviteTally(
                     accepted: match!.acceptedCount,
                     pending: match!.pendingCount,
+                    waiting: match!.waitingCount,
                     refused: match!.refusedCount,
                   )
                 else
@@ -925,7 +926,9 @@ class _NextMatchBandState extends State<_NextMatchBand> {
                 Expanded(
                   flex: 2,
                   child: FilledButton.icon(
-                    onPressed: responding ? null : onAccept,
+                    onPressed: responding || response == InviteResponse.waiting
+                        ? null
+                        : onAccept,
                     icon: responding
                         ? const SizedBox.square(
                             dimension: 16,
@@ -935,7 +938,9 @@ class _NextMatchBandState extends State<_NextMatchBand> {
                     label: Text(
                       response == InviteResponse.accepted
                           ? 'Presença confirmada'
-                          : 'Confirmar presença',
+                          : response == InviteResponse.waiting
+                              ? 'Na lista de espera'
+                              : 'Confirmar presença',
                     ),
                   ),
                 ),
@@ -976,7 +981,9 @@ class _NextMatchBandState extends State<_NextMatchBand> {
                                 Theme.of(context).brightness,
                               ).withValues(alpha: 0.08),
                       ),
-                      child: const Text('Não vou'),
+                      child: Text(response == InviteResponse.waiting
+                          ? 'Sair da fila'
+                          : 'Não vou'),
                     ),
                   ),
                 ),
@@ -1509,11 +1516,13 @@ class _LinkedEventLine extends StatelessWidget {
 class _InviteTally extends StatelessWidget {
   final int accepted;
   final int pending;
+  final int waiting;
   final int refused;
 
   const _InviteTally({
     required this.accepted,
     required this.pending,
+    this.waiting = 0,
     required this.refused,
   });
 
@@ -1536,6 +1545,15 @@ class _InviteTally extends StatelessWidget {
             count: pending,
             color: AppColors.warning,
             semantic: 'pendentes',
+          ),
+        ],
+        if (waiting > 0) ...[
+          const SizedBox(height: 5),
+          _TallyRow(
+            icon: Icons.hourglass_top_rounded,
+            count: waiting,
+            color: AppColors.amber500,
+            semantic: 'na lista de espera',
           ),
         ],
         if (refused > 0) ...[

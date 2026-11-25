@@ -161,12 +161,16 @@ class GroupDetail {
 // From GET/PUT /api/GroupSettings/group/{groupId}
 
 class GroupSettings {
+  final String? groupCity;
   // Player limits
   final int minPlayers;
   final int maxPlayers;
 
   // Match defaults
   final String? defaultPlaceName;
+  final String? defaultPlaceAddress;
+  final double? defaultPlaceLatitude;
+  final double? defaultPlaceLongitude;
   final int? defaultDayOfWeek; // 0=Sun…6=Sat, null=unset
   final List<int> defaultDaysOfWeek;
   final String? defaultKickoffTime; // "HH:mm:ss" from API; display as "HH:mm"
@@ -217,9 +221,13 @@ class GroupSettings {
   final List<ManualMatchSchedule> manualMatchSchedules;
 
   const GroupSettings({
+    this.groupCity,
     this.minPlayers = 5,
     this.maxPlayers = 6,
     this.defaultPlaceName,
+    this.defaultPlaceAddress,
+    this.defaultPlaceLatitude,
+    this.defaultPlaceLongitude,
     this.defaultDayOfWeek,
     this.defaultDaysOfWeek = const [],
     this.defaultKickoffTime,
@@ -271,9 +279,13 @@ class GroupSettings {
     if (days.isEmpty && legacyDay != null) days.add(legacyDay);
 
     return GroupSettings(
+      groupCity: j['groupCity'] as String?,
       minPlayers: (j['minPlayers'] as int?) ?? 5,
       maxPlayers: (j['maxPlayers'] as int?) ?? 6,
       defaultPlaceName: j['defaultPlaceName'] as String?,
+      defaultPlaceAddress: j['defaultPlaceAddress'] as String?,
+      defaultPlaceLatitude: (j['defaultPlaceLatitude'] as num?)?.toDouble(),
+      defaultPlaceLongitude: (j['defaultPlaceLongitude'] as num?)?.toDouble(),
       defaultDayOfWeek: days.isEmpty ? legacyDay : days.first,
       defaultDaysOfWeek: days,
       defaultKickoffTime: j['defaultKickoffTime'] as String?,
@@ -318,6 +330,9 @@ class GroupSettings {
     required int minPlayers,
     required int maxPlayers,
     required String? defaultPlaceName,
+    String? defaultPlaceAddress,
+    double? defaultPlaceLatitude,
+    double? defaultPlaceLongitude,
     required List<int> defaultDaysOfWeek,
     required String? defaultKickoffTime, // already "HH:mm:ss"
     required int paymentMode,
@@ -352,6 +367,9 @@ class GroupSettings {
         'minPlayers': minPlayers,
         'maxPlayers': maxPlayers,
         'defaultPlaceName': defaultPlaceName,
+        'defaultPlaceAddress': defaultPlaceAddress,
+        'defaultPlaceLatitude': defaultPlaceLatitude,
+        'defaultPlaceLongitude': defaultPlaceLongitude,
         'defaultDayOfWeek':
             defaultDaysOfWeek.isEmpty ? null : defaultDaysOfWeek.first,
         'defaultDaysOfWeek': defaultDaysOfWeek,

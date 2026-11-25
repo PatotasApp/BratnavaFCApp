@@ -5,6 +5,7 @@ import '../../../../core/share/share_links.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/discovery_datasource.dart';
 import '../../domain/discovery_models.dart';
+import '../providers/applicants_menu_provider.dart';
 
 /// Privacidade da patota: quem encontra, o que cada um vê e o perfil público.
 ///
@@ -19,11 +20,15 @@ class GroupDiscoverySettingsCard extends ConsumerStatefulWidget {
     this.publicPageEnabled = true,
     this.onPublicPageChanged,
     this.onSaveSettings,
+    this.embedded = false,
   });
   final String groupId;
+
+  /// Dentro da própria tela de Privacidade: sem cabeçalho e sempre aberto.
+  final bool embedded;
   final bool publicPageEnabled;
   final ValueChanged<bool>? onPublicPageChanged;
-  final Future<void> Function()? onSaveSettings;
+  final Future<bool> Function()? onSaveSettings;
   @override
   ConsumerState<GroupDiscoverySettingsCard> createState() => _State();
 }
@@ -34,7 +39,9 @@ class _State extends ConsumerState<GroupDiscoverySettingsCard> {
       city = TextEditingController();
   bool saving = false, isPublic = true, accepting = false, showMembers = false;
   bool showGoalsToGuests = false;
-  bool open = false;
+  bool regeneratingCode = false;
+  String? loadError;
+  late bool open = widget.embedded;
   DiscoveryDataSource get api => DiscoveryDataSource(ref.read(dioProvider));
   @override
   void initState() {
@@ -50,10 +57,12 @@ class _State extends ConsumerState<GroupDiscoverySettingsCard> {
   }
 
   Future<void> load() async {
-    final value = await api.group(widget.groupId);
-    if (mounted) {
+    try {
+      final value = await api.group(widget.groupId);
+      if (!mounted) return;
       setState(() {
         p = value;
+        loadError = null;
         isPublic = value.isPublic;
         accepting = value.accepting;
         showMembers = value.showMembers;
@@ -61,6 +70,9 @@ class _State extends ConsumerState<GroupDiscoverySettingsCard> {
         description.text = value.description ?? '';
         city.text = value.city ?? '';
       });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => loadError = 'Não foi possível carregar a privacidade.');
     }
   }
 
@@ -77,15 +89,70 @@ class _State extends ConsumerState<GroupDiscoverySettingsCard> {
             description.text.trim().isEmpty ? null : description.text.trim(),
         city: city.text.trim().isEmpty ? null : city.text.trim(),
       );
-      await widget.onSaveSettings?.call();
+      final settingsSaved = await widget.onSaveSettings?.call() ?? true;
+      // Menu "Interessados" e "Completar com jogadores de fora" dependem disto.
+      ref.invalidate(applicantsMenuVisibleProvider(widget.groupId));
+      ref.invalidate(groupOpenToOutsidersProvider(widget.groupId));
       await load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Privacidade e perfil atualizados.')),
+          SnackBar(
+            content: Text(settingsSaved
+                ? 'Privacidade e perfil atualizados.'
+                : 'Perfil atualizado, mas não foi possível salvar o link de compartilhamento.'),
+          ),
         );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:
+              Text('Não foi possível salvar a privacidade. Tente novamente.'),
+        ));
       }
     } finally {
       if (mounted) setState(() => saving = false);
+    }
+  }
+
+  Future<void> _regenerateCode() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Gerar novo código?'),
+        content: const Text(
+          'O código atual deixará de funcionar. Quem ainda não entrou na patota '
+          'precisará receber o novo código.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Gerar novo código'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => regeneratingCode = true);
+    try {
+      final code = await api.regenerateCode(widget.groupId);
+      if (!mounted) return;
+      setState(() => p = p?.copyWithCode(code));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Novo código gerado.')),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível gerar outro código.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => regeneratingCode = false);
     }
   }
 
@@ -126,10 +193,28 @@ class _State extends ConsumerState<GroupDiscoverySettingsCard> {
   Widget build(BuildContext context) {
     final value = p;
     if (value == null) {
-      return const Card(
+      return Card(
         child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Center(child: CircularProgressIndicator()),
+          padding: const EdgeInsets.all(24),
+          child: loadError == null
+              ? const Center(child: CircularProgressIndicator())
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.cloud_off_outlined, size: 42),
+                    const SizedBox(height: 10),
+                    Text(loadError!, textAlign: TextAlign.center),
+                    const SizedBox(height: 14),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() => loadError = null);
+                        load();
+                      },
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Tentar novamente'),
+                    ),
+                  ],
+                ),
         ),
       );
     }
@@ -143,50 +228,51 @@ class _State extends ConsumerState<GroupDiscoverySettingsCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: () => setState(() => open = !open),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: c.primaryContainer,
-                      borderRadius: BorderRadius.circular(12),
+          if (!widget.embedded)
+            InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () => setState(() => open = !open),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: c.primaryContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(Icons.lock_outline_rounded,
+                          size: 20, color: c.onPrimaryContainer),
                     ),
-                    child: Icon(Icons.lock_outline_rounded,
-                        size: 20, color: c.onPrimaryContainer),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Privacidade',
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w900),
-                        ),
-                        Text(
-                          _summary,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              fontSize: 12, color: c.onSurfaceVariant),
-                        ),
-                      ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Privacidade',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w900),
+                          ),
+                          Text(
+                            _summary,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 12, color: c.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  Icon(open
-                      ? Icons.expand_less_rounded
-                      : Icons.expand_more_rounded),
-                ],
+                    Icon(open
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded),
+                  ],
+                ),
               ),
             ),
-          ),
           if (open)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -204,7 +290,9 @@ class _State extends ConsumerState<GroupDiscoverySettingsCard> {
                   ),
                   _switch(
                     'Aceitando jogadores',
-                    'Permite publicar vagas nas partidas',
+                    isPublic
+                        ? 'Permite publicar vagas nas partidas'
+                        : 'Ative “Aparecer na busca” para receber candidaturas',
                     accepting,
                     (v) => setState(() => accepting = v),
                   ),
@@ -309,14 +397,15 @@ class _State extends ConsumerState<GroupDiscoverySettingsCard> {
                           tooltip: 'Copiar',
                         ),
                         IconButton(
-                          onPressed: () async {
-                            final code =
-                                await api.regenerateCode(widget.groupId);
-                            if (mounted) {
-                              setState(() => p = value.copyWithCode(code));
-                            }
-                          },
-                          icon: const Icon(Icons.refresh_rounded),
+                          onPressed: regeneratingCode ? null : _regenerateCode,
+                          icon: regeneratingCode
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.refresh_rounded),
                           tooltip: 'Gerar outro',
                         ),
                       ],

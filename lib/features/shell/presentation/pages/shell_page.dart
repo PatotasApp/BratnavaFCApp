@@ -8,6 +8,7 @@ import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/widgets/email_verification_banner.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
+import '../../../discovery/presentation/providers/applicants_menu_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../replays/presentation/providers/replay_access_provider.dart';
 import '../../domain/shell_navigation_policy.dart';
@@ -52,6 +53,21 @@ class _ShellPageState extends ConsumerState<ShellPage>
         path: ''),
   ];
 
+  static const _guestTabs = [
+    _TabItem(
+      icon: Icons.sports_soccer_outlined,
+      activeIcon: Icons.sports_soccer,
+      label: 'Convites para jogar',
+      path: '/app/match-invitations',
+    ),
+    _TabItem(
+      icon: Icons.account_circle_outlined,
+      activeIcon: Icons.account_circle,
+      label: 'Minha conta',
+      path: '/app/account',
+    ),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -92,7 +108,12 @@ class _ShellPageState extends ConsumerState<ShellPage>
     // token sozinho, e o interceptor pega o token válido a cada request.
 
     final location = GoRouterState.of(context).uri.path;
-    final selected = _selectedIndex(context);
+    final account = ref.watch(accountStoreProvider).activeAccount;
+    final guestOnly = account?.isGuestOnly ?? false;
+    final tabs = guestOnly ? _guestTabs : _tabs;
+    final selected = guestOnly
+        ? (location == '/app/account' || location == '/app/theme' ? 1 : 0)
+        : _selectedIndex(context);
     // Key forces full widget subtree recreation on account switch, clearing
     // any widget-local state (timers, refresh flags) from the previous account.
     final accountKey = ref.watch(
@@ -132,10 +153,11 @@ class _ShellPageState extends ConsumerState<ShellPage>
           ],
         ),
         bottomNavigationBar: _PrototypeBottomNavigation(
+          tabs: tabs,
           selectedIndex: selected,
           onDestinationSelected: (i) {
-            if (_tabs[i].path.isNotEmpty) {
-              context.go(_tabs[i].path);
+            if (tabs[i].path.isNotEmpty) {
+              context.go(tabs[i].path);
             } else {
               _openDrawer(context);
             }
@@ -170,10 +192,12 @@ class _TabItem {
 }
 
 class _PrototypeBottomNavigation extends StatelessWidget {
+  final List<_TabItem> tabs;
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
 
   const _PrototypeBottomNavigation({
+    required this.tabs,
     required this.selectedIndex,
     required this.onDestinationSelected,
   });
@@ -196,8 +220,8 @@ class _PrototypeBottomNavigation extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             child: Row(
-              children: List.generate(_ShellPageState._tabs.length, (index) {
-                final item = _ShellPageState._tabs[index];
+              children: List.generate(tabs.length, (index) {
+                final item = tabs[index];
                 final selected = selectedIndex == index;
 
                 return Expanded(
@@ -427,6 +451,9 @@ class _MoreSheet extends ConsumerWidget {
         ? ref.watch(groupSettingsProvider(groupId)).valueOrNull
         : null;
     final canSeeStats = isAdmin || (settings?.showPlayerStats ?? false);
+    // Só consulta quando é admin; enquanto carrega, o item fica visível.
+    final canSeeApplicants = !isAdmin ||
+        (ref.watch(applicantsMenuVisibleProvider(groupId)).valueOrNull ?? true);
 
     return FractionallySizedBox(
       heightFactor: .86,
@@ -472,6 +499,7 @@ class _MoreSheet extends ConsumerWidget {
                           requiresStatsPermission: item.statsPermission,
                           groupId: groupId,
                           canSeeReplays: canSeeReplays,
+                          canSeeApplicants: canSeeApplicants,
                         ))) ...[
                       Text(
                         group.label.toUpperCase(),
@@ -493,6 +521,7 @@ class _MoreSheet extends ConsumerWidget {
                               requiresStatsPermission: item.statsPermission,
                               groupId: groupId,
                               canSeeReplays: canSeeReplays,
+                              canSeeApplicants: canSeeApplicants,
                             );
                           });
 

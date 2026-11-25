@@ -183,6 +183,9 @@ class ApiConstants {
       '/api/Polls/group/$groupId/$pollId/vote';
   static String adminVote(String groupId, String pollId) =>
       '/api/Polls/group/$groupId/$pollId/admin-vote';
+  static String pollParticipationHistory(
+          String groupId, String pollId, String playerId) =>
+      '/api/Polls/group/$groupId/$pollId/players/$playerId/participation-history';
 
   // Team Colors
   static String teamColors(String groupId) => '/api/TeamColor/group/$groupId';
@@ -263,6 +266,9 @@ class ApiConstants {
       '/api/Matches/group/$groupId/$matchId/invite/accept';
   static String matchInviteReject(String groupId, String matchId) =>
       '/api/Matches/group/$groupId/$matchId/invite/reject';
+  static String matchParticipationHistory(
+          String groupId, String matchId, String playerId) =>
+      '/api/Matches/group/$groupId/$matchId/players/$playerId/participation-history';
 
   // TeamGeneration
   static const String teamGenGenerate = '/api/TeamGeneration/generate';

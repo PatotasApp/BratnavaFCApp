@@ -30,7 +30,7 @@ class TeamColor extends Equatable {
   List<Object?> get props => [id, name, hexValue];
 }
 
-enum InviteResponse { pending, accepted, declined }
+enum InviteResponse { pending, accepted, declined, waiting }
 
 class MatchPlayer extends Equatable {
   final String matchPlayerId;
@@ -61,10 +61,11 @@ class MatchPlayer extends Equatable {
         inviteResponse: _parseInvite(j['inviteResponse'] as int? ?? 1),
       );
 
-  // 1=Pendente  2=Recusado  3=Confirmado  (igual ao site)
+  // 1=Pendente  2=Recusado  3=Confirmado  4=Lista de espera
   static InviteResponse _parseInvite(int v) => switch (v) {
         3 => InviteResponse.accepted,
         2 => InviteResponse.declined,
+        4 => InviteResponse.waiting,
         _ => InviteResponse.pending,
       };
 

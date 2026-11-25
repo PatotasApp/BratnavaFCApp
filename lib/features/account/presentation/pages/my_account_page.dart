@@ -287,7 +287,7 @@ class _GroupsTab extends StatelessWidget {
                       trailing:
                           players[index].playerId == activePlayer?.playerId
                               ? const PrototypeBadge(
-                                  label: 'Ativa',
+                                  label: 'Selecionada',
                                   tone: PrototypeBadgeTone.success,
                                 )
                               : const Icon(Icons.chevron_right_rounded),

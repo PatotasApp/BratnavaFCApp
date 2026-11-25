@@ -6,11 +6,13 @@ import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../../shared/presentation/widgets/user_profile_link.dart';
+import '../../../../shared/presentation/widgets/participation_history_sheet.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../discovery/data/discovery_datasource.dart';
 import '../../../discovery/domain/discovery_models.dart';
 import '../../../discovery/presentation/pages/discovery_search_page.dart';
+import '../../../discovery/presentation/providers/applicants_menu_provider.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../members/presentation/providers/members_provider.dart';
@@ -37,6 +39,17 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
   /// Empilhar os três cards obrigava a rolar a tela inteira para chegar nos
   /// pendentes, que é justamente onde há trabalho a fazer.
   String _tab = _tabAccepted;
+
+  Future<void> _showHistory(
+      String groupId, String matchId, MatchPlayerInfo player) async {
+    await showParticipationHistorySheet(
+      context: context,
+      playerName: player.playerName,
+      history: ref
+          .read(matchDsProvider)
+          .fetchParticipationHistory(groupId, matchId, player.playerId),
+    );
+  }
 
   Future<void> _goNext() async {
     await ref.read(matchNotifierProvider.notifier).goToMatchmaking();
@@ -231,6 +244,7 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
     final accepted = s.acceptedPlayers;
     final rejected = s.rejectedPlayers;
     final pending = s.pendingPlayers;
+    final waiting = s.waitingPlayers;
     final myId = account?.activePlayerId ?? activePlayer?.playerId ?? '';
     // O jogador manda no grupo: `activeGroupId` da conta pode apontar
     // para uma patota sem jogador nosso, e aí toda rota por grupo
@@ -241,7 +255,6 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
     final isAdmin = isGroupAdmin;
     final icons =
         GroupIcons.from(ref.watch(groupSettingsProvider(gid)).valueOrNull);
-    final pct = s.maxPlayers > 0 ? accepted.length / s.maxPlayers : 0.0;
 
     return Column(
       children: [
@@ -261,10 +274,15 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
                     acceptedCount: accepted.length,
                     maxPlayers: s.maxPlayers,
                     pendingCount: pending.length,
-                    acceptedOverLimit: s.acceptedOverLimit,
-                    progress: pct,
+                    waitingCount: waiting.length,
                   ),
-                  if (isAdmin && (s.matchId ?? '').isNotEmpty) ...[
+                  if (isAdmin &&
+                      (s.matchId ?? '').isNotEmpty &&
+                      gid.isNotEmpty &&
+                      (ref
+                              .watch(groupOpenToOutsidersProvider(gid))
+                              .valueOrNull ??
+                          false)) ...[
                     const SizedBox(height: 10),
                     SizedBox(
                         width: double.infinity,
@@ -321,6 +339,7 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
                       _tabPending => _InviteVariant.pending,
                       _ => _InviteVariant.accepted,
                     },
+                    waitingItems: _tab == _tabAccepted ? waiting : const [],
                     myId: myId,
                     myPhotoUrl: myPhotoUrl,
                     isAdmin: isAdmin,
@@ -335,6 +354,9 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
                     onSetRole: (mpId, gk) => ref
                         .read(matchNotifierProvider.notifier)
                         .setPlayerRole(mpId, gk),
+                    onHistory: isAdmin && (s.matchId ?? '').isNotEmpty
+                        ? (player) => _showHistory(gid, s.matchId!, player)
+                        : null,
                   ),
                   const SizedBox(height: 80),
                 ],
@@ -379,8 +401,7 @@ class _AcceptanceSummaryCard extends StatelessWidget {
   final int acceptedCount;
   final int maxPlayers;
   final int pendingCount;
-  final bool acceptedOverLimit;
-  final double progress;
+  final int waitingCount;
 
   const _AcceptanceSummaryCard({
     required this.playedAt,
@@ -388,8 +409,7 @@ class _AcceptanceSummaryCard extends StatelessWidget {
     required this.acceptedCount,
     required this.maxPlayers,
     required this.pendingCount,
-    required this.acceptedOverLimit,
-    required this.progress,
+    required this.waitingCount,
   });
 
   @override
@@ -510,29 +530,15 @@ class _AcceptanceSummaryCard extends StatelessWidget {
                             ),
                           ),
                         ],
-                        if (acceptedOverLimit) ...[
-                          const SizedBox(height: 8),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: AppColors.dangerBgOf(theme.brightness),
-                              borderRadius: BorderRadius.circular(9),
-                              border: Border.all(
-                                  color: AppColors.dangerOf(theme.brightness)),
-                            ),
-                            child: Text(
-                              maxPlayers > 0
-                                  ? 'Passou do limite: $acceptedCount / $maxPlayers. Recuse alguns para avan\u00e7ar.'
-                                  : 'Passou do limite. Recuse alguns para avan\u00e7ar.',
+                        if (waitingCount > 0) ...[
+                          const SizedBox(height: 3),
+                          Text('$waitingCount na lista de espera',
                               style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.dangerOf(theme.brightness),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
+                                  fontSize: 11,
+                                  color: isDark
+                                      ? AppColors.amber400
+                                      : AppColors.amber800,
+                                  fontWeight: FontWeight.w600)),
                         ],
                       ],
                     ),
@@ -547,7 +553,7 @@ class _AcceptanceSummaryCard extends StatelessWidget {
   }
 }
 
-enum _InviteVariant { accepted, rejected, pending }
+enum _InviteVariant { accepted, rejected, pending, waiting }
 
 /// Restaram só as duas regras de comportamento. Os seis getters de cor
 /// (`topBorder`, `headerColor`, `countBg`, `countFg`, `avatarBg`, `avatarFg`)
@@ -559,7 +565,9 @@ extension _InviteVariantX on _InviteVariant {
   }
 
   bool get showRejectBtn {
-    return this == _InviteVariant.pending || this == _InviteVariant.accepted;
+    return this == _InviteVariant.pending ||
+        this == _InviteVariant.accepted ||
+        this == _InviteVariant.waiting;
   }
 }
 
@@ -569,6 +577,7 @@ class _InviteCard extends StatelessWidget {
   final String title;
   final int count;
   final List<MatchPlayerInfo> items;
+  final List<MatchPlayerInfo> waitingItems;
   final _InviteVariant variant;
   final String myId;
   final String? myPhotoUrl;
@@ -582,11 +591,13 @@ class _InviteCard extends StatelessWidget {
   final void Function(String pid) onAccept;
   final void Function(String pid) onReject;
   final void Function(String mpId, bool isGk) onSetRole;
+  final void Function(MatchPlayerInfo player)? onHistory;
 
   const _InviteCard({
     required this.title,
     required this.count,
     required this.items,
+    this.waitingItems = const [],
     required this.variant,
     required this.myId,
     this.myPhotoUrl,
@@ -596,6 +607,7 @@ class _InviteCard extends StatelessWidget {
     required this.onAccept,
     required this.onReject,
     required this.onSetRole,
+    this.onHistory,
   });
 
   @override
@@ -676,6 +688,62 @@ class _InviteCard extends StatelessWidget {
                   ),
                 ],
               ],
+              if (waitingItems.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: 12, bottom: 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Divider(
+                          color: isDark
+                              ? AppColors.slate700
+                              : AppColors.lightBorder,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Text(
+                          'LISTA DE ESPERA',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                            color: isDark
+                                ? AppColors.amber400
+                                : AppColors.amber800,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color:
+                              isDark ? AppColors.amber950 : AppColors.amber50,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          '${waitingItems.length}',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: isDark
+                                ? AppColors.amber200
+                                : AppColors.amber800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ..._withDividers(
+                  waitingItems
+                      .map((player) =>
+                          _row(player, rowVariant: _InviteVariant.waiting))
+                      .toList(),
+                  isDark: isDark,
+                ),
+              ],
             ],
           ),
         ],
@@ -683,21 +751,23 @@ class _InviteCard extends StatelessWidget {
     );
   }
 
-  Widget _row(MatchPlayerInfo p) => _PlayerRow(
+  Widget _row(MatchPlayerInfo p, {_InviteVariant? rowVariant}) => _PlayerRow(
         player: p,
         isMe: p.playerId == myId,
         photoUrlOverride: p.playerId == myId ? myPhotoUrl : null,
         isGuest: p.isGuest,
         isAdmin: isAdmin,
         icons: icons,
-        variant: variant,
-        // Aceite/recusa entram no conjunto pelo playerId; o toggle de goleiro,
-        // pelo matchPlayerId.
-        busy: pendingPlayerIds.contains(p.playerId) ||
-            pendingPlayerIds.contains(p.matchPlayerId),
+        variant: rowVariant ?? variant,
+        // São duas ações independentes na mesma linha. O aceite/recusa usa o
+        // playerId; a troca de função usa o matchPlayerId. Não compartilhe o
+        // indicador visual entre elas.
+        inviteBusy: pendingPlayerIds.contains(p.playerId),
+        roleBusy: pendingPlayerIds.contains(p.matchPlayerId),
         onAccept: onAccept,
         onReject: onReject,
         onSetRole: onSetRole,
+        onHistory: onHistory,
       );
 
   /// `.proto-card>.proto-list-row+.proto-list-row{border-top-color:…}` — o
@@ -737,13 +807,15 @@ class _PlayerRow extends StatelessWidget {
   final GroupIcons icons;
   final _InviteVariant variant;
 
-  /// Só esta linha tem uma ação em voo. As outras seguem clicáveis, para o
-  /// admin conseguir aceitar vários jogadores em sequência.
-  final bool busy;
+  /// Aceite/recusa e troca de função podem acontecer na mesma linha, mas são
+  /// operações distintas e precisam de indicadores de carregamento próprios.
+  final bool inviteBusy;
+  final bool roleBusy;
 
   final void Function(String) onAccept;
   final void Function(String) onReject;
   final void Function(String, bool) onSetRole;
+  final void Function(MatchPlayerInfo player)? onHistory;
 
   const _PlayerRow({
     required this.player,
@@ -753,10 +825,12 @@ class _PlayerRow extends StatelessWidget {
     required this.isAdmin,
     this.icons = GroupIcons.defaults,
     required this.variant,
-    required this.busy,
+    required this.inviteBusy,
+    required this.roleBusy,
     required this.onAccept,
     required this.onReject,
     required this.onSetRole,
+    this.onHistory,
   });
 
   static String _initials(String name) {
@@ -844,20 +918,33 @@ class _PlayerRow extends StatelessWidget {
                   height: _identityLineHeight,
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: UserProfileLink(
-                      userId: player.userId,
-                      child: Text(
-                        player.playerName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color:
-                              isDark ? AppColors.onDark : AppColors.lightText,
+                    child: Row(children: [
+                      Expanded(
+                          child: UserProfileLink(
+                              userId: player.userId,
+                              child: Text(player.playerName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: isDark
+                                          ? AppColors.onDark
+                                          : AppColors.lightText)))),
+                      if (onHistory != null)
+                        IconButton(
+                          key: ValueKey(
+                              'match-player-history-${player.playerId}'),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                              width: 32, height: 32),
+                          tooltip: 'Ver histórico de ações',
+                          onPressed: () => onHistory!(player),
+                          icon:
+                              const Icon(Icons.info_outline_rounded, size: 18),
                         ),
-                      ),
-                    ),
+                    ]),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -872,7 +959,7 @@ class _PlayerRow extends StatelessWidget {
                           playerName: player.playerName,
                           isGoalkeeper: player.isGoalkeeper,
                           icons: icons,
-                          busy: busy,
+                          busy: roleBusy,
                           onPressed: () => onSetRole(
                               player.matchPlayerId, !player.isGoalkeeper),
                         )
@@ -960,7 +1047,7 @@ class _PlayerRow extends StatelessWidget {
                           icon: Icons.close,
                           isDark: isDark,
                           tooltip: 'Recusar',
-                          enabled: !busy,
+                          enabled: !inviteBusy,
                           onTap: () => onReject(player.playerId),
                         )
                       : null,
@@ -973,7 +1060,7 @@ class _PlayerRow extends StatelessWidget {
                           icon: Icons.check,
                           isDark: isDark,
                           tooltip: 'Aceitar',
-                          enabled: !busy,
+                          enabled: !inviteBusy,
                           onTap: () => onAccept(player.playerId),
                         )
                       : showReject
@@ -981,7 +1068,7 @@ class _PlayerRow extends StatelessWidget {
                               icon: Icons.close,
                               isDark: isDark,
                               tooltip: 'Recusar',
-                              enabled: !busy,
+                              enabled: !inviteBusy,
                               onTap: () => onReject(player.playerId),
                             )
                           : null,

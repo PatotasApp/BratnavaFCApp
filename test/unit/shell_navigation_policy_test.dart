@@ -82,4 +82,39 @@ void main() {
       );
     });
   });
+
+  group('guestOnlyRedirect', () {
+    test('mantém usuário novo sem patota no fluxo normal', () {
+      expect(
+        guestOnlyRedirect(location: '/app/search', isGuestOnly: false),
+        isNull,
+      );
+    });
+
+    test('leva convidado sem patota para seus convites', () {
+      expect(
+        guestOnlyRedirect(location: '/app', isGuestOnly: true),
+        '/app/match-invitations',
+      );
+      expect(
+        guestOnlyRedirect(location: '/app/search', isGuestOnly: true),
+        '/app/match-invitations',
+      );
+    });
+
+    test('permite convites, partida e conta para convidado', () {
+      for (final path in [
+        '/app/match-invitations',
+        '/app/guest-match/partida-1',
+        '/app/account',
+        '/app/theme',
+      ]) {
+        expect(
+          guestOnlyRedirect(location: path, isGuestOnly: true),
+          isNull,
+          reason: path,
+        );
+      }
+    });
+  });
 }

@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import '../../../../core/api/api_constants.dart';
 import '../../domain/entities/match_models.dart';
+import '../../../../shared/domain/participation_history_item.dart';
 
 class MatchRemoteDataSource {
   final Dio _dio;
@@ -132,10 +133,19 @@ class MatchRemoteDataSource {
   }
 
   Future<void> createMatch(
-      String groupId, String placeName, DateTime playedAt) async {
+    String groupId,
+    String placeName,
+    DateTime playedAt, {
+    String? placeAddress,
+    double? placeLatitude,
+    double? placeLongitude,
+  }) async {
     await _dio.post(ApiConstants.matchCreate(groupId), data: {
       'placeName': placeName,
       'playedAt': playedAt.toIso8601String(),
+      'placeAddress': placeAddress,
+      'placeLatitude': placeLatitude,
+      'placeLongitude': placeLongitude,
     });
   }
 
@@ -163,6 +173,17 @@ class MatchRemoteDataSource {
       ApiConstants.matchInviteReject(groupId, matchId),
       data: {'playerId': playerId},
     );
+  }
+
+  Future<List<ParticipationHistoryItem>> fetchParticipationHistory(
+      String groupId, String matchId, String playerId) async {
+    final res = await _dio.get(
+      ApiConstants.matchParticipationHistory(groupId, matchId, playerId),
+    );
+    return _unwrapList(res.data)
+        .map((e) => ParticipationHistoryItem.fromJson(
+            Map<String, dynamic>.from(e as Map)))
+        .toList();
   }
 
   Future<void> goToMatchmaking(String groupId, String matchId) async {

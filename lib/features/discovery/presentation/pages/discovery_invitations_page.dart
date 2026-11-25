@@ -17,6 +17,7 @@ class DiscoveryInvitationsPage extends ConsumerStatefulWidget {
 class _State extends ConsumerState<DiscoveryInvitationsPage> {
   List<MatchApplication> _items = [];
   bool _loading = true;
+  String? _error;
   String? _answering;
 
   DiscoveryDataSource get _api => DiscoveryDataSource(ref.read(dioProvider));
@@ -28,12 +29,21 @@ class _State extends ConsumerState<DiscoveryInvitationsPage> {
   }
 
   Future<void> _load() async {
-    final items = await _api.myApplications();
-    if (!mounted) return;
-    setState(() {
-      _items = items;
-      _loading = false;
-    });
+    try {
+      final items = await _api.myApplications();
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _error = null;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Não foi possível carregar seus convites.';
+        _loading = false;
+      });
+    }
   }
 
   bool _finished(MatchApplication x) => x.matchStatus >= 4;
@@ -79,7 +89,8 @@ class _State extends ConsumerState<DiscoveryInvitationsPage> {
         ..._played(recent: true),
         if (_played(recent: false).isNotEmpty) 'JOGOS QUE JOGUEI',
         ..._played(recent: false),
-        if (_notConcluded.isNotEmpty) _notConcluded,
+        if (_notConcluded.isNotEmpty) 'NÃO CONCLUÍDOS',
+        ..._notConcluded,
       ];
 
   Widget _card(MatchApplication item) => _InvitationCard(
@@ -107,6 +118,13 @@ class _State extends ConsumerState<DiscoveryInvitationsPage> {
           ),
         );
       }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:
+              Text('Não foi possível responder ao convite. Tente novamente.'),
+        ));
+      }
     } finally {
       if (mounted) setState(() => _answering = null);
     }
@@ -117,68 +135,94 @@ class _State extends ConsumerState<DiscoveryInvitationsPage> {
         appBar: AppBar(title: const Text('Convites para jogar')),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
-            : RefreshIndicator(
-                onRefresh: _load,
-                child: _items.isEmpty
-                    ? ListView(
-                        children: const [
-                          SizedBox(height: 160),
-                          Icon(Icons.sports_soccer_rounded, size: 52),
-                          SizedBox(height: 14),
-                          Text(
-                            'Nenhum convite ou candidatura.',
-                            textAlign: TextAlign.center,
+            : _error != null && _items.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.cloud_off_outlined, size: 48),
+                          const SizedBox(height: 12),
+                          Text(_error!, textAlign: TextAlign.center),
+                          const SizedBox(height: 16),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              setState(() => _loading = true);
+                              _load();
+                            },
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: const Text('Tentar novamente'),
                           ),
                         ],
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _rows.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
-                        itemBuilder: (_, index) {
-                          final row = _rows[index];
-                          if (row is String) {
-                            return Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: Text(
-                                row,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelLarge
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w900,
-                                      color:
-                                          Theme.of(context).colorScheme.primary,
-                                    ),
-                              ),
-                            );
-                          }
-                          if (row is List<MatchApplication>) {
-                            return ExpansionTile(
-                              tilePadding: EdgeInsets.zero,
-                              shape: const Border(),
-                              collapsedShape: const Border(),
-                              title: Text(
-                                'NÃO CONCLUÍDOS (${row.length})',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelLarge
-                                    ?.copyWith(fontWeight: FontWeight.w900),
-                              ),
-                              childrenPadding: EdgeInsets.zero,
-                              children: [
-                                for (final item in row)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 12),
-                                    child: _card(item),
-                                  ),
-                              ],
-                            );
-                          }
-                          return _card(row as MatchApplication);
-                        },
                       ),
-              ),
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: _load,
+                    child: _items.isEmpty
+                        ? ListView(
+                            children: const [
+                              SizedBox(height: 160),
+                              Icon(Icons.sports_soccer_rounded, size: 52),
+                              SizedBox(height: 14),
+                              Text(
+                                'Nenhum convite ou candidatura.',
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: _rows.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (_, index) {
+                              final row = _rows[index];
+                              if (row is String) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: Text(
+                                    row,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelLarge
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w900,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
+                                        ),
+                                  ),
+                                );
+                              }
+                              if (row is List<MatchApplication>) {
+                                return ExpansionTile(
+                                  tilePadding: EdgeInsets.zero,
+                                  shape: const Border(),
+                                  collapsedShape: const Border(),
+                                  title: Text(
+                                    'NÃO CONCLUÍDOS (${row.length})',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelLarge
+                                        ?.copyWith(fontWeight: FontWeight.w900),
+                                  ),
+                                  childrenPadding: EdgeInsets.zero,
+                                  children: [
+                                    for (final item in row)
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 12),
+                                        child: _card(item),
+                                      ),
+                                  ],
+                                );
+                              }
+                              return _card(row as MatchApplication);
+                            },
+                          ),
+                  ),
       );
 }
 
@@ -207,7 +251,8 @@ class _InvitationCard extends StatelessWidget {
       1 => 'Aguardando análise da patota',
       2 => 'Você foi aceito · confirme sua presença',
       3 => 'Presença confirmada',
-      4 => 'Não aprovado',
+      4 when item.source == 2 => 'Você recusou o convite',
+      4 => 'A patota não aprovou sua candidatura',
       _ => 'Cancelado',
     };
     return Card(

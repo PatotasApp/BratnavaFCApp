@@ -20,6 +20,7 @@ class Account extends Equatable {
   final bool?
       activeGroupIsAdmin; // role na patota ATIVA — atualiza a cada troca
   final bool? activeGroupIsFinanceiro; // idem para financeiro
+  final bool hasGuestActivity;
 
   /// URL pública do avatar, vinda do `GET /api/users/me`. Representa o USUÁRIO.
   ///
@@ -39,8 +40,11 @@ class Account extends Equatable {
     this.groupFinanceiroIds = const [],
     this.activeGroupIsAdmin,
     this.activeGroupIsFinanceiro,
+    this.hasGuestActivity = false,
     this.photoUrl,
   });
+
+  bool get isGuestOnly => activeGroupId == null && hasGuestActivity;
 
   // ── RBAC helpers ──────────────────────────────────────────────────────────
 
@@ -112,6 +116,7 @@ class Account extends Equatable {
         'groupFinanceiroIds': groupFinanceiroIds,
         'activeGroupIsAdmin': activeGroupIsAdmin,
         'activeGroupIsFinanceiro': activeGroupIsFinanceiro,
+        'hasGuestActivity': hasGuestActivity,
         'photoUrl': photoUrl,
       };
 
@@ -131,6 +136,7 @@ class Account extends Equatable {
             List<String>.from(json['groupFinanceiroIds'] as List? ?? []),
         activeGroupIsAdmin: json['activeGroupIsAdmin'] as bool?,
         activeGroupIsFinanceiro: json['activeGroupIsFinanceiro'] as bool?,
+        hasGuestActivity: json['hasGuestActivity'] as bool? ?? false,
         // Ausente em contas gravadas antes desta versão: abre sem foto, sem estourar.
         photoUrl: json['photoUrl'] as String?,
       );
@@ -148,6 +154,7 @@ class Account extends Equatable {
     List<String>? groupFinanceiroIds,
     bool? activeGroupIsAdmin,
     bool? activeGroupIsFinanceiro,
+    bool? hasGuestActivity,
     String? photoUrl,
   }) =>
       Account(
@@ -164,6 +171,7 @@ class Account extends Equatable {
         activeGroupIsAdmin: activeGroupIsAdmin ?? this.activeGroupIsAdmin,
         activeGroupIsFinanceiro:
             activeGroupIsFinanceiro ?? this.activeGroupIsFinanceiro,
+        hasGuestActivity: hasGuestActivity ?? this.hasGuestActivity,
         photoUrl: photoUrl ?? this.photoUrl,
       );
 
@@ -183,6 +191,7 @@ class Account extends Equatable {
         groupFinanceiroIds: groupFinanceiroIds,
         activeGroupIsAdmin: activeGroupIsAdmin,
         activeGroupIsFinanceiro: activeGroupIsFinanceiro,
+        hasGuestActivity: hasGuestActivity,
         photoUrl: photoUrl,
       );
 
@@ -198,6 +207,7 @@ class Account extends Equatable {
         groupFinanceiroIds,
         activeGroupIsAdmin,
         activeGroupIsFinanceiro,
+        hasGuestActivity,
         photoUrl,
       ];
 }

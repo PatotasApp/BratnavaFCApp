@@ -83,6 +83,8 @@
 		</dict>
 		<key>NSCameraUsageDescription</key>
 		<string>O PatotasApp usa a câmera para você fotografar sua foto de perfil, comprovantes de pagamento e imagens de enquetes.</string>
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>O PatotasApp usa sua localização somente quando você escolhe preencher o endereço da patota pelo GPS.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>O PatotasApp acessa suas fotos para você escolher sua foto de perfil, o logo da patota, comprovantes de pagamento e imagens de enquetes.</string>
 		<!-- A escalação é compartilhada pela folha de compartilhamento do iOS, que

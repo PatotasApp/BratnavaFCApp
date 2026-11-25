@@ -33,9 +33,13 @@ class DiscoveryPlayerItem {
     required this.userName,
     this.photoUrl,
     this.position,
+    this.inGroup = false,
   });
   final String id, name, userName;
   final String? photoUrl, position;
+
+  /// Já é mensalista da patota ativa de quem busca.
+  final bool inGroup;
   factory DiscoveryPlayerItem.fromJson(Map<String, dynamic> j) =>
       DiscoveryPlayerItem(
         id: j['userId'] as String,
@@ -43,6 +47,7 @@ class DiscoveryPlayerItem {
         userName: j['userName'] as String,
         photoUrl: j['photoUrl'] as String?,
         position: j['position'] as String?,
+        inGroup: j['inGroup'] == true,
       );
 }
 
@@ -170,6 +175,7 @@ class MatchApplication {
     this.placeName,
     required this.playedAt,
     required this.status,
+    required this.source,
     this.position,
     this.message,
     this.decisionReason,
@@ -182,6 +188,9 @@ class MatchApplication {
   final String? photoUrl, placeName;
   final DateTime playedAt;
   final int status;
+
+  /// 1 = candidatura do jogador; 2 = convite direto da patota.
+  final int source;
   final int? position;
   final String? message, decisionReason;
   factory MatchApplication.fromJson(Map<String, dynamic> j) => MatchApplication(
@@ -197,6 +206,7 @@ class MatchApplication {
         placeName: j['placeName'] as String?,
         playedAt: DateTime.parse(j['playedAt'] as String).toLocal(),
         status: (j['status'] as num).toInt(),
+        source: (j['source'] as num?)?.toInt() ?? 1,
         position: (j['openingPosition'] as num?)?.toInt(),
         message: j['message'] as String?,
         decisionReason: j['decisionReason'] as String?,
@@ -280,7 +290,7 @@ class GuestMatch {
   final int? teamAGoals, teamBGoals;
   final GuestMatchColor? teamAColor, teamBColor;
 
-  /// "pending", "going" ou "not_going".
+  /// "pending", "going", "waiting" ou "not_going".
   final String myResponse;
   final bool canChangeAttendance;
   final List<GuestMatchPlayer> players;

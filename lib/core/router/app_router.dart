@@ -10,7 +10,6 @@ import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/forgot_password_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/auth/presentation/providers/session_provider.dart';
-import '../../features/auth/presentation/providers/account_store.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/account/presentation/pages/my_account_page.dart';
 import '../../features/calendar/presentation/pages/calendar_page.dart';
@@ -26,6 +25,7 @@ import '../../features/discovery/presentation/pages/discovery_invitations_page.d
 import '../../features/group_settings/presentation/pages/group_settings_page.dart';
 import '../../features/birthdays/presentation/pages/birthday_page.dart';
 import '../../features/shell/presentation/pages/shell_page.dart';
+import '../../features/shell/domain/shell_navigation_policy.dart';
 import '../../features/shell/presentation/pages/theme_page.dart';
 import '../../features/visual_stats/presentation/pages/visual_stats_page.dart';
 import '../../features/polls/presentation/pages/polls_page.dart';
@@ -299,6 +299,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             RegExp(r'^/app/history/[^/]+/([^/]+)$').firstMatch(path);
         if (history != null) return '/app/guest-match/${history.group(1)}';
       }
+
+      final guestRedirect = guestOnlyRedirect(
+        location: path,
+        isGuestOnly: account?.isGuestOnly ?? false,
+      );
+      if (guestRedirect != null) return guestRedirect;
 
       return null;
     },
