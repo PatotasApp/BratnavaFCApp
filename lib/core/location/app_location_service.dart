@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geocoding/geocoding.dart';
@@ -91,6 +93,8 @@ class AppLocationService {
   static Future<List<AppLocationResult>> search(
     String text, {
     String? city,
+    double? nearLatitude,
+    double? nearLongitude,
   }) async {
     final query = text.trim();
     if (query.isEmpty) return const [];
@@ -117,6 +121,10 @@ class AppLocationService {
         queryParameters: {
           'q': contextualQuery,
           'limit': 5,
+          if (nearLatitude != null && nearLongitude != null)
+            'lat': nearLatitude,
+          if (nearLatitude != null && nearLongitude != null)
+            'lon': nearLongitude,
         },
       );
       final features = response.data?['features'];
@@ -145,7 +153,13 @@ class AppLocationService {
             longitude: longitude,
           ));
         }
-        if (locations.isNotEmpty) return locations;
+        if (locations.isNotEmpty) {
+          return sortByDistance(
+            locations,
+            latitude: nearLatitude,
+            longitude: nearLongitude,
+          );
+        }
       }
     } catch (error, stackTrace) {
       debugPrint('Photon autocomplete failed: $error');
@@ -173,6 +187,10 @@ class AppLocationService {
           'addressdetails': 1,
           'dedupe': 1,
           'q': contextualQuery,
+          if (nearLatitude != null && nearLongitude != null)
+            'viewbox':
+                '${nearLongitude - 1},${nearLatitude + 1},${nearLongitude + 1},${nearLatitude - 1}',
+          if (nearLatitude != null && nearLongitude != null) 'bounded': 0,
         },
       );
       final results = response.data;
@@ -198,12 +216,50 @@ class AppLocationService {
           longitude: longitude,
         ));
       }
-      return locations;
+      return sortByDistance(
+        locations,
+        latitude: nearLatitude,
+        longitude: nearLongitude,
+      );
     } catch (error, stackTrace) {
       debugPrint('Nominatim location search failed: $error');
       debugPrintStack(stackTrace: stackTrace);
       return const [];
     }
+  }
+
+  @visibleForTesting
+  static List<AppLocationResult> sortByDistance(
+    List<AppLocationResult> results, {
+    double? latitude,
+    double? longitude,
+  }) {
+    if (latitude == null || longitude == null || results.length < 2) {
+      return results;
+    }
+    final sorted = List<AppLocationResult>.of(results);
+    sorted.sort((a, b) => _distanceKm(
+            latitude, longitude, a.latitude, a.longitude)
+        .compareTo(_distanceKm(latitude, longitude, b.latitude, b.longitude)));
+    return sorted;
+  }
+
+  static double _distanceKm(
+    double latitude,
+    double longitude,
+    double otherLatitude,
+    double otherLongitude,
+  ) {
+    const earthRadiusKm = 6371.0;
+    double radians(double degrees) => degrees * math.pi / 180;
+    final deltaLatitude = radians(otherLatitude - latitude);
+    final deltaLongitude = radians(otherLongitude - longitude);
+    final a = math.sin(deltaLatitude / 2) * math.sin(deltaLatitude / 2) +
+        math.cos(radians(latitude)) *
+            math.cos(radians(otherLatitude)) *
+            math.sin(deltaLongitude / 2) *
+            math.sin(deltaLongitude / 2);
+    return earthRadiusKm * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
   }
 
   static Future<void> openMap({

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/constants/feature_flags.dart';
 import '../../../../core/share/share_links.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../data/discovery_datasource.dart';
@@ -158,9 +159,12 @@ class _State extends ConsumerState<GroupDiscoverySettingsCard> {
 
   String get _summary {
     final parts = <String>[
-      isPublic ? 'Na busca' : 'Fora da busca',
+      FeatureFlags.externalPlayerInteractionsEnabled
+          ? (isPublic ? 'Na busca' : 'Fora da busca')
+          : 'Privada na busca',
       widget.publicPageEnabled ? 'Link ativo' : 'Link desligado',
-      if (accepting) 'Aceitando jogadores',
+      if (FeatureFlags.externalPlayerInteractionsEnabled && accepting)
+        'Aceitando jogadores',
     ];
     return parts.join(' · ');
   }
@@ -280,22 +284,46 @@ class _State extends ConsumerState<GroupDiscoverySettingsCard> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _group('QUEM ENCONTRA A PATOTA', c),
-                  _switch(
-                    'Aparecer na busca',
-                    isPublic
-                        ? 'Qualquer jogador acha a patota na busca'
-                        : 'Só entra quem tem o link ou o código',
-                    isPublic,
-                    (v) => setState(() => isPublic = v),
-                  ),
-                  _switch(
-                    'Aceitando jogadores',
-                    isPublic
-                        ? 'Permite publicar vagas nas partidas'
-                        : 'Ative “Aparecer na busca” para receber candidaturas',
-                    accepting,
-                    (v) => setState(() => accepting = v),
-                  ),
+                  if (FeatureFlags.externalPlayerInteractionsEnabled) ...[
+                    _switch(
+                      'Aparecer na busca',
+                      isPublic
+                          ? 'Qualquer jogador acha a patota na busca'
+                          : 'Só entra quem tem o link ou o código',
+                      isPublic,
+                      (v) => setState(() => isPublic = v),
+                    ),
+                    _switch(
+                      'Aceitando jogadores',
+                      isPublic
+                          ? 'Permite publicar vagas nas partidas'
+                          : 'Ative “Aparecer na busca” para receber candidaturas',
+                      accepting,
+                      (v) => setState(() => accepting = v),
+                    ),
+                  ] else
+                    Container(
+                      margin: const EdgeInsets.symmetric(vertical: 8),
+                      padding: const EdgeInsets.all(13),
+                      decoration: BoxDecoration(
+                        color: c.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.lock_outline_rounded, size: 20),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'A patota aparece na busca como privada. '
+                              'Convites e candidaturas para partidas estão '
+                              'temporariamente indisponíveis.',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   _switch(
                     'Link de compartilhamento',
                     'Abre a página pública da patota',

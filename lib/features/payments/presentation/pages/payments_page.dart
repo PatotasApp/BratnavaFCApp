@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_input_utils.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
@@ -201,7 +202,6 @@ class _PaymentsPageState extends ConsumerState<PaymentsPage>
             ],
           });
         },
-        onSaveRating: (stars) => _ds.updatePlayerRating(row.playerId, stars),
         onSaved: _refreshMonthly,
       ),
     );
@@ -697,8 +697,8 @@ class _CaixaViewState extends ConsumerState<_CaixaView> {
     final descCtrl = TextEditingController();
     var selectedDate = DateTime.now();
     final dateCtrl = TextEditingController(
-        text:
-            '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}');
+      text: formatBrazilianDate(selectedDate),
+    );
     int? category;
     String? validationMessage;
 
@@ -732,8 +732,7 @@ class _CaixaViewState extends ConsumerState<_CaixaView> {
                   if (picked == null) return;
                   setS(() {
                     selectedDate = picked;
-                    dateCtrl.text =
-                        '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                    dateCtrl.text = formatBrazilianDate(picked);
                   });
                 },
                 decoration: const InputDecoration(
@@ -809,7 +808,7 @@ class _CaixaViewState extends ConsumerState<_CaixaView> {
             type: type,
             amount: amount,
             description: descCtrl.text.trim(),
-            date: dateCtrl.text.trim(),
+            date: formatApiDate(selectedDate),
             category: type == 1 ? category : null,
           ));
       await _load();
@@ -1688,9 +1687,7 @@ class _MonthlyGrid extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: cell.isPaid
-                        ? AppColors.green100
-                        : AppColors.rose50,
+                    color: cell.isPaid ? AppColors.green100 : AppColors.rose50,
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -1737,9 +1734,8 @@ class _MonthlyGrid extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: isDark
-                              ? AppColors.slate400
-                              : AppColors.slate600,
+                          color:
+                              isDark ? AppColors.slate400 : AppColors.slate600,
                         ),
                       ),
                     ),

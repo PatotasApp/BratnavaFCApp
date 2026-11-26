@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/errors/app_exception.dart';
-import '../../../../core/location/app_location_service.dart';
 import '../../../../core/onboarding/new_group_tour_storage.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/domain/entities/account.dart';
@@ -21,6 +20,7 @@ import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../../shared/presentation/widgets/new_group_tour_banner.dart';
+import '../../../../shared/presentation/widgets/location_picker_fields.dart';
 import '../../../group_spreadsheets/presentation/group_spreadsheets_page.dart';
 import '../../../discovery/presentation/widgets/group_discovery_settings_card.dart';
 
@@ -368,15 +368,6 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
   late final TextEditingController _placeAddressCtrl;
   double? _placeLatitude;
   double? _placeLongitude;
-  bool _locating = false;
-  bool _searchingLocation = false;
-  bool _settingAddress = false;
-  bool _placeNameWasManuallyEdited = false;
-  final FocusNode _locationFocusNode = FocusNode();
-  Timer? _locationSearchDebounce;
-  List<AppLocationResult> _locationSuggestions = const [];
-  String? _locationSearchMessage;
-  int _locationSearchGeneration = 0;
   late final TextEditingController _maxCtrl;
   late final TextEditingController _feeCtrl;
   late final TextEditingController _goalkeeperFeeCtrl;
@@ -444,18 +435,10 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
 
   void _initFromSettings(GroupSettings s) {
     _placeCtrl = TextEditingController(text: s.defaultPlaceName ?? '');
-    _placeNameWasManuallyEdited = _placeCtrl.text.trim().isNotEmpty;
     _placeAddressCtrl =
         TextEditingController(text: s.defaultPlaceAddress ?? '');
     _placeLatitude = s.defaultPlaceLatitude;
     _placeLongitude = s.defaultPlaceLongitude;
-    _placeAddressCtrl.addListener(() {
-      if (!_settingAddress) {
-        _placeLatitude = null;
-        _placeLongitude = null;
-        if (mounted) setState(() {});
-      }
-    });
     _maxCtrl = TextEditingController(text: s.maxPlayers.toString());
     _feeCtrl = TextEditingController(
       text: s.monthlyFee != null ? s.monthlyFee!.toStringAsFixed(2) : '',
@@ -600,276 +583,21 @@ class _SettingsBodyState extends ConsumerState<_SettingsBody> {
     );
   }
 
-  Future<void> _useCurrentLocation() async {
-    setState(() => _locating = true);
-    try {
-      final result = await AppLocationService.current();
-      if (!mounted) return;
-      _settingAddress = true;
-      _placeAddressCtrl.text = result.address;
-      if (!_placeNameWasManuallyEdited || _placeCtrl.text.trim().isEmpty) {
-        _placeCtrl.text = (result.name ?? '').trim().isNotEmpty
-            ? result.name!.trim()
-            : result.address.split(',').first.trim();
-      }
-      _settingAddress = false;
-      setState(() {
-        _placeLatitude = result.latitude;
-        _placeLongitude = result.longitude;
-        _locationSuggestions = const [];
-        _locationSearchMessage = null;
-      });
-      _locationFocusNode.unfocus();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
-      );
-    } finally {
-      _settingAddress = false;
-      if (mounted) setState(() => _locating = false);
-    }
-  }
-
-  void _onLocationQueryChanged(String value) {
-    _locationSearchDebounce?.cancel();
-    final query = value.trim();
-    setState(() {
-      _locationSuggestions = const [];
-      _locationSearchMessage = null;
-    });
-    if (query.length < 3) {
-      setState(() => _searchingLocation = false);
-      return;
-    }
-    _locationSearchDebounce = Timer(
-      const Duration(milliseconds: 450),
-      () => _searchLocation(query),
-    );
-  }
-
-  Future<void> _searchLocation([String? requestedQuery]) async {
-    _locationSearchDebounce?.cancel();
-    final query = (requestedQuery ?? _placeAddressCtrl.text).trim();
-    if (query.length < 3) return;
-    final generation = ++_locationSearchGeneration;
-    setState(() => _searchingLocation = true);
-    try {
-      final results = await AppLocationService.search(
-        query,
+  Widget _locationFields(bool isDark) => LocationPickerFields(
+        nameController: _placeCtrl,
+        addressController: _placeAddressCtrl,
         city: widget.settings.groupCity,
-      );
-      if (!mounted || generation != _locationSearchGeneration) return;
-      setState(() {
-        _locationSuggestions = results;
-        _locationSearchMessage = results.isEmpty
-            ? 'Nenhum local encontrado. Tente incluir a cidade.'
-            : null;
-      });
-    } catch (_) {
-      if (!mounted || generation != _locationSearchGeneration) return;
-      setState(() {
-        _locationSuggestions = const [];
-        _locationSearchMessage = 'Não foi possível buscar agora.';
-      });
-    } finally {
-      if (mounted && generation == _locationSearchGeneration) {
-        setState(() => _searchingLocation = false);
-      }
-    }
-  }
-
-  void _selectLocation(AppLocationResult result) {
-    final resultName = (result.name ?? '').trim();
-    _settingAddress = true;
-    _placeAddressCtrl.text = result.address;
-    if (!_placeNameWasManuallyEdited || _placeCtrl.text.trim().isEmpty) {
-      _placeCtrl.text = resultName.isNotEmpty
-          ? resultName
-          : result.address.split(',').first.trim();
-    }
-    _settingAddress = false;
-    setState(() {
-      _placeLatitude = result.latitude;
-      _placeLongitude = result.longitude;
-      _locationSuggestions = const [];
-      _locationSearchMessage = null;
-    });
-    _locationFocusNode.unfocus();
-  }
-
-  Widget _locationFields(bool isDark) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _labeledInput(
-            label: 'Nome do local',
-            ctrl: _placeCtrl,
-            hint: 'Ex: Arena Municipal',
-            isDark: isDark,
-            helper: 'É o nome que ficará registrado na partida.',
-            onChanged: (_) => _placeNameWasManuallyEdited = true,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Endereço',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: isDark ? AppColors.slate400 : AppColors.slate500,
-            ),
-          ),
-          const SizedBox(height: 5),
-          TextField(
-            controller: _placeAddressCtrl,
-            focusNode: _locationFocusNode,
-            textInputAction: TextInputAction.search,
-            onChanged: _onLocationQueryChanged,
-            onSubmitted: (_) => _searchLocation(),
-            style: TextStyle(
-              fontSize: 13,
-              color: isDark ? AppColors.slate100 : AppColors.slate800,
-            ),
-            decoration: InputDecoration(
-              hintText: 'Digite um lugar ou endereço',
-              prefixIcon: const Icon(Icons.search_rounded, size: 20),
-              suffixIcon: IconButton(
-                tooltip: 'Usar minha localização',
-                onPressed: _locating ? null : _useCurrentLocation,
-                icon: _locating
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.my_location_rounded, size: 20),
-              ),
-              filled: true,
-              fillColor: isDark ? AppColors.slate800 : AppColors.slate50,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(
-                  color: isDark ? AppColors.slate700 : AppColors.slate200,
-                ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(
-                  color: isDark ? AppColors.slate700 : AppColors.slate200,
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide:
-                    const BorderSide(color: AppColors.blue500, width: 1.5),
-              ),
-            ),
-          ),
-          if (_searchingLocation)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: LinearProgressIndicator(minHeight: 2),
-            ),
-          if (_locationSuggestions.isNotEmpty)
-            Container(
-              margin: const EdgeInsets.only(top: 6),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.slate800 : AppColors.onDark,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isDark ? AppColors.slate700 : AppColors.slate200,
-                ),
-              ),
-              child: ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _locationSuggestions.length,
-                separatorBuilder: (_, __) => Divider(
-                  height: 1,
-                  indent: 48,
-                  color: isDark ? AppColors.slate700 : AppColors.slate200,
-                ),
-                itemBuilder: (_, index) {
-                  final option = _locationSuggestions[index];
-                  final optionName = (option.name ?? '').trim();
-                  return ListTile(
-                    dense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                    leading: const Icon(Icons.place_outlined, size: 20),
-                    title: Text(
-                      optionName.isEmpty
-                          ? option.address.split(',').first
-                          : optionName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    subtitle: Text(
-                      option.address,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                    onTap: () => _selectLocation(option),
-                  );
-                },
-              ),
-            ),
-          if (_locationSearchMessage != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6, left: 2),
-              child: Text(
-                _locationSearchMessage!,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isDark ? AppColors.slate400 : AppColors.slate500,
-                ),
-              ),
-            )
-          else if (_placeLatitude != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6, left: 2),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle_rounded,
-                      size: 14, color: AppColors.green600),
-                  const SizedBox(width: 5),
-                  Expanded(
-                    child: Text(
-                      '${_placeCtrl.text} selecionado',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.green600,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.only(top: 6, left: 2),
-              child: Text(
-                'As opções aparecem enquanto você digita.',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isDark ? AppColors.slate400 : AppColors.slate500,
-                ),
-              ),
-            ),
-        ],
+        initialLatitude: _placeLatitude,
+        initialLongitude: _placeLongitude,
+        onLocationChanged: (latitude, longitude) {
+          _placeLatitude = latitude;
+          _placeLongitude = longitude;
+        },
       );
 
   @override
   void dispose() {
     _scrollController.dispose();
-    _locationSearchDebounce?.cancel();
-    _locationFocusNode.dispose();
     _placeCtrl.dispose();
     _placeAddressCtrl.dispose();
     _maxCtrl.dispose();

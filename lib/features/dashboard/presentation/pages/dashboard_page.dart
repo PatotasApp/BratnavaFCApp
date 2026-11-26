@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/realtime/realtime_provider.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
 import '../../../../shared/presentation/widgets/football_pitch.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
@@ -292,6 +293,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         ),
       ),
     );
+    final seasonsAsync = ref.watch(seasonsProvider(groupId));
+    final seasons = seasonsAsync.valueOrNull;
+    final currentSeason = seasons?.current;
     final matchesAsync = ref.watch(upcomingMatchesFullProvider(groupId));
 
     final paymentAsync = ref.watch(myPaymentSummaryProvider(groupId));
@@ -302,9 +306,20 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         ref.watch(dashboardChampionshipsProvider(groupId)).valueOrNull ??
             const <ChampionshipDetails>[];
 
-    final summary = historyAsync.valueOrNull == null
+    final completeHistory = historyAsync.valueOrNull;
+    final careerSummary = completeHistory == null
         ? null
-        : PlayerHistorySummary.from(historyAsync.valueOrNull!);
+        : PlayerHistorySummary.from(completeHistory);
+    final currentSeasonHistory =
+        completeHistory == null || currentSeason == null
+            ? null
+            : completeHistory.where((item) {
+                final playedAt = AppDateUtils.parse(item.date);
+                return playedAt != null && currentSeason.contains(playedAt);
+              }).toList(growable: false);
+    final summary = currentSeasonHistory == null
+        ? null
+        : PlayerHistorySummary.from(currentSeasonHistory);
     final pendingPayments = paymentAsync.valueOrNull == null
         ? null
         : paymentAsync.valueOrNull!.pendingMonthlyCount +
@@ -328,7 +343,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             photoUrl: profile?.photoUrl ?? activePlayer.photoUrl,
             isGoalkeeper: activePlayer.isGoalkeeper,
             summary: summary,
-            loading: historyAsync.isLoading,
+            careerFirstPlayedAt: careerSummary?.firstPlayedAt,
+            loading: historyAsync.isLoading || seasonsAsync.isLoading,
             onOpen: () => context.go('/app/player-history'),
           ),
           const SizedBox(height: 12),
@@ -408,6 +424,7 @@ class _PlayerIdentityCard extends ConsumerWidget {
   final String? photoUrl;
   final bool isGoalkeeper;
   final PlayerHistorySummary? summary;
+  final DateTime? careerFirstPlayedAt;
   final bool loading;
   final VoidCallback onOpen;
 
@@ -421,6 +438,7 @@ class _PlayerIdentityCard extends ConsumerWidget {
     required this.photoUrl,
     required this.isGoalkeeper,
     required this.summary,
+    required this.careerFirstPlayedAt,
     required this.loading,
     required this.onOpen,
   });
@@ -568,7 +586,7 @@ class _PlayerIdentityCard extends ConsumerWidget {
                             // partida do jogador. Assim, uma segunda temporada
                             // no mesmo ano avança corretamente o ordinal.
                             child: Text(
-                              '${seasons?.seasonOrdinalFor(summary?.firstPlayedAt) ?? summary?.seasonNumber ?? 1}ª temporada',
+                              '${seasons?.seasonOrdinalFor(careerFirstPlayedAt) ?? 1}ª temporada',
                               style: TextStyle(
                                 color: AppColors.accentTextOf(theme.brightness),
                                 fontSize: 11,
@@ -576,6 +594,26 @@ class _PlayerIdentityCard extends ConsumerWidget {
                               ),
                             ),
                           ),
+                          if (seasons?.current?.isPreSeason == true)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.amber50,
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(color: AppColors.amber500),
+                              ),
+                              child: const Text(
+                                'PRÉ-TEMPORADA',
+                                style: TextStyle(
+                                  color: AppColors.amber900,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -1975,13 +2013,21 @@ class _DashboardMessageState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         PrototypeIconBox(
           size: 52,
           icon: Icon(icon, size: 26),
         ),
         const SizedBox(height: 14),
-        Text(title, style: Theme.of(context).textTheme.titleMedium),
+        SizedBox(
+          width: double.infinity,
+          child: Text(
+            title,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
         const SizedBox(height: 4),
         Text(
           message,

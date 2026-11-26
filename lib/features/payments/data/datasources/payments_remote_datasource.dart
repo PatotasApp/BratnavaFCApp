@@ -189,17 +189,6 @@ class PaymentsRemoteDataSource {
     return PaymentSummary.fromJson(d);
   }
 
-  // ── Avaliação do jogador (estrelas) ──────────────────────────────────────
-
-  /// Salva a avaliação (1–5 estrelas) de um jogador via PUT /api/Players/{id}.
-  Future<void> updatePlayerRating(String playerId, int starRating) async {
-    final res = await _dio.put(
-      ApiConstants.playerOps(playerId),
-      data: {'guestStarRating': starRating},
-    );
-    _throwIfError(res.data);
-  }
-
   // ── Utilitário: converte arquivo para base64 ──────────────────────────────
 
   static Future<({String base64, String fileName, String mimeType})>

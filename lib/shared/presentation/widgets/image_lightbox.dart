@@ -9,7 +9,7 @@ Future<void> showImageLightbox(
   return showDialog<void>(
     context: context,
     barrierColor: colors.scrim.withValues(alpha: .92),
-    builder: (_) => Dialog.fullscreen(
+    builder: (dialogContext) => Dialog.fullscreen(
       backgroundColor: colors.surface.withValues(alpha: 0),
       child: Stack(
         children: [
@@ -36,7 +36,7 @@ Future<void> showImageLightbox(
             right: 12,
             child: SafeArea(
               child: IconButton.filledTonal(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(dialogContext),
                 icon: const Icon(Icons.close_rounded),
                 tooltip: 'Fechar',
               ),

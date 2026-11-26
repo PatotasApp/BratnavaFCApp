@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_input_utils.dart';
 import 'poll_form_widgets.dart';
 
 class ClosePollSheet extends StatefulWidget {
@@ -58,7 +59,7 @@ class _ClosePollSheetState extends State<ClosePollSheet> {
       'eventTitle': _createEvent ? _titleCtrl.text.trim() : null,
       'eventDescription':
           _descCtrl.text.trim().isNotEmpty ? _descCtrl.text.trim() : null,
-      'eventDate': _createEvent ? _dateCtrl.text : null,
+      'eventDate': _createEvent ? dateInputToApi(_dateCtrl.text) : null,
       'eventTime': _timeCtrl.text.isNotEmpty ? _timeCtrl.text : null,
       'eventIcon': _icon.isNotEmpty ? _icon : null,
       'costType': _costType.isNotEmpty ? _costType : null,

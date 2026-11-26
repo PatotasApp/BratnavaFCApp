@@ -126,6 +126,18 @@ class MatchNotifier extends StateNotifier<MatchState> {
           d['colorsLocked'] as bool? ?? d['ColorsLocked'] as bool? ?? false,
       canStartMatch:
           d['canStartMatch'] as bool? ?? d['CanStartMatch'] as bool? ?? false,
+      canGenerateByProfile: d['canGenerateByProfile'] as bool? ??
+          d['CanGenerateByProfile'] as bool? ??
+          true,
+      profileGenerationBlockedReason:
+          d['profileGenerationBlockedReason'] as String? ??
+              d['ProfileGenerationBlockedReason'] as String?,
+      canGenerateByAlgorithm: d['canGenerateByAlgorithm'] as bool? ??
+          d['CanGenerateByAlgorithm'] as bool? ??
+          true,
+      algorithmGenerationBlockedReason:
+          d['algorithmGenerationBlockedReason'] as String? ??
+              d['AlgorithmGenerationBlockedReason'] as String?,
     );
   }
 
@@ -423,13 +435,33 @@ class MatchNotifier extends StateNotifier<MatchState> {
     }
   }
 
-  Future<bool> updateMatch(String placeName, DateTime playedAt) async {
+  Future<bool> updateMatch(
+    String placeName,
+    DateTime playedAt, {
+    String? placeAddress,
+    double? placeLatitude,
+    double? placeLongitude,
+  }) async {
     final matchId = state.matchId;
     if (matchId == null || matchId.isEmpty) return false;
     state = state.copyWith(mutating: true, error: null);
     try {
-      await _ds.updateMatch(groupId, matchId, placeName, playedAt);
-      state = state.copyWith(placeName: placeName, playedAt: playedAt);
+      await _ds.updateMatch(
+        groupId,
+        matchId,
+        placeName,
+        playedAt,
+        placeAddress: placeAddress,
+        placeLatitude: placeLatitude,
+        placeLongitude: placeLongitude,
+      );
+      state = state.copyWith(
+        placeName: placeName,
+        playedAt: playedAt,
+        placeAddress: placeAddress,
+        placeLatitude: placeLatitude,
+        placeLongitude: placeLongitude,
+      );
       await _loadStepPayload(matchId, state.step);
       return true;
     } catch (e) {
@@ -796,7 +828,8 @@ class MatchNotifier extends StateNotifier<MatchState> {
     state = state.copyWith(mutating: true);
     try {
       await _ds.endMatch(groupId, matchId);
-      await _loadStepPayload(matchId, MatchStep.ended);
+      await _ds.goToPostGame(groupId, matchId);
+      await _loadStepPayload(matchId, MatchStep.post);
       return true;
     } catch (e) {
       state = state.copyWith(
@@ -828,16 +861,18 @@ class MatchNotifier extends StateNotifier<MatchState> {
 
   // ── Step 6 – Pós-jogo ─────────────────────────────────────────────────────
 
-  Future<void> setScore(int teamAGoals, int teamBGoals) async {
+  Future<bool> setScore(int teamAGoals, int teamBGoals) async {
     final matchId = state.matchId;
-    if (matchId == null) return;
-    state = state.copyWith(mutating: true);
+    if (matchId == null) return false;
+    state = state.copyWith(mutating: true, error: null);
     try {
       await _ds.setScore(groupId, matchId, teamAGoals, teamBGoals);
       await refresh();
+      return true;
     } catch (e) {
       state = state.copyWith(
           error: extractDioError(e, 'Falha ao registrar placar.'));
+      return false;
     } finally {
       state = state.copyWith(mutating: false);
     }
@@ -846,7 +881,7 @@ class MatchNotifier extends StateNotifier<MatchState> {
   Future<bool> voteMvp(String voterMpId, String votedMpId) async {
     final matchId = state.matchId;
     if (matchId == null) return false;
-    state = state.copyWith(mutating: true);
+    state = state.copyWith(mutating: true, error: null);
     try {
       await _ds.voteMvp(groupId, matchId, voterMpId, votedMpId);
       await refresh();

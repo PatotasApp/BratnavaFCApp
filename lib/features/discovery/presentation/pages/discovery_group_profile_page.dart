@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/constants/feature_flags.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/providers/account_store.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
@@ -262,7 +263,9 @@ class _DiscoveryGroupProfilePageState
                           padding: const EdgeInsets.only(bottom: 12),
                           child: _MatchCard(
                             match: m,
-                            canApply: !isOwnGroup,
+                            canApply: FeatureFlags
+                                    .externalPlayerInteractionsEnabled &&
+                                !isOwnGroup,
                             busy: busy,
                             onApply: apply,
                           ),

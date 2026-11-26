@@ -4,6 +4,7 @@ import '../../features/auth/presentation/providers/account_store.dart';
 import '../../features/discovery/presentation/pages/guest_match_page.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../constants/feature_flags.dart';
 import '../../features/moderation/moderation.dart';
 import '../../features/auth/presentation/pages/email_login_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
@@ -37,7 +38,6 @@ import '../../features/replays/presentation/providers/replay_access_provider.dar
 import '../../features/player_spotlight/presentation/pages/player_spotlight_page.dart';
 import '../../features/retrospective/presentation/pages/retrospective_page.dart';
 import '../../features/player_history/presentation/pages/player_history_page.dart';
-import '../../features/groups/presentation/pages/group_invites_page.dart';
 import '../../features/team_builder/presentation/pages/team_builder_page.dart';
 import '../../features/conquistas/presentation/pages/conquistas_page.dart';
 import '../../features/conquistas/presentation/pages/public_profile_page.dart';
@@ -306,6 +306,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       );
       if (guestRedirect != null) return guestRedirect;
 
+      // A tela continua implementada para futura reativação, mas não pode ser
+      // aberta por link ou navegação antiga enquanto o fluxo externo estiver
+      // desligado.
+      if (!FeatureFlags.externalPlayerInteractionsEnabled &&
+          path == '/app/applicants') {
+        return '/app';
+      }
+
       return null;
     },
     routes: [
@@ -494,7 +502,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/app/invites',
-            builder: (_, __) => const GroupInvitesPage(),
+            redirect: (_, __) => '/app/account?tab=invites',
           ),
           GoRoute(
             path: '/app/account',

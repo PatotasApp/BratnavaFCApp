@@ -97,15 +97,12 @@ class PlayerRow {
   final String playerName;
   final List<MonthlyCell> months;
 
-  /// 1–5 star evaluation (guestStarRating field from the player record).
-  final int? starRating;
   final bool isGoalkeeper;
 
   const PlayerRow({
     required this.playerId,
     required this.playerName,
     required this.months,
-    this.starRating,
     this.isGoalkeeper = false,
   });
 
@@ -115,7 +112,6 @@ class PlayerRow {
         months: (j['months'] as List? ?? [])
             .map((e) => MonthlyCell.fromJson(e as Map<String, dynamic>))
             .toList(),
-        starRating: j['guestStarRating'] as int? ?? j['starRating'] as int?,
         isGoalkeeper: j['isGoalkeeper'] as bool? ?? false,
       );
 }

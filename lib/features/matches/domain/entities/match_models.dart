@@ -50,7 +50,11 @@ enum MatchStep {
     }
   }
 
-  int get stepNumber => MatchStep.values.indexOf(this) + 1;
+  int get stepNumber {
+    final visible = visibleMatchSteps.indexOf(this);
+    if (visible >= 0) return visible + 1;
+    return visibleMatchSteps.indexOf(MatchStep.post) + 1;
+  }
 
   String get label {
     switch (this) {
@@ -71,6 +75,17 @@ enum MatchStep {
     }
   }
 }
+
+/// Etapas apresentadas ao usuário. `ended` permanece no protocolo da API para
+/// compatibilidade, mas é apenas uma transição técnica entre jogo e pós-jogo.
+const visibleMatchSteps = <MatchStep>[
+  MatchStep.create,
+  MatchStep.accept,
+  MatchStep.teams,
+  MatchStep.playing,
+  MatchStep.post,
+  MatchStep.done,
+];
 
 // ── Resposta ao convite ───────────────────────────────────────────────────────
 
@@ -599,6 +614,10 @@ class MatchState {
     this.unassignedPlayers = const [],
     this.participants = const [],
     this.canStartMatch = false,
+    this.canGenerateByProfile = true,
+    this.profileGenerationBlockedReason,
+    this.canGenerateByAlgorithm = true,
+    this.algorithmGenerationBlockedReason,
     this.teamGenOptions = const [],
     this.selectedTeamGenIdx = 0,
     this.goals = const [],
@@ -672,6 +691,10 @@ class MatchState {
 
   /// Backend calculou: pode iniciar a partida (ambos os times têm jogadores).
   final bool canStartMatch;
+  final bool canGenerateByProfile;
+  final String? profileGenerationBlockedReason;
+  final bool canGenerateByAlgorithm;
+  final String? algorithmGenerationBlockedReason;
 
   final List<TeamGenOption> teamGenOptions;
   final int selectedTeamGenIdx;
@@ -733,7 +756,7 @@ class MatchState {
     bool? loading,
     bool? mutating,
     Set<String>? pendingPlayerIds,
-    String? error,
+    Object? error = _unset,
     String? matchId,
     String? groupId,
     MatchStep? step,
@@ -761,6 +784,10 @@ class MatchState {
     List<MatchPlayerInfo>? unassignedPlayers,
     List<MatchPlayerInfo>? participants,
     bool? canStartMatch,
+    bool? canGenerateByProfile,
+    Object? profileGenerationBlockedReason = _unset,
+    bool? canGenerateByAlgorithm,
+    Object? algorithmGenerationBlockedReason = _unset,
     List<TeamGenOption>? teamGenOptions,
     int? selectedTeamGenIdx,
     List<MatchGoal>? goals,
@@ -783,7 +810,7 @@ class MatchState {
         loading: loading ?? this.loading,
         mutating: mutating ?? this.mutating,
         pendingPlayerIds: pendingPlayerIds ?? this.pendingPlayerIds,
-        error: error ?? this.error,
+        error: identical(error, _unset) ? this.error : error as String?,
         matchId: matchId ?? this.matchId,
         groupId: groupId ?? this.groupId,
         step: step ?? this.step,
@@ -820,6 +847,17 @@ class MatchState {
         unassignedPlayers: unassignedPlayers ?? this.unassignedPlayers,
         participants: participants ?? this.participants,
         canStartMatch: canStartMatch ?? this.canStartMatch,
+        canGenerateByProfile: canGenerateByProfile ?? this.canGenerateByProfile,
+        profileGenerationBlockedReason:
+            identical(profileGenerationBlockedReason, _unset)
+                ? this.profileGenerationBlockedReason
+                : profileGenerationBlockedReason as String?,
+        canGenerateByAlgorithm:
+            canGenerateByAlgorithm ?? this.canGenerateByAlgorithm,
+        algorithmGenerationBlockedReason:
+            identical(algorithmGenerationBlockedReason, _unset)
+                ? this.algorithmGenerationBlockedReason
+                : algorithmGenerationBlockedReason as String?,
         teamGenOptions: teamGenOptions ?? this.teamGenOptions,
         selectedTeamGenIdx: selectedTeamGenIdx ?? this.selectedTeamGenIdx,
         goals: goals ?? this.goals,

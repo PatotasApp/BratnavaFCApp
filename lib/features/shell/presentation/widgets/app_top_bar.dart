@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/push/notification_router.dart';
+import '../../../../core/push/push_providers.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/theme_mode_provider.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
@@ -118,8 +119,10 @@ class _AppTopBarState extends ConsumerState<AppTopBar> {
           ),
         ],
       ),
-      // ── RIGHT: convites + botão de usuário ───────────────────────
+      // ── RIGHT: tema + notificações + botão de usuário ────────────
       actions: const [
+        _ThemeModeButton(),
+        SizedBox(width: 6),
         _NotificationBell(),
         Padding(
           padding: EdgeInsets.only(right: 12),
@@ -130,6 +133,40 @@ class _AppTopBarState extends ConsumerState<AppTopBar> {
   }
 }
 
+class _ThemeModeButton extends ConsumerWidget {
+  const _ThemeModeButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(themeModeProvider);
+    final label = themeModeLabel(mode);
+    final icon = switch (mode) {
+      ThemeMode.system => Icons.settings_brightness_outlined,
+      ThemeMode.light => Icons.light_mode_outlined,
+      ThemeMode.dark => Icons.dark_mode_outlined,
+    };
+
+    return IconButton(
+      tooltip: 'Tema atual: $label',
+      onPressed: () {
+        final next = nextThemeMode(mode);
+        ref.read(themeModeProvider.notifier).setMode(next);
+
+        final messenger = ScaffoldMessenger.of(context);
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text('Tema: ${themeModeLabel(next)}'),
+              duration: const Duration(milliseconds: 1400),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+      },
+      icon: Icon(icon),
+    );
+  }
+}
 
 class _AccountButton extends ConsumerWidget {
   const _AccountButton();
@@ -259,20 +296,15 @@ class _NotificationSheetState extends ConsumerState<_NotificationSheet> {
 
   void _navigate(BuildContext ctx, AppNotification n) {
     _markRead(n);
-    // Captura o router ANTES do pop — após fechar o sheet o ctx está desmontado
-    // e ctx.push() lançaria assertion ou falharia silenciosamente.
-    final router = GoRouter.of(ctx);
     Navigator.pop(ctx);
-
-    // actionUrl explícito tem prioridade
-    if (n.actionUrl != null && n.actionUrl!.isNotEmpty) {
-      router.push(n.actionUrl!);
-      return;
-    }
-
-    // Usa dataJson (IDs) para montar a rota mais específica possível
-    final route = notificationRoute(n.type, n.dataJson ?? {});
-    if (route.isNotEmpty) router.push(route);
+    // Usa exatamente o mesmo fluxo do FCM: resolve a rota, troca a patota
+    // quando necessário e só então navega.
+    ref.read(pushServiceProvider).openNotification(
+          type: n.type,
+          data: n.dataJson ?? const {},
+          actionUrl: n.actionUrl,
+          fallbackGroupId: n.dataJson?['groupId']?.toString(),
+        );
   }
 
   IconData _iconFor(String type) {
@@ -286,7 +318,16 @@ class _NotificationSheetState extends ConsumerState<_NotificationSheet> {
       case 'teams_assigned':
       case 'attendance_accepted':
       case 'attendance_rejected':
+      case 'match_waiting_list':
+      case 'match_waiting_promoted':
         return Icons.sports_soccer_rounded;
+
+      case 'match_application':
+      case 'match_application_invite':
+      case 'match_application_closed':
+      case 'match_application_rejected':
+      case 'match_application_declined':
+        return Icons.person_search_rounded;
 
       case 'match_mvp':
       case 'mvp_voting_reminder':
@@ -307,9 +348,12 @@ class _NotificationSheetState extends ConsumerState<_NotificationSheet> {
       case 'payment_confirmed':
       case 'monthly_payment_reminder':
       case 'extra_charge_discount':
+      case 'charge_fully_paid':
+      case 'billing_reminder':
         return Icons.payments_rounded;
 
       case 'group_invite':
+      case 'invite_accepted':
         return Icons.group_add_rounded;
 
       case 'promoted_admin':
@@ -343,7 +387,16 @@ class _NotificationSheetState extends ConsumerState<_NotificationSheet> {
       case 'teams_assigned':
       case 'attendance_accepted':
       case 'attendance_rejected':
+      case 'match_waiting_list':
+      case 'match_waiting_promoted':
         return AppColors.info; // blue
+
+      case 'match_application':
+      case 'match_application_invite':
+      case 'match_application_closed':
+      case 'match_application_rejected':
+      case 'match_application_declined':
+        return AppColors.info;
 
       case 'match_mvp':
       case 'mvp_voting_reminder':
@@ -364,9 +417,12 @@ class _NotificationSheetState extends ConsumerState<_NotificationSheet> {
       case 'payment_confirmed':
       case 'monthly_payment_reminder':
       case 'extra_charge_discount':
+      case 'charge_fully_paid':
+      case 'billing_reminder':
         return AppColors.accent; // green
 
       case 'group_invite':
+      case 'invite_accepted':
       case 'promoted_admin':
       case 'promoted_financeiro':
         return AppColors.info; // violet

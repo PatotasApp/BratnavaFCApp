@@ -39,7 +39,7 @@ class MatchPlayerRoleToggle extends StatelessWidget {
         enabled: !busy,
         label: '$playerName: $actionDescription',
         child: Material(
-          color: Colors.transparent,
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0),
           child: InkWell(
             key: const Key('match-player-role-toggle'),
             onTap: busy ? null : onPressed,

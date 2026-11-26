@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/constants/feature_flags.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/providers/account_store.dart';
@@ -328,7 +329,7 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
           const SizedBox(height: 5),
           Text(
             widget.preferredMatchId == null
-                ? 'Conheça patotas públicas e jogadores do Patotas.'
+                ? 'Encontre patotas e jogadores do Patotas.'
                 : 'Pesquise um perfil e envie um convite para esta partida.',
             style: TextStyle(color: colors.onSurfaceVariant),
           ),
@@ -408,7 +409,8 @@ class _DiscoverySearchPageState extends ConsumerState<DiscoverySearchPage> {
           final player = _players[index];
           final account = ref.read(accountStoreProvider).activeAccount;
           final groupId = account?.activeGroupId;
-          final canInvite = groupId != null &&
+          final canInvite = FeatureFlags.externalPlayerInteractionsEnabled &&
+              groupId != null &&
               (account?.isGroupAdmin(groupId) ?? false) &&
               player.id != account?.userId &&
               !player.inGroup;
@@ -589,6 +591,36 @@ class _GroupCard extends StatelessWidget {
                               fontSize: 9,
                               fontWeight: FontWeight.w900,
                               color: colors.primary,
+                            ),
+                          )
+                        else if (!item.isPublic)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colors.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.lock_outline_rounded,
+                                  size: 11,
+                                  color: colors.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'PRIVADA',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w900,
+                                    color: colors.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ),
                           )
                         else if (item.accepting)

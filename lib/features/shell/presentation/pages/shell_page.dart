@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/constants/feature_flags.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/prototype_ui.dart';
 import '../../../auth/presentation/providers/account_store.dart';
@@ -11,6 +12,8 @@ import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../discovery/presentation/providers/applicants_menu_provider.dart';
 import '../../../group_settings/presentation/providers/group_settings_provider.dart';
 import '../../../replays/presentation/providers/replay_access_provider.dart';
+import '../../../notifications/presentation/providers/notifications_provider.dart';
+import '../../../groups/presentation/providers/group_invites_provider.dart';
 import '../../domain/shell_navigation_policy.dart';
 import '../widgets/app_top_bar.dart';
 
@@ -95,6 +98,10 @@ class _ShellPageState extends ConsumerState<ShellPage>
     await ref.read(accountStoreProvider.notifier).reloadFromStorage();
     if (!mounted) return;
     await ref.read(authNotifierProvider.notifier).refreshGroupMembership();
+    ref.invalidate(myNotificationsProvider);
+    ref.invalidate(notifUnreadCountProvider);
+    ref.invalidate(myGroupInvitesProvider);
+    ref.invalidate(myGroupInviteCountProvider);
   }
 
   int _selectedIndex(BuildContext context) {
@@ -110,6 +117,7 @@ class _ShellPageState extends ConsumerState<ShellPage>
     final location = GoRouterState.of(context).uri.path;
     final account = ref.watch(accountStoreProvider).activeAccount;
     final guestOnly = account?.isGuestOnly ?? false;
+    final homePath = guestOnly ? '/app/match-invitations' : '/app';
     final tabs = guestOnly ? _guestTabs : _tabs;
     final selected = guestOnly
         ? (location == '/app/account' || location == '/app/theme' ? 1 : 0)
@@ -131,8 +139,8 @@ class _ShellPageState extends ConsumerState<ShellPage>
         final router = GoRouter.of(context);
         if (router.canPop()) {
           router.pop();
-        } else if (location != '/app') {
-          context.go('/app');
+        } else if (location != homePath) {
+          context.go(homePath);
         } else {
           SystemNavigator.pop();
         }
@@ -406,31 +414,6 @@ class _MoreSheet extends ConsumerWidget {
         ),
       ],
     ),
-    _MoreGroup(
-      label: 'Conta',
-      items: [
-        _MoreItem(
-          icon: Icons.account_circle_outlined,
-          label: 'Minha conta',
-          path: '/app/account',
-        ),
-        _MoreItem(
-          icon: Icons.palette_outlined,
-          label: 'Tema',
-          path: '/app/theme',
-        ),
-        _MoreItem(
-          icon: Icons.mail_outline_rounded,
-          label: 'Convites',
-          path: '/app/invites',
-        ),
-        _MoreItem(
-          icon: Icons.sports_soccer_outlined,
-          label: 'Convites para jogar',
-          path: '/app/match-invitations',
-        ),
-      ],
-    ),
   ];
 
   @override
@@ -452,8 +435,10 @@ class _MoreSheet extends ConsumerWidget {
         : null;
     final canSeeStats = isAdmin || (settings?.showPlayerStats ?? false);
     // Só consulta quando é admin; enquanto carrega, o item fica visível.
-    final canSeeApplicants = !isAdmin ||
-        (ref.watch(applicantsMenuVisibleProvider(groupId)).valueOrNull ?? true);
+    final canSeeApplicants = FeatureFlags.externalPlayerInteractionsEnabled &&
+        (!isAdmin ||
+            (ref.watch(applicantsMenuVisibleProvider(groupId)).valueOrNull ??
+                true));
 
     return FractionallySizedBox(
       heightFactor: .86,

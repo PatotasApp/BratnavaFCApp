@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_input_utils.dart';
 import '../../data/datasources/calendar_remote_datasource.dart';
 import '../../domain/entities/calendar_event.dart';
 
@@ -254,7 +255,7 @@ class _CreateEditEventSheetState extends State<CreateEditEventSheet> {
                                 : AppColors.slate500),
                         const SizedBox(width: 10),
                         Text(
-                          _date,
+                          apiDateToInput(_date),
                           style: TextStyle(
                             fontSize: 14,
                             color: isDark

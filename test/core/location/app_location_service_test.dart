@@ -1,39 +1,27 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:geocoding/geocoding.dart';
 import 'package:patotas_app/core/location/app_location_service.dart';
 
 void main() {
-  group('AppLocationService.formatPlacemarkAddress', () {
-    test('não duplica endereço completo devolvido pelo Android', () {
-      const placemark = Placemark(
-        street: '1600 Amphitheatre Pkwy, Mountain View, CA 94043, USA',
-        locality: 'Mountain View',
-        administrativeArea: 'California',
-        postalCode: '94043',
-        country: 'United States',
-      );
+  test('prioriza resultados mais proximos da localizacao informada', () {
+    const blumenau = AppLocationResult(
+      name: 'Boca Juniors Blumenau',
+      address: 'Rua Ayres Gama, Blumenau',
+      latitude: -26.9187,
+      longitude: -49.0660,
+    );
+    const campinas = AppLocationResult(
+      name: 'Boca Juniors Campinas',
+      address: 'Campinas, SP',
+      latitude: -22.9056,
+      longitude: -47.0608,
+    );
 
-      expect(
-        AppLocationService.formatPlacemarkAddress(placemark),
-        '1600 Amphitheatre Pkwy, Mountain View, CA 94043, USA',
-      );
-    });
+    final sorted = AppLocationService.sortByDistance(
+      const [campinas, blumenau],
+      latitude: -26.92,
+      longitude: -49.07,
+    );
 
-    test('monta endereço quando a rua não contém cidade e CEP', () {
-      const placemark = Placemark(
-        street: 'Rua Ayres Gama, 350',
-        subLocality: 'Centro',
-        locality: 'Blumenau',
-        administrativeArea: 'Santa Catarina',
-        postalCode: '89012-480',
-        country: 'Brasil',
-      );
-
-      expect(
-        AppLocationService.formatPlacemarkAddress(placemark),
-        'Rua Ayres Gama, 350, Centro, Blumenau, Santa Catarina, '
-        '89012-480, Brasil',
-      );
-    });
+    expect(sorted.first.name, 'Boca Juniors Blumenau');
   });
 }

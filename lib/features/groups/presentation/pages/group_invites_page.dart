@@ -8,14 +8,31 @@ import '../providers/group_invites_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 
-class GroupInvitesPage extends ConsumerStatefulWidget {
+class GroupInvitesPage extends StatelessWidget {
   const GroupInvitesPage({super.key});
 
   @override
-  ConsumerState<GroupInvitesPage> createState() => _GroupInvitesPageState();
+  Widget build(BuildContext context) => const Scaffold(
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              _InvitesHeader(),
+              Expanded(child: GroupInvitesTab()),
+            ],
+          ),
+        ),
+      );
 }
 
-class _GroupInvitesPageState extends ConsumerState<GroupInvitesPage> {
+class GroupInvitesTab extends ConsumerStatefulWidget {
+  const GroupInvitesTab({super.key});
+
+  @override
+  ConsumerState<GroupInvitesTab> createState() => _GroupInvitesTabState();
+}
+
+class _GroupInvitesTabState extends ConsumerState<GroupInvitesTab> {
   final Set<String> _loading = {};
 
   Future<void> _refresh() async {
@@ -75,55 +92,43 @@ class _GroupInvitesPageState extends ConsumerState<GroupInvitesPage> {
   Widget build(BuildContext context) {
     final invitesAsync = ref.watch(myGroupInvitesProvider);
 
-    return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            const _InvitesHeader(),
-            Expanded(
-                child: invitesAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => _InvitesError(onRetry: _refresh),
-              data: (invites) {
-                if (invites.isEmpty) {
-                  return _InvitesEmpty(onRefresh: _refresh);
-                }
-                return RefreshIndicator(
-                  onRefresh: _refresh,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                    itemCount: invites.length + 1,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (_, i) {
-                      if (i == 0) {
-                        return Text(
-                          '${invites.length} convite${invites.length != 1 ? 's' : ''} aguardando sua resposta',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color:
-                                Theme.of(context).brightness == Brightness.dark
-                                    ? AppColors.slate400
-                                    : AppColors.slate500,
-                          ),
-                        );
-                      }
-                      final invite = invites[i - 1];
-                      return _InviteCard(
-                        invite: invite,
-                        acceptLoading: _loading.contains(invite.id),
-                        rejectLoading: _loading.contains('reject_${invite.id}'),
-                        onAccept: () => _accept(invite),
-                        onReject: () => _reject(invite),
-                      );
-                    },
+    return invitesAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => _InvitesError(onRetry: _refresh),
+      data: (invites) {
+        if (invites.isEmpty) {
+          return _InvitesEmpty(onRefresh: _refresh);
+        }
+        return RefreshIndicator(
+          onRefresh: _refresh,
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            itemCount: invites.length + 1,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (_, i) {
+              if (i == 0) {
+                return Text(
+                  '${invites.length} convite${invites.length != 1 ? 's' : ''} aguardando sua resposta',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? AppColors.slate400
+                        : AppColors.slate500,
                   ),
                 );
-              },
-            )),
-          ],
-        ),
-      ),
+              }
+              final invite = invites[i - 1];
+              return _InviteCard(
+                invite: invite,
+                acceptLoading: _loading.contains(invite.id),
+                rejectLoading: _loading.contains('reject_${invite.id}'),
+                onAccept: () => _accept(invite),
+                onReject: () => _reject(invite),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }

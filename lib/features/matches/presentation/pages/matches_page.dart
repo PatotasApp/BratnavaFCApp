@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +9,7 @@ import '../../../../core/location/app_location_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/realtime/realtime_provider.dart';
 import '../../../../shared/presentation/widgets/app_page_header.dart';
+import '../../../../shared/presentation/widgets/location_picker_fields.dart';
 import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../../shared/presentation/widgets/new_group_tour_banner.dart';
 import '../../../auth/domain/entities/account.dart';
@@ -24,7 +27,6 @@ import '../widgets/match_stepper_header.dart';
 import 'step2_aceitacao_page.dart';
 import 'step3_matchmaking_page.dart';
 import 'step4_jogo_page.dart';
-import 'step5_encerrar_page.dart';
 import 'step6_pos_jogo_page.dart';
 import 'step7_final_page.dart';
 
@@ -54,7 +56,6 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
   final _placeAddressCtrl = TextEditingController();
   double? _placeLatitude;
   double? _placeLongitude;
-  bool _locating = false;
   bool _settingAddress = false;
   DateTime _date = DateTime.now();
   TimeOfDay _time = TimeOfDay.now();
@@ -196,110 +197,26 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
     final currentDate = s.playedAt;
     if (matchId == null || matchId.isEmpty || currentDate == null) return;
 
-    final placeCtrl = TextEditingController(text: s.placeName ?? '');
-    DateTime selected = currentDate;
-
-    final saved = await showDialog<DateTime>(
+    final edited = await showDialog<_EditedMatch>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocalState) {
-          Future<void> pickDate() async {
-            final picked = await showDatePicker(
-              context: ctx,
-              initialDate: selected,
-              firstDate: DateTime(DateTime.now().year - 1),
-              lastDate: DateTime(DateTime.now().year + 3),
-            );
-            if (picked == null) return;
-            setLocalState(() {
-              selected = DateTime(
-                picked.year,
-                picked.month,
-                picked.day,
-                selected.hour,
-                selected.minute,
-              );
-            });
-          }
-
-          Future<void> pickTime() async {
-            final picked = await showTimePicker(
-              context: ctx,
-              initialTime: TimeOfDay(
-                hour: selected.hour,
-                minute: selected.minute,
-              ),
-            );
-            if (picked == null) return;
-            setLocalState(() {
-              selected = DateTime(
-                selected.year,
-                selected.month,
-                selected.day,
-                picked.hour,
-                picked.minute,
-              );
-            });
-          }
-
-          return AlertDialog(
-            title: const Text('Alterar partida'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: placeCtrl,
-                  decoration: const InputDecoration(labelText: 'Local'),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: pickDate,
-                        icon:
-                            const Icon(Icons.calendar_today_outlined, size: 16),
-                        label: Text(
-                          '${selected.day.toString().padLeft(2, '0')}/${selected.month.toString().padLeft(2, '0')}/${selected.year}',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: pickTime,
-                        icon: const Icon(Icons.access_time_rounded, size: 16),
-                        label: Text(
-                          '${selected.hour.toString().padLeft(2, '0')}:${selected.minute.toString().padLeft(2, '0')}',
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('Cancelar'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(ctx).pop(selected),
-                child: const Text('Salvar'),
-              ),
-            ],
-          );
-        },
+      builder: (_) => _EditMatchDialog(
+        initialName: s.placeName ?? '',
+        initialAddress: s.placeAddress ?? '',
+        initialLatitude: s.placeLatitude,
+        initialLongitude: s.placeLongitude,
+        initialDate: currentDate,
+        city: s.groupSettings?.groupCity,
       ),
     );
+    if (edited == null) return;
 
-    final place = placeCtrl.text.trim();
-    placeCtrl.dispose();
-    if (saved == null || place.isEmpty) return;
-
-    final ok = await ref
-        .read(matchNotifierProvider.notifier)
-        .updateMatch(place, saved);
+    final ok = await ref.read(matchNotifierProvider.notifier).updateMatch(
+          edited.placeName,
+          edited.playedAt,
+          placeAddress: edited.placeAddress,
+          placeLatitude: edited.latitude,
+          placeLongitude: edited.longitude,
+        );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -325,44 +242,6 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
     if (t != null) setState(() => _time = t);
   }
 
-  Future<void> _useCurrentLocation() async {
-    setState(() => _locating = true);
-    try {
-      final result = await AppLocationService.current();
-      if (!mounted) return;
-      _settingAddress = true;
-      _placeAddressCtrl.text = result.address;
-      _settingAddress = false;
-      setState(() {
-        _placeLatitude = result.latitude;
-        _placeLongitude = result.longitude;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
-      );
-    } finally {
-      _settingAddress = false;
-      if (mounted) setState(() => _locating = false);
-    }
-  }
-
-  Future<void> _openLocationMap() async {
-    try {
-      await AppLocationService.openMap(
-        address: _placeAddressCtrl.text,
-        latitude: _placeLatitude,
-        longitude: _placeLongitude,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Bad state: ', ''))),
-      );
-    }
-  }
-
   // ── Conteúdo por etapa ────────────────────────────────────────────────────
   Widget _buildStepContent(MatchState s, bool isAdmin, String groupId) {
     if (!s.hasMatch || _creatingNew) {
@@ -371,10 +250,13 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
               formKey: _formKey,
               placeCtrl: _placeCtrl,
               placeAddressCtrl: _placeAddressCtrl,
-              hasCoordinates: _placeLatitude != null && _placeLongitude != null,
-              locating: _locating,
-              onUseCurrentLocation: _useCurrentLocation,
-              onOpenMap: _openLocationMap,
+              initialLatitude: _placeLatitude,
+              initialLongitude: _placeLongitude,
+              city: s.groupSettings?.groupCity,
+              onLocationChanged: (latitude, longitude) => setState(() {
+                _placeLatitude = latitude;
+                _placeLongitude = longitude;
+              }),
               date: _date,
               time: _time,
               onPickDate: _pickDate,
@@ -398,11 +280,13 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
                 formKey: _formKey,
                 placeCtrl: _placeCtrl,
                 placeAddressCtrl: _placeAddressCtrl,
-                hasCoordinates:
-                    _placeLatitude != null && _placeLongitude != null,
-                locating: _locating,
-                onUseCurrentLocation: _useCurrentLocation,
-                onOpenMap: _openLocationMap,
+                initialLatitude: _placeLatitude,
+                initialLongitude: _placeLongitude,
+                city: s.groupSettings?.groupCity,
+                onLocationChanged: (latitude, longitude) => setState(() {
+                  _placeLatitude = latitude;
+                  _placeLongitude = longitude;
+                }),
                 date: _date,
                 time: _time,
                 onPickDate: _pickDate,
@@ -434,7 +318,7 @@ class _MatchesPageState extends ConsumerState<MatchesPage> {
       case MatchStep.playing:
         return const Step4JogoPage();
       case MatchStep.ended:
-        return const Step5EncerrarPage();
+        return const Step6PosJogoPage();
       case MatchStep.post:
         return const Step6PosJogoPage();
       case MatchStep.done:
@@ -1533,16 +1417,193 @@ class _PreviewBanner extends StatelessWidget {
   }
 }
 
+class _EditedMatch {
+  const _EditedMatch({
+    required this.placeName,
+    required this.placeAddress,
+    required this.playedAt,
+    this.latitude,
+    this.longitude,
+  });
+
+  final String placeName;
+  final String placeAddress;
+  final DateTime playedAt;
+  final double? latitude;
+  final double? longitude;
+}
+
+class _EditMatchDialog extends StatefulWidget {
+  const _EditMatchDialog({
+    required this.initialName,
+    required this.initialAddress,
+    required this.initialDate,
+    this.initialLatitude,
+    this.initialLongitude,
+    this.city,
+  });
+
+  final String initialName;
+  final String initialAddress;
+  final DateTime initialDate;
+  final double? initialLatitude;
+  final double? initialLongitude;
+  final String? city;
+
+  @override
+  State<_EditMatchDialog> createState() => _EditMatchDialogState();
+}
+
+class _EditMatchDialogState extends State<_EditMatchDialog> {
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _addressCtrl;
+  late DateTime _playedAt;
+  double? _latitude;
+  double? _longitude;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(text: widget.initialName);
+    _addressCtrl = TextEditingController(text: widget.initialAddress);
+    _playedAt = widget.initialDate;
+    _latitude = widget.initialLatitude;
+    _longitude = widget.initialLongitude;
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _addressCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _playedAt,
+      firstDate: DateTime(DateTime.now().year - 1),
+      lastDate: DateTime(DateTime.now().year + 3),
+    );
+    if (picked == null) return;
+    setState(() {
+      _playedAt = DateTime(
+        picked.year,
+        picked.month,
+        picked.day,
+        _playedAt.hour,
+        _playedAt.minute,
+      );
+    });
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_playedAt),
+    );
+    if (picked == null) return;
+    setState(() {
+      _playedAt = DateTime(
+        _playedAt.year,
+        _playedAt.month,
+        _playedAt.day,
+        picked.hour,
+        picked.minute,
+      );
+    });
+  }
+
+  void _save() {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) return;
+    Navigator.pop(
+      context,
+      _EditedMatch(
+        placeName: name,
+        placeAddress: _addressCtrl.text.trim(),
+        playedAt: _playedAt,
+        latitude: _latitude,
+        longitude: _longitude,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final date = DateFormat('dd/MM/yyyy', 'pt_BR').format(_playedAt);
+    final time = DateFormat('HH:mm', 'pt_BR').format(_playedAt);
+    return AlertDialog(
+      title: const Text('Alterar partida'),
+      content: SizedBox(
+        width: 480,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Confira e altere os dados da partida.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 14),
+              LocationPickerFields(
+                nameController: _nameCtrl,
+                addressController: _addressCtrl,
+                initialLatitude: widget.initialLatitude,
+                initialLongitude: widget.initialLongitude,
+                city: widget.city,
+                nameRequired: true,
+                onLocationChanged: (latitude, longitude) {
+                  _latitude = latitude;
+                  _longitude = longitude;
+                },
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _pickDate,
+                      icon: const Icon(Icons.calendar_today_outlined, size: 16),
+                      label: Text(date),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _pickTime,
+                      icon: const Icon(Icons.access_time_rounded, size: 16),
+                      label: Text(time),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(onPressed: _save, child: const Text('Salvar')),
+      ],
+    );
+  }
+}
+
 // ── Vista: criar partida (Step 1 embutido) ────────────────────────────────────
 
 class _CreateMatchView extends StatelessWidget {
   final GlobalKey<FormState> formKey;
   final TextEditingController placeCtrl;
   final TextEditingController placeAddressCtrl;
-  final bool hasCoordinates;
-  final bool locating;
-  final VoidCallback onUseCurrentLocation;
-  final VoidCallback onOpenMap;
+  final double? initialLatitude;
+  final double? initialLongitude;
+  final String? city;
+  final LocationChanged onLocationChanged;
   final DateTime date;
   final TimeOfDay time;
   final VoidCallback onPickDate;
@@ -1557,10 +1618,10 @@ class _CreateMatchView extends StatelessWidget {
     required this.formKey,
     required this.placeCtrl,
     required this.placeAddressCtrl,
-    required this.hasCoordinates,
-    required this.locating,
-    required this.onUseCurrentLocation,
-    required this.onOpenMap,
+    required this.initialLatitude,
+    required this.initialLongitude,
+    required this.city,
+    required this.onLocationChanged,
     required this.date,
     required this.time,
     required this.onPickDate,
@@ -1600,62 +1661,14 @@ class _CreateMatchView extends StatelessWidget {
                                   .titleMedium
                                   ?.copyWith(fontWeight: FontWeight.w700)),
                           const SizedBox(height: 20),
-                          // Local
-                          TextFormField(
-                            controller: placeCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Local *',
-                              prefixIcon: Icon(Icons.location_on_outlined),
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (v) => (v?.trim().isEmpty ?? true)
-                                ? 'Informe o local'
-                                : null,
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: placeAddressCtrl,
-                            decoration: InputDecoration(
-                              labelText: 'Endereço',
-                              hintText: 'Rua, número, bairro e cidade',
-                              prefixIcon: const Icon(Icons.map_outlined),
-                              suffixIcon: hasCoordinates
-                                  ? const Icon(Icons.check_circle_rounded,
-                                      color: AppColors.accent)
-                                  : null,
-                              border: const OutlineInputBorder(),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed:
-                                      locating ? null : onUseCurrentLocation,
-                                  icon: locating
-                                      ? const SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(
-                                              strokeWidth: 2),
-                                        )
-                                      : const Icon(Icons.my_location_rounded,
-                                          size: 18),
-                                  label: Text(locating
-                                      ? 'Localizando...'
-                                      : 'Usar localização atual'),
-                                ),
-                              ),
-                              if (placeAddressCtrl.text.trim().isNotEmpty) ...[
-                                const SizedBox(width: 8),
-                                IconButton.outlined(
-                                  tooltip: 'Ver no mapa',
-                                  onPressed: onOpenMap,
-                                  icon: const Icon(Icons.map_outlined),
-                                ),
-                              ],
-                            ],
+                          LocationPickerFields(
+                            nameController: placeCtrl,
+                            addressController: placeAddressCtrl,
+                            initialLatitude: initialLatitude,
+                            initialLongitude: initialLongitude,
+                            city: city,
+                            nameRequired: true,
+                            onLocationChanged: onLocationChanged,
                           ),
                           const SizedBox(height: 16),
                           // Data

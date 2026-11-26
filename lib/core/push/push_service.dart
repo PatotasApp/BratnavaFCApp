@@ -65,9 +65,11 @@ class PushService {
     required PushTokenApi tokenApi,
     required GoRouter router,
     Future<void> Function(String groupId)? onSwitchGroup,
+    VoidCallback? onNotificationReceived,
   })  : _tokenApi = tokenApi,
         _router = router,
-        _onSwitchGroup = onSwitchGroup {
+        _onSwitchGroup = onSwitchGroup,
+        _onNotificationReceived = onNotificationReceived {
     // Callbacks de navegação para toque no corpo das notificações locais
     LocalNotifications.onMatchInviteTapped = (groupId, matchId) {
       _go(
@@ -96,6 +98,7 @@ class PushService {
   final PushTokenApi _tokenApi;
   final GoRouter _router;
   final Future<void> Function(String groupId)? _onSwitchGroup;
+  final VoidCallback? _onNotificationReceived;
   final _log = Logger();
   late final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   bool _initialized = false;
@@ -239,6 +242,7 @@ class PushService {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       _log.i(
           '[Push FG] ${message.notification?.title} | data: ${message.data}');
+      _onNotificationReceived?.call();
       _showForegroundNotification(message);
     });
   }
@@ -274,15 +278,50 @@ class PushService {
   /// A lógica de roteamento está centralizada em [notificationRoute].
   void _navigate(Map<String, dynamic> data) {
     final type = data['type'] as String?;
-    if (type == null || type.isEmpty) {
-      _log.d('[Push] Payload sem campo "type" — ignorando navegação.');
+    unawaited(openNotification(type: type ?? '', data: data));
+  }
+
+  /// Único ponto de entrada para navegação de notificações, seja pelo FCM,
+  /// pela notificação local ou pelo sino interno do app.
+  Future<void> openNotification({
+    required String type,
+    Map<String, dynamic> data = const {},
+    String? actionUrl,
+    String? fallbackGroupId,
+  }) async {
+    final payload = Map<String, dynamic>.from(data);
+    if ((payload['groupId'] == null || '${payload['groupId']}'.isEmpty) &&
+        fallbackGroupId != null &&
+        fallbackGroupId.isNotEmpty) {
+      payload['groupId'] = fallbackGroupId;
+    }
+
+    if (type.isEmpty && (actionUrl == null || actionUrl.isEmpty)) {
+      _log.w('[Push] Notificação sem type e sem actionUrl; abrindo início.');
+      await _go('/app');
       return;
     }
 
-    final route = notificationRoute(type, data);
-    _log.d('[Push] Navegando: type=$type → $route');
-    _go(route, groupId: data['groupId'] as String?);
+    final route = actionUrl != null && actionUrl.isNotEmpty
+        ? actionUrl
+        : notificationRoute(type, payload);
+    final groupId = payload['groupId']?.toString();
+    _log.d('[Push] Navegando: type=$type, groupId=$groupId → $route');
+    await _go(
+      route,
+      groupId: _requiresActiveGroup(type) ? groupId : null,
+    );
   }
+
+  bool _requiresActiveGroup(String type) => switch (type) {
+        // O usuário ainda não pertence à patota nestes fluxos.
+        'group_invite' ||
+        'match_application_invite' ||
+        'match_application_closed' ||
+        'match_application_rejected' =>
+          false,
+        _ => true,
+      };
 
   /// Troca a patota ativa para a da notificação antes de navegar. Sem isso, a
   /// tela abria no tenant da patota atual quando o usuário tem mais de uma.
@@ -292,6 +331,10 @@ class PushService {
         await _onSwitchGroup(groupId);
       } catch (e) {
         _log.w('[Push] Falha ao trocar patota antes de navegar: $e');
+        // Não abra a entidade usando a patota errada. Voltar ao início é mais
+        // seguro que produzir 403/404 ou exibir dados de outro contexto.
+        _router.go('/app');
+        return;
       }
       // Aguarda o frame seguinte para o router processar qualquer redirect
       // ou rebuild desencadeado pela troca de grupo antes de fazer o push.

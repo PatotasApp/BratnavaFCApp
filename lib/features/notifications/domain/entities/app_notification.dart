@@ -34,6 +34,16 @@ class AppNotification extends Equatable {
       } catch (_) {}
     }
 
+    // A API também devolve GroupId como coluna própria. Versões antigas do
+    // backend nem sempre o repetiam dentro de dataJson; preservá-lo aqui faz
+    // o clique no sino ter o mesmo contexto que o clique no push do sistema.
+    final rawGroupId = j['groupId'] ?? j['GroupId'];
+    final groupId = rawGroupId?.toString();
+    if (groupId != null && groupId.isNotEmpty) {
+      dataMap ??= <String, dynamic>{};
+      dataMap.putIfAbsent('groupId', () => groupId);
+    }
+
     return AppNotification(
       id: (j['id'] ?? j['notificationId'] ?? '') as String,
       type: (j['type'] ?? '') as String,

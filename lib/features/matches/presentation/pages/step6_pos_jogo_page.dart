@@ -158,13 +158,34 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
   Future<void> _saveScore() async {
     final a = int.tryParse(_scoreACtrl.text);
     final b = int.tryParse(_scoreBCtrl.text);
-    if (a == null || b == null || a < 0 || b < 0) return;
-    await ref.read(matchNotifierProvider.notifier).setScore(a, b);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Placar salvo!')),
+    if (a == null || b == null || a < 0 || b < 0) {
+      _showActionMessage(
+        'Informe um placar válido para os dois times.',
+        isError: true,
       );
+      return;
     }
+    final ok = await ref.read(matchNotifierProvider.notifier).setScore(a, b);
+    if (!mounted) return;
+    _showActionMessage(
+      ok
+          ? 'Placar salvo!'
+          : ref.read(matchNotifierProvider).error ??
+              'Não foi possível salvar o placar.',
+      isError: !ok,
+    );
+  }
+
+  void _showActionMessage(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: isError ? AppColors.prototypeDanger : null,
+        ),
+      );
   }
 
   Future<void> _vote() async {
@@ -227,7 +248,45 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
       ),
     );
     if (confirm != true || !mounted) return;
-    await ref.read(matchNotifierProvider.notifier).finalizeMatch();
+
+    var current = ref.read(matchNotifierProvider);
+    if ((current.teamAGoals == null || current.teamBGoals == null) &&
+        current.goals.isEmpty) {
+      final a = int.tryParse(_scoreACtrl.text);
+      final b = int.tryParse(_scoreBCtrl.text);
+      if (a == null || b == null || a < 0 || b < 0) {
+        _showActionMessage(
+          'Defina o placar dos dois times antes de finalizar.',
+          isError: true,
+        );
+        return;
+      }
+
+      final scoreSaved =
+          await ref.read(matchNotifierProvider.notifier).setScore(a, b);
+      if (!mounted) return;
+      if (!scoreSaved) {
+        _showActionMessage(
+          ref.read(matchNotifierProvider).error ??
+              'Não foi possível salvar o placar antes da finalização.',
+          isError: true,
+        );
+        return;
+      }
+      current = ref.read(matchNotifierProvider);
+    }
+
+    final ok = await ref.read(matchNotifierProvider.notifier).finalizeMatch();
+    if (!mounted) return;
+    if (!ok) {
+      _showActionMessage(
+        ref.read(matchNotifierProvider).error ??
+            'Não foi possível finalizar a partida.',
+        isError: true,
+      );
+      return;
+    }
+    _showActionMessage('Partida finalizada com sucesso!');
   }
 
   @override
@@ -271,27 +330,6 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
             ),
           ),
         ),
-        // ── Finalizar (admin) ──────────────────────────────────────────
-        if (_isAdmin)
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: s.mutating ? null : _finalize,
-                  icon: s.mutating
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: AppColors.onDark))
-                      : const Icon(Icons.check_circle_outline),
-                  label: const Text('Finalizar →'),
-                ),
-              ),
-            ),
-          ),
       ],
     );
   }
@@ -879,8 +917,39 @@ class _Step6State extends ConsumerState<Step6PosJogoPage> {
             ],
           ),
         ),
-
-        const SizedBox(height: 80),
+        const SizedBox(height: 12),
+        _SectionCard(
+          title: 'Finalização',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Finalize somente depois de conferir MVP, placar e gols. '
+                'Depois disso os dados não poderão ser alterados.',
+                style: TextStyle(fontSize: 12, color: AppColors.slate500),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                key: const Key('finalize-match-button'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.rose500,
+                  side: const BorderSide(color: AppColors.rose500),
+                ),
+                onPressed: s.mutating ? null : _finalize,
+                icon: s.mutating
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.check_circle_outline),
+                label:
+                    Text(s.mutating ? 'Finalizando...' : 'Finalizar partida'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
       ],
     );
   }

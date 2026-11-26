@@ -24,14 +24,12 @@ const kMonths = [
 ];
 
 /// [onSubmit] recebe o dto montado (com base64 se houver) e faz a chamada API.
-/// [onSaveRating] é chamado com (starRating) quando o admin altera a avaliação.
 class MonthlyPaymentSheet extends StatefulWidget {
   final String groupId;
   final PlayerRow row;
   final int month;
   final bool isAdmin;
   final Future<void> Function(Map<String, dynamic>) onSubmit;
-  final Future<void> Function(int starRating)? onSaveRating;
   final VoidCallback onSaved;
 
   const MonthlyPaymentSheet({
@@ -41,7 +39,6 @@ class MonthlyPaymentSheet extends StatefulWidget {
     required this.month,
     required this.isAdmin,
     required this.onSubmit,
-    this.onSaveRating,
     required this.onSaved,
   });
 
@@ -55,7 +52,6 @@ class _MonthlyPaymentSheetState extends State<MonthlyPaymentSheet> {
   String? _pickedPath;
   String? _pickedName;
   bool _saving = false;
-  int? _starRating; // avaliação 1–5 estrelas
 
   MonthlyCell? get _cell =>
       widget.row.months.where((c) => c.month == widget.month).firstOrNull;
@@ -66,7 +62,6 @@ class _MonthlyPaymentSheetState extends State<MonthlyPaymentSheet> {
     _discCtrl =
         TextEditingController(text: (_cell?.discount ?? 0).toStringAsFixed(2));
     _reasonCtrl = TextEditingController(text: _cell?.discountReason ?? '');
-    _starRating = widget.row.starRating;
   }
 
   @override
@@ -135,18 +130,6 @@ class _MonthlyPaymentSheetState extends State<MonthlyPaymentSheet> {
       }
 
       await widget.onSubmit(dto);
-
-      // Save rating if admin changed it
-      if (widget.isAdmin &&
-          widget.onSaveRating != null &&
-          _starRating != null &&
-          _starRating != widget.row.starRating) {
-        try {
-          await widget.onSaveRating!(_starRating!);
-        } catch (_) {
-          // Rating save failure is non-critical — don't block the payment save
-        }
-      }
 
       if (mounted) {
         widget.onSaved();
@@ -230,26 +213,6 @@ class _MonthlyPaymentSheetState extends State<MonthlyPaymentSheet> {
             SheetField(
                 controller: _reasonCtrl, isDark: isDark, hint: 'Opcional'),
             const SizedBox(height: 20),
-
-            // ── Avaliação do jogador ───────────────────────────────────
-            _RatingSectionDivider(isDark: isDark),
-            const SizedBox(height: 12),
-            FieldLabel('Avaliação do jogador', isDark),
-            const SizedBox(height: 4),
-            Text(
-              'Nível estimado (1–5 estrelas)',
-              style: TextStyle(
-                fontSize: 11,
-                color: isDark ? AppColors.slate500 : AppColors.slate400,
-              ),
-            ),
-            const SizedBox(height: 8),
-            _StarPicker(
-              value: _starRating,
-              disabled: _saving,
-              onChanged: (v) => setState(() => _starRating = v),
-            ),
-            const SizedBox(height: 12),
           ],
           FieldLabel('Comprovante (opcional)', isDark),
           const SizedBox(height: 6),
@@ -305,95 +268,6 @@ class _MonthlyPaymentSheetState extends State<MonthlyPaymentSheet> {
           ]),
         ],
       ),
-    );
-  }
-}
-
-// ── Rating section divider ────────────────────────────────────────────────────
-
-class _RatingSectionDivider extends StatelessWidget {
-  final bool isDark;
-  const _RatingSectionDivider({required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Divider(
-            color: isDark ? AppColors.slate700 : AppColors.slate200,
-            height: 1,
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.star_rounded,
-                size: 12,
-                color: isDark ? AppColors.slate500 : AppColors.slate400,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'Avaliação',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
-                  color: isDark ? AppColors.slate500 : AppColors.slate400,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: Divider(
-            color: isDark ? AppColors.slate700 : AppColors.slate200,
-            height: 1,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ── Star picker ───────────────────────────────────────────────────────────────
-
-class _StarPicker extends StatelessWidget {
-  final int? value;
-  final bool disabled;
-  final ValueChanged<int> onChanged;
-
-  const _StarPicker({
-    required this.value,
-    required this.disabled,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: List.generate(5, (i) {
-        final star = i + 1;
-        final filled = value != null && star <= value!;
-        return GestureDetector(
-          onTap: disabled ? null : () => onChanged(star),
-          child: Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 150),
-              child: Icon(
-                filled ? Icons.star_rounded : Icons.star_border_rounded,
-                key: ValueKey('$star-$filled'),
-                size: 32,
-                color: filled ? AppColors.warning : AppColors.lightTextMuted,
-              ),
-            ),
-          ),
-        );
-      }),
     );
   }
 }

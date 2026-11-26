@@ -764,7 +764,11 @@ class _ClockField extends StatelessWidget {
             enabled: enabled,
             keyboardType: TextInputType.datetime,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.w800),
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              color: AppColors.slate900,
+            ),
+            cursorColor: AppColors.slate900,
             decoration: InputDecoration(
               isDense: true,
               hintText: 'HH:mm',
@@ -1114,9 +1118,7 @@ class _ReplayButton extends StatelessWidget {
       style: FilledButton.styleFrom(
         backgroundColor: color,
         foregroundColor: foregroundColor,
-        side: isLightColor
-            ? const BorderSide(color: AppColors.slate300)
-            : null,
+        side: isLightColor ? const BorderSide(color: AppColors.slate300) : null,
         padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 10),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),

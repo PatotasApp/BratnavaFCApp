@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_input_utils.dart';
 import 'payment_sheet_widgets.dart';
 
 class CreateExtraChargeSheet extends StatefulWidget {
@@ -51,8 +52,7 @@ class _CreateExtraChargeSheetState extends State<CreateExtraChargeSheet> {
       lastDate: DateTime(now.year + 5),
     );
     if (picked != null) {
-      _dueDateCtrl.text =
-          '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+      _dueDateCtrl.text = formatBrazilianDate(picked);
     }
   }
 
@@ -85,7 +85,7 @@ class _CreateExtraChargeSheetState extends State<CreateExtraChargeSheet> {
       final desc = _descCtrl.text.trim();
       if (desc.isNotEmpty) dto['description'] = desc;
       final due = _dueDateCtrl.text.trim();
-      if (due.isNotEmpty) dto['dueDate'] = due;
+      if (due.isNotEmpty) dto['dueDate'] = dateInputToApi(due);
 
       await widget.onSubmit(dto);
 

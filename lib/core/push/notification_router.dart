@@ -25,8 +25,24 @@ String notificationRoute(String type, Map<String, dynamic> data) {
     case 'attendance_accepted':
     case 'attendance_rejected':
     case 'quorum_reached':
+    case 'match_waiting_list':
+    case 'match_waiting_promoted':
       if (_ok(matchId)) return '/app/matches?matchId=$matchId';
       return '/app/matches';
+
+    // Convites/candidaturas de jogadores de fora não exigem que o usuário
+    // pertença à patota. A tela de convidado resolve o acesso pelo matchId.
+    case 'match_application_invite':
+      if (_ok(matchId)) return '/app/guest-match/$matchId';
+      return '/app/match-invitations';
+
+    case 'match_application_closed':
+    case 'match_application_rejected':
+      return '/app/match-invitations';
+
+    case 'match_application':
+    case 'match_application_declined':
+      return '/app/applicants';
 
     case 'match_finalized':
     case 'match_mvp':
@@ -43,9 +59,13 @@ String notificationRoute(String type, Map<String, dynamic> data) {
     case 'poll_deadline_changed':
       final pollId = data['pollId'] as String?;
       if (data['pollType'] == 'event') {
-        return _ok(pollId) ? '/app/polls/events?pollId=$pollId' : '/app/polls/events';
+        return _ok(pollId)
+            ? '/app/polls/events?pollId=$pollId'
+            : '/app/polls/events';
       }
-      return _ok(pollId) ? '/app/polls/votes?pollId=$pollId' : '/app/polls/votes';
+      return _ok(pollId)
+          ? '/app/polls/votes?pollId=$pollId'
+          : '/app/polls/votes';
 
     // ── Calendário ────────────────────────────────────────────────────────
 
@@ -62,6 +82,9 @@ String notificationRoute(String type, Map<String, dynamic> data) {
     case 'extra_charge_discount':
     case 'charge_fully_paid':
       return '/app/payments';
+
+    case 'billing_reminder':
+      return _ok(groupId) ? '/app/plano?groupId=$groupId' : '/app/plano';
 
     // ── Grupo / membros ───────────────────────────────────────────────────
 
@@ -99,6 +122,8 @@ String notificationRoute(String type, Map<String, dynamic> data) {
 
     case 'admin_notification':
     case 'admin_broadcast':
+    case 'content_report':
+    case 'generic':
       return '/app';
 
     default:

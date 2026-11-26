@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/constants/feature_flags.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/presentation/widgets/avatar_widget.dart';
 import '../../../../shared/presentation/widgets/group_icon_renderer.dart';
@@ -276,7 +277,8 @@ class _Step2State extends ConsumerState<Step2AceitacaoPage> {
                     pendingCount: pending.length,
                     waitingCount: waiting.length,
                   ),
-                  if (isAdmin &&
+                  if (FeatureFlags.externalPlayerInteractionsEnabled &&
+                      isAdmin &&
                       (s.matchId ?? '').isNotEmpty &&
                       gid.isNotEmpty &&
                       (ref

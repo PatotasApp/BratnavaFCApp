@@ -8,10 +8,11 @@ class DiscoveryGroupItem {
     required this.accepting,
     required this.members,
     this.isMember = false,
+    this.isPublic = true,
   });
   final String id, name, code;
   final String? logoUrl, city;
-  final bool accepting, isMember;
+  final bool accepting, isMember, isPublic;
   final int members;
   factory DiscoveryGroupItem.fromJson(Map<String, dynamic> j) =>
       DiscoveryGroupItem(
@@ -23,6 +24,7 @@ class DiscoveryGroupItem {
         accepting: j['isAcceptingPlayers'] == true,
         members: (j['memberCount'] as num?)?.toInt() ?? 0,
         isMember: j['isMember'] == true,
+        isPublic: j['isPublic'] == true,
       );
 }
 

@@ -23,12 +23,27 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../dashboard/domain/entities/my_player.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../../members/presentation/providers/members_provider.dart';
+import '../../../groups/presentation/pages/group_invites_page.dart';
 
-class MyAccountPage extends ConsumerWidget {
+class MyAccountPage extends ConsumerStatefulWidget {
   const MyAccountPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MyAccountPage> createState() => _MyAccountPageState();
+}
+
+class _MyAccountPageState extends ConsumerState<MyAccountPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(authNotifierProvider.notifier).refreshRoles();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final active = ref.watch(accountStoreProvider).activeAccount;
     final playersAsync = ref.watch(myPlayersProvider);
     final players = playersAsync.valueOrNull ?? const <MyPlayer>[];
@@ -36,8 +51,15 @@ class MyAccountPage extends ConsumerWidget {
 
     if (active == null) return const SizedBox.shrink();
 
+    final initialTab =
+        GoRouterState.of(context).uri.queryParameters['tab'] == 'invites'
+            ? 3
+            : 0;
+
     return DefaultTabController(
-      length: 3,
+      key: ValueKey(initialTab),
+      length: 4,
+      initialIndex: initialTab,
       child: Scaffold(
         body: Column(
           children: [
@@ -52,6 +74,7 @@ class MyAccountPage extends ConsumerWidget {
                   Tab(text: 'Perfil'),
                   Tab(text: 'Patotas'),
                   Tab(text: 'Segurança'),
+                  Tab(text: 'Convites'),
                 ],
               ),
             ),
@@ -60,6 +83,7 @@ class MyAccountPage extends ConsumerWidget {
                 children: [
                   _ProfileTab(account: active, activePlayer: activePlayer),
                   _GroupsTab(
+                    account: active,
                     players: players,
                     activePlayer: activePlayer,
                     loading: playersAsync.isLoading,
@@ -69,6 +93,7 @@ class MyAccountPage extends ConsumerWidget {
                     email: active.email,
                     onLogout: () => _logout(context, ref),
                   ),
+                  const GroupInvitesTab(),
                 ],
               ),
             ),
@@ -223,12 +248,14 @@ class _ReadOnlyField extends StatelessWidget {
 }
 
 class _GroupsTab extends StatelessWidget {
+  final Account account;
   final List<MyPlayer> players;
   final MyPlayer? activePlayer;
   final bool loading;
   final ValueChanged<MyPlayer> onSwitch;
 
   const _GroupsTab({
+    required this.account,
     required this.players,
     required this.activePlayer,
     required this.loading,
@@ -280,7 +307,7 @@ class _GroupsTab extends StatelessWidget {
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                           Text(
-                            players[index].isGuest ? 'Convidado' : 'Mensalista',
+                            groupMembershipLabel(account, players[index]),
                           ),
                         ],
                       ),
@@ -308,6 +335,13 @@ class _GroupsTab extends StatelessWidget {
       ),
     );
   }
+}
+
+@visibleForTesting
+String groupMembershipLabel(Account account, MyPlayer player) {
+  if (account.isGroupAdmin(player.groupId)) return 'Administrador';
+  if (account.isGroupFinanceiro(player.groupId)) return 'Financeiro';
+  return player.isGuest ? 'Convidado' : 'Mensalista';
 }
 
 class _SecurityTab extends StatelessWidget {

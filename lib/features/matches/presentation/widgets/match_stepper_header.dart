@@ -15,16 +15,20 @@ class MatchStepperHeader extends StatelessWidget {
     this.onStepTap,
   });
 
-  static const _steps = MatchStep.values;
+  static const _steps = visibleMatchSteps;
 
-  MatchStep get _viewedStep => previewStep ?? currentStep;
+  MatchStep get _effectiveCurrentStep =>
+      currentStep == MatchStep.ended ? MatchStep.post : currentStep;
+
+  MatchStep get _viewedStep => previewStep ?? _effectiveCurrentStep;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final viewed = _viewedStep;
-    final isPreview = viewed != currentStep;
-    final progress = (currentStep.index + 1) / _steps.length;
+    final effectiveCurrent = _effectiveCurrentStep;
+    final isPreview = viewed != effectiveCurrent;
+    final progress = effectiveCurrent.stepNumber / _steps.length;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -42,7 +46,7 @@ class MatchStepperHeader extends StatelessWidget {
                       Text(
                         isPreview
                             ? 'PRÉVIA · ETAPA ${viewed.stepNumber}'
-                            : 'ETAPA ${currentStep.stepNumber} DE ${_steps.length}',
+                            : 'ETAPA ${effectiveCurrent.stepNumber} DE ${_steps.length}',
                         style: theme.textTheme.labelSmall,
                       ),
                       const SizedBox(height: 4),
@@ -157,8 +161,9 @@ class MatchStepperHeader extends StatelessWidget {
                   ),
                   itemBuilder: (context, index) {
                     final step = _steps[index];
-                    final isCurrent = step == currentStep;
-                    final isDone = step.index < currentStep.index;
+                    final isCurrent = step == _effectiveCurrentStep;
+                    final isDone =
+                        step.stepNumber < _effectiveCurrentStep.stepNumber;
                     final canOpen = onStepTap != null;
 
                     return ListTile(

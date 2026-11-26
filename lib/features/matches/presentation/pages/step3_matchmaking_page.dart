@@ -106,6 +106,10 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
       if (maxPerTeam >= 1 && _playersPerTeam > maxPerTeam) {
         _playersPerTeam = maxPerTeam;
       }
+      if ((_strategyType == 3 && !s.canGenerateByAlgorithm) ||
+          (_strategyType == 5 && !s.canGenerateByProfile)) {
+        _strategyType = 1;
+      }
 
       // Abre na aba correspondente ao ponto em que a formação parou, para o
       // admin não ter que reencontrar o trabalho já feito.
@@ -189,6 +193,9 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
         ref.watch(groupSettingsProvider(s.groupId)).valueOrNull);
 
     final showGenerateButton = _isAdmin && _tab == _FormationTab.gerar;
+    final selectedStrategyEnabled =
+        (_strategyType != 3 || s.canGenerateByAlgorithm) &&
+            (_strategyType != 5 || s.canGenerateByProfile);
 
     return Column(
       children: [
@@ -224,7 +231,7 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
             minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
             child: _GenerateTeamsButton(
               mutating: s.mutating,
-              onPressed: _generateTeams,
+              onPressed: selectedStrategyEnabled ? _generateTeams : null,
             ),
           ),
       ],
@@ -249,6 +256,10 @@ class _Step3State extends ConsumerState<Step3MatchmakingPage> {
             playersPerTeam: _playersPerTeam,
             includeGoalkeepers: _includeGoalkeepers,
             acceptedCount: s.formationPlayers.length,
+            canGenerateByProfile: s.canGenerateByProfile,
+            profileBlockedReason: s.profileGenerationBlockedReason,
+            canGenerateByAlgorithm: s.canGenerateByAlgorithm,
+            algorithmBlockedReason: s.algorithmGenerationBlockedReason,
             icons: icons,
             onStrategy: (id) => setState(() => _strategyType = id),
             onPlayersPerTeam: (n) => setState(() => _playersPerTeam = n),
@@ -515,6 +526,10 @@ class _GeneratorPanel extends StatelessWidget {
   final int playersPerTeam;
   final bool includeGoalkeepers;
   final int acceptedCount;
+  final bool canGenerateByProfile;
+  final String? profileBlockedReason;
+  final bool canGenerateByAlgorithm;
+  final String? algorithmBlockedReason;
   final GroupIcons icons;
   final ValueChanged<int> onStrategy;
   final ValueChanged<int> onPlayersPerTeam;
@@ -525,6 +540,10 @@ class _GeneratorPanel extends StatelessWidget {
     required this.playersPerTeam,
     required this.includeGoalkeepers,
     required this.acceptedCount,
+    required this.canGenerateByProfile,
+    required this.profileBlockedReason,
+    required this.canGenerateByAlgorithm,
+    required this.algorithmBlockedReason,
     required this.icons,
     required this.onStrategy,
     required this.onPlayersPerTeam,
@@ -567,6 +586,7 @@ class _GeneratorPanel extends StatelessWidget {
                       child: _StrategyCard(
                         strategy: pairs[r],
                         selected: pairs[r].id == strategyType,
+                        enabled: pairs[r].id != 3 || canGenerateByAlgorithm,
                         onTap: () => onStrategy(pairs[r].id),
                       ),
                     ),
@@ -576,6 +596,7 @@ class _GeneratorPanel extends StatelessWidget {
                       child: _StrategyCard(
                         strategy: pairs[r + 1],
                         selected: pairs[r + 1].id == strategyType,
+                        enabled: pairs[r + 1].id != 3 || canGenerateByAlgorithm,
                         onTap: () => onStrategy(pairs[r + 1].id),
                       ),
                     ),
@@ -587,11 +608,29 @@ class _GeneratorPanel extends StatelessWidget {
                 strategy: _kStrategies.last,
                 selected: _kStrategies.last.id == strategyType,
                 wide: true,
+                enabled: canGenerateByProfile,
                 onTap: () => onStrategy(_kStrategies.last.id),
               ),
             ],
           );
         }),
+
+        if (!canGenerateByAlgorithm) ...[
+          const SizedBox(height: 10),
+          _StrategyBlockedNotice(
+            title: 'Algoritmo indisponível',
+            message: algorithmBlockedReason ??
+                'Finalize ao menos 3 partidas para liberar este método.',
+          ),
+        ],
+        if (!canGenerateByProfile) ...[
+          const SizedBox(height: 8),
+          _StrategyBlockedNotice(
+            title: 'Por perfil indisponível',
+            message: profileBlockedReason ??
+                'Complete o perfil de todos os jogadores de linha.',
+          ),
+        ],
 
         const SizedBox(height: 16),
 
@@ -626,9 +665,55 @@ class _GeneratorPanel extends StatelessWidget {
   }
 }
 
+class _StrategyBlockedNotice extends StatelessWidget {
+  const _StrategyBlockedNotice({
+    required this.title,
+    required this.message,
+  });
+
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.amber900 : AppColors.amber50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.amber500),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.lock_outline_rounded, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(message, style: const TextStyle(fontSize: 10.5)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _GenerateTeamsButton extends StatelessWidget {
   final bool mutating;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   const _GenerateTeamsButton({
     required this.mutating,
@@ -686,6 +771,7 @@ class _GenerateTeamsButton extends StatelessWidget {
 class _StrategyCard extends StatelessWidget {
   final ({int id, String label, String description, IconData icon}) strategy;
   final bool selected;
+  final bool enabled;
 
   /// Variante larga do quinto card: ícone à esquerda, texto ao lado.
   final bool wide;
@@ -695,13 +781,16 @@ class _StrategyCard extends StatelessWidget {
     required this.strategy,
     required this.selected,
     required this.onTap,
+    this.enabled = true,
     this.wide = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final titleColor = isDark ? AppColors.onDark : AppColors.darkCard;
+    final titleColor = enabled
+        ? (isDark ? AppColors.onDark : AppColors.darkCard)
+        : (isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted);
     final descriptionColor =
         isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
 
@@ -717,7 +806,7 @@ class _StrategyCard extends StatelessWidget {
         border: isDark ? null : Border.all(color: AppColors.lightBorder),
       ),
       child: Icon(
-        strategy.icon,
+        enabled ? strategy.icon : Icons.lock_outline_rounded,
         size: 16,
         color: selected
             ? AppColors.darkApp
@@ -743,10 +832,11 @@ class _StrategyCard extends StatelessWidget {
 
     return Semantics(
       button: true,
+      enabled: enabled,
       selected: selected,
       label: '${strategy.label}. ${strategy.description}',
       child: InkWell(
-        onTap: onTap,
+        onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(13),
         child: Container(
           constraints: BoxConstraints(minHeight: wide ? 62 : 76),
@@ -1827,8 +1917,7 @@ class _TeamGenOptionsSectionState
                         height: 16,
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: AppColors.onDark))
-                    : const Text('Setar times',
-                        style: TextStyle(fontSize: 13)),
+                    : const Text('Setar times', style: TextStyle(fontSize: 13)),
               ),
             ),
           ],

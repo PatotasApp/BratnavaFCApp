@@ -4,6 +4,8 @@ import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/auth/presentation/providers/account_store.dart';
 import 'push_service.dart';
 import 'push_token_api.dart';
+import '../../features/groups/presentation/providers/group_invites_provider.dart';
+import '../../features/notifications/presentation/providers/notifications_provider.dart';
 
 String _normGroupId(String? id) =>
     (id ?? '').trim().toLowerCase().replaceAll(RegExp(r'[{}]'), '');
@@ -24,6 +26,12 @@ final pushServiceProvider = Provider<PushService>((ref) {
       await ref
           .read(authNotifierProvider.notifier)
           .selectActiveGroup(groupId: groupId);
+    },
+    onNotificationReceived: () {
+      ref.invalidate(myNotificationsProvider);
+      ref.invalidate(notifUnreadCountProvider);
+      ref.invalidate(myGroupInvitesProvider);
+      ref.invalidate(myGroupInviteCountProvider);
     },
   );
 });

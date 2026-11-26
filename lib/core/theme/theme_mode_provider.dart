@@ -9,6 +9,18 @@ final themeModeProvider =
   return ThemeModeController(ref.watch(sharedPreferencesProvider));
 });
 
+ThemeMode nextThemeMode(ThemeMode current) => switch (current) {
+      ThemeMode.system => ThemeMode.light,
+      ThemeMode.light => ThemeMode.dark,
+      ThemeMode.dark => ThemeMode.system,
+    };
+
+String themeModeLabel(ThemeMode mode) => switch (mode) {
+      ThemeMode.system => 'Sistema',
+      ThemeMode.light => 'Claro',
+      ThemeMode.dark => 'Escuro',
+    };
+
 class ThemeModeController extends StateNotifier<ThemeMode> {
   final SharedPreferences _preferences;
 

@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_input_utils.dart';
 
 const kPollIcons = [
   '🥩',
@@ -80,8 +81,7 @@ class PollDateField extends StatelessWidget {
               lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
             );
             if (picked != null) {
-              controller.text =
-                  '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+              controller.text = formatBrazilianDate(picked);
             }
           },
         ),

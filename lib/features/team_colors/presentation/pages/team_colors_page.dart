@@ -9,6 +9,7 @@ import '../../../../shared/presentation/widgets/app_page_header.dart';
 import '../../../../shared/presentation/widgets/no_active_group_view.dart';
 import '../../../../shared/presentation/widgets/new_group_tour_banner.dart';
 import '../../../auth/presentation/providers/account_store.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../../data/datasources/team_color_remote_datasource.dart';
 import '../../domain/entities/team_color.dart';
@@ -27,6 +28,18 @@ class TeamColorsPage extends ConsumerStatefulWidget {
 
 class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
   int _selectedIndex = 0;
+  bool _rolesRefreshing = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // A permissão pode ter sido removida por outro administrador enquanto a
+    // sessão estava aberta. Revalida no servidor antes de liberar as ações.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(authNotifierProvider.notifier).refreshRoles();
+      if (mounted) setState(() => _rolesRefreshing = false);
+    });
+  }
 
   Future<void> _continueTour() async {
     await ref
@@ -51,8 +64,10 @@ class _TeamColorsPageState extends ConsumerState<TeamColorsPage> {
     final groupId = account?.activeGroupId ?? activePlayer?.groupId;
     final groupIdNN = groupId; // non-null alias used in closures
     final canManage = account != null &&
+        !_rolesRefreshing &&
         groupIdNN != null &&
-        account.groupAdminIds.isNotEmpty;
+        groupIdNN.isNotEmpty &&
+        account.isGroupAdmin(groupIdNN);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final page = RefreshIndicator(

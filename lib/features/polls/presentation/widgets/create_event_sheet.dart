@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_input_utils.dart';
 import '../../data/datasources/polls_remote_datasource.dart';
 import '../../domain/entities/poll_detail.dart';
 import '../providers/polls_provider.dart';
@@ -64,7 +65,7 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
         'title': _titleCtrl.text.trim(),
         'description':
             _descCtrl.text.trim().isNotEmpty ? _descCtrl.text.trim() : null,
-        'eventDate': _dateCtrl.text,
+        'eventDate': dateInputToApi(_dateCtrl.text),
         'eventTime': _timeCtrl.text.isNotEmpty ? _timeCtrl.text : null,
         'eventLocation': _locationCtrl.text.trim().isNotEmpty
             ? _locationCtrl.text.trim()
@@ -74,8 +75,9 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
         'costAmount': _amountCtrl.text.isNotEmpty
             ? double.tryParse(_amountCtrl.text)
             : null,
-        'deadlineDate':
-            _deadlineDateCtrl.text.isNotEmpty ? _deadlineDateCtrl.text : null,
+        'deadlineDate': _deadlineDateCtrl.text.isNotEmpty
+            ? dateInputToApi(_deadlineDateCtrl.text)
+            : null,
         'deadlineTime':
             _deadlineTimeCtrl.text.isNotEmpty ? _deadlineTimeCtrl.text : null,
         'showVotes': _showVotes,
@@ -177,7 +179,7 @@ class _CreateEventSheetState extends ConsumerState<CreateEventSheet> {
                       onSelect: (v) => setState(() => _costType = v),
                       isDark: isDark),
                   const SizedBox(height: 12),
-                  Text('Prazo RSVP (opcional)',
+                  Text('Prazo de resposta (opcional)',
                       style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
